@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: theme('fontFamily.body');
+    color: theme('colors.slate.100');
+    background-color: theme('colors.midnight');
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}
