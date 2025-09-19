@@ -8,7 +8,22 @@ const defaultSession = {
 
 export const useSessionStore = create((set) => ({
   session: { ...defaultSession },
-  setSession: (session) => set({ session: { ...defaultSession, ...session } }),
+  isLoading: false,
+  error: null,
+  setSession: (session) =>
+    set({
+      session: { ...defaultSession, ...session },
+      isLoading: false,
+      error: null,
+    }),
+  setCampaigns: (campaigns) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        campaigns,
+      },
+      error: null,
+    })),
   assignCampaign: (campaign) =>
     set((state) => {
       const campaignExists = state.session.campaigns.some((c) => c.id === campaign.id)
@@ -22,7 +37,22 @@ export const useSessionStore = create((set) => ({
           campaigns,
           activeCampaignId: campaign.id,
         },
+        error: null,
       }
     }),
-  clearSession: () => set({ session: { ...defaultSession } }),
+  setActiveCampaign: (campaignId) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        activeCampaignId: campaignId,
+      },
+    })),
+  setLoading: (isLoading) => set({ isLoading }),
+  setError: (error) => set({ error }),
+  clearSession: () =>
+    set({
+      session: { ...defaultSession },
+      isLoading: false,
+      error: null,
+    }),
 }))

@@ -1,8 +1,22 @@
+import { useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 import { useSessionStore } from '../store/useSessionStore'
 
 const PlayerView = () => {
-  const { session } = useSessionStore()
+  const { campaignId } = useParams()
+  const { session, assignCampaign } = useSessionStore()
   const activeCampaign = session.campaigns.find((campaign) => campaign.id === session.activeCampaignId)
+
+  useEffect(() => {
+    if (!campaignId) return
+    if (session.activeCampaignId === campaignId && activeCampaign?.role === 'player') return
+
+    assignCampaign({
+      id: campaignId,
+      name: Campaign ,
+      role: 'player',
+    })
+  }, [campaignId, assignCampaign, session.activeCampaignId, activeCampaign?.role])
 
   return (
     <section className="space-y-6">
@@ -28,6 +42,7 @@ const PlayerView = () => {
                 </span>
               </p>
             )}
+            <p className="text-xs uppercase tracking-widest text-slate-500">ID: {activeCampaign.id}</p>
           </div>
         ) : (
           <p className="mt-2 text-sm text-slate-500">Join a campaign to view shared encounters.</p>
