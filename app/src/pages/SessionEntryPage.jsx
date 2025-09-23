@@ -14,15 +14,28 @@ const SessionEntryPage = ({ role }) => {
   const [campaignError, setCampaignError] = useState(null)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
 
-  const buildSessionPath = (id) => `/session/${id}/${role === 'dm' ? 'dm' : 'player'}`
+  const buildPreparationPath = (id) => `/session/${id}/${role === 'dm' ? 'tools' : 'player'}`
+  const buildLiveSessionPath = (id) => `/session/${id}/dm`
 
   useEffect(() => {
     if (!activeCampaignId) return
-    navigate(buildSessionPath(activeCampaignId), { replace: true })
+    navigate(`/session/${activeCampaignId}/${role === 'dm' ? 'tools' : 'player'}`, { replace: true })
   }, [activeCampaignId, navigate, role])
 
+  const handlePreparation = (campaignId) => {
+    navigate(buildPreparationPath(campaignId))
+  }
+
+  const handleGoLive = (campaignId) => {
+    navigate(buildLiveSessionPath(campaignId))
+  }
+
   const handleJoin = (campaignId) => {
-    navigate(buildSessionPath(campaignId))
+    if (role === 'dm') {
+      handlePreparation(campaignId)
+      return
+    }
+    navigate(buildPreparationPath(campaignId))
   }
 
   const handleCampaignFieldChange = (event) => {
@@ -55,7 +68,7 @@ const SessionEntryPage = ({ role }) => {
       const campaign = await createCampaign(payload)
       assignCampaign({ ...campaign, role: 'dm' })
       setCampaignForm({ name: '', description: '', status: 'draft' })
-      navigate(buildSessionPath(campaign.id))
+      navigate(buildPreparationPath(campaign.id))
     } catch (creationError) {
       const message =
         creationError.response?.data?.message ??
@@ -201,13 +214,32 @@ const SessionEntryPage = ({ role }) => {
                 </p>
               )}
             </div>
-            <button
-              type='button'
-              onClick={() => handleJoin(campaign.id)}
-              className='mt-4 inline-flex items-center justify-center rounded-full bg-ember px-4 py-2 text-sm font-semibold uppercase tracking-widest text-slate-950 transition hover:bg-ember/90'
-            >
-              {role === 'dm' ? 'Dirigir sesion' : 'Unirme como jugador'}
-            </button>
+            {role === 'dm' ? (
+              <div className='mt-4 flex flex-col gap-2 sm:flex-row'>
+                <button
+                  type='button'
+                  onClick={() => handlePreparation(campaign.id)}
+                  className='inline-flex items-center justify-center rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold uppercase tracking-widest text-slate-950 transition hover:bg-emerald-400'
+                >
+                  Abrir herramientas
+                </button>
+                <button
+                  type='button'
+                  onClick={() => handleGoLive(campaign.id)}
+                  className='inline-flex items-center justify-center rounded-full border border-ember px-4 py-2 text-sm font-semibold uppercase tracking-widest text-ember transition hover:bg-ember/10'
+                >
+                  Iniciar sesion en vivo
+                </button>
+              </div>
+            ) : (
+              <button
+                type='button'
+                onClick={() => handleJoin(campaign.id)}
+                className='mt-4 inline-flex items-center justify-center rounded-full bg-ember px-4 py-2 text-sm font-semibold uppercase tracking-widest text-slate-950 transition hover:bg-ember/90'
+              >
+                Unirme como jugador
+              </button>
+            )}
           </article>
         ))}
       </div>

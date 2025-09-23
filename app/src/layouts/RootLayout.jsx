@@ -32,9 +32,9 @@ const RootLayout = () => {
   const isPlayerMode = session.activeMode === 'player'
   const isDmMode = session.activeMode === 'dm'
 
-  const dmToolsPath = activeCampaignId ? `/session/${activeCampaignId}/dm` : '/dm'
+  const dmToolsPath = activeCampaignId ? `/session/${activeCampaignId}/tools` : '/dm'
   const dmToolsTitle = activeCampaignId
-    ? 'Abrir herramientas del DM para la campaña activa.'
+    ? 'Abrir las herramientas de preparación para la campaña activa.'
     : 'Selecciona una campaña para habilitar las herramientas del DM.'
 
   const modeAwareLinks = []
@@ -52,7 +52,7 @@ const RootLayout = () => {
         key: 'dm-tools',
         label: 'Herramientas DM',
         to: dmToolsPath,
-        isActive: activeCampaignId ? location.pathname.startsWith(`/session/${activeCampaignId}/dm`) : false,
+        isActive: activeCampaignId ? location.pathname.startsWith(`/session/${activeCampaignId}/tools`) : false,
         muted: !activeCampaignId,
         title: dmToolsTitle,
       })
