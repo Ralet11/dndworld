@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
+
   createCampaign,
   updateCampaign,
   createScenario,
@@ -15,6 +16,7 @@ import {
   updateItem,
 } from '../../api/campaigns'
 import { useCampaignList } from '../../hooks/useCampaignList'
+
 import { useCampaignSession } from '../../hooks/useCampaignSession'
 
 const scenarioInitialState = {
@@ -23,6 +25,8 @@ const scenarioInitialState = {
   objective: '',
   environmentTags: '',
 }
+
+const scenarioEditInitialState = { ...scenarioInitialState }
 
 const npcInitialState = {
   name: '',
@@ -33,16 +37,19 @@ const npcInitialState = {
   portraitUrl: '',
 }
 
+
 const campaignInitialState = {
   name: '',
   description: '',
   status: 'draft',
 }
 
+
 const itemInitialState = {
   name: '',
   type: 'misc',
   scenarioId: '',
+
   description: '',
 }
 
@@ -108,6 +115,7 @@ const buildItemPayload = (form) => {
   }
 
   return payload
+
 }
 
 const DMToolsPage = () => {
@@ -140,6 +148,11 @@ const DMToolsPage = () => {
   const [deletingScenarioId, setDeletingScenarioId] = useState(null)
   const [scenarioDeleteError, setScenarioDeleteError] = useState(null)
 
+  const [editingScenarioId, setEditingScenarioId] = useState(null)
+  const [scenarioEditForm, setScenarioEditForm] = useState(scenarioEditInitialState)
+  const [scenarioEditError, setScenarioEditError] = useState(null)
+  const [isUpdatingScenario, setIsUpdatingScenario] = useState(false)
+
   const [npcForm, setNpcForm] = useState(npcInitialState)
   const [npcError, setNpcError] = useState(null)
   const [isCreatingNpc, setIsCreatingNpc] = useState(false)
@@ -161,8 +174,19 @@ const DMToolsPage = () => {
   const [itemEditError, setItemEditError] = useState(null)
   const [isUpdatingItem, setIsUpdatingItem] = useState(false)
 
+  const [editingNpcId, setEditingNpcId] = useState(null)
+  const [npcEditForm, setNpcEditForm] = useState(npcEditInitialState)
+  const [npcEditError, setNpcEditError] = useState(null)
+  const [isUpdatingNpc, setIsUpdatingNpc] = useState(false)
+
+  const [editingItemId, setEditingItemId] = useState(null)
+  const [itemForm, setItemForm] = useState(itemInitialState)
+  const [itemError, setItemError] = useState(null)
+  const [isUpdatingItem, setIsUpdatingItem] = useState(false)
+
   const scenarios = activeCampaign?.scenarios ?? []
   const allNpcs = activeCampaign?.npcs ?? []
+  const items = activeCampaign?.items ?? []
 
   const scenarioLookup = useMemo(() => {
     const entries = scenarios.map((scenario) => [scenario.id, scenario.title])
@@ -306,8 +330,55 @@ const DMToolsPage = () => {
   }
 
   const handleScenarioEditInputChange = (event) => {
+
     const { name, value } = event.target
     setScenarioEditForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleNpcEditInputChange = (event) => {
+    const { name, value } = event.target
+    setNpcEditForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const startNpcEdit = (npc) => {
+    setEditingNpcId(npc.id)
+    setNpcEditForm({
+      name: npc.name ?? '',
+      title: npc.title ?? '',
+      creatureType: npc.creatureType ?? '',
+      disposition: npc.disposition ?? 'unknown',
+      scenarioId: npc.scenarioId ?? '',
+      portraitUrl: npc.portraitUrl ?? '',
+    })
+    setNpcEditError(null)
+  }
+
+  const cancelNpcEdit = () => {
+    setEditingNpcId(null)
+    setNpcEditForm(npcEditInitialState)
+    setNpcEditError(null)
+  }
+
+  const handleItemInputChange = (event) => {
+    const { name, value } = event.target
+    setItemForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const startItemEdit = (item) => {
+    setEditingItemId(item.id)
+    setItemForm({
+      name: item.name ?? '',
+      type: item.type ?? 'misc',
+      scenarioId: item.scenarioId ?? '',
+      data: item.data ? JSON.stringify(item.data, null, 2) : '',
+    })
+    setItemError(null)
+  }
+
+  const cancelItemEdit = () => {
+    setEditingItemId(null)
+    setItemForm(itemInitialState)
+    setItemError(null)
   }
 
   const submitScenario = async (event) => {
@@ -338,6 +409,7 @@ const DMToolsPage = () => {
     }
   }
 
+
   const startScenarioEdit = (scenario) => {
     setEditingScenarioId(scenario.id)
     setScenarioEditForm({
@@ -356,11 +428,14 @@ const DMToolsPage = () => {
   }
 
   const submitScenarioEdit = async (event) => {
+
     event.preventDefault()
     if (!activeCampaign || !editingScenarioId) return
 
     if (!scenarioEditForm.title.trim()) {
+
       setScenarioEditError('El título del escenario es obligatorio.')
+
       return
     }
 
@@ -368,10 +443,12 @@ const DMToolsPage = () => {
     setScenarioEditError(null)
 
     try {
+
       const payload = buildScenarioPayload(scenarioEditForm)
       await updateScenario(activeCampaign.id, editingScenarioId, payload)
       await refetch()
       cancelScenarioEdit()
+
     } catch (updateError) {
       const message =
         updateError.response?.data?.message ??
@@ -382,6 +459,7 @@ const DMToolsPage = () => {
       setIsUpdatingScenario(false)
     }
   }
+
 
   const handleDeleteScenario = async (scenarioId) => {
     if (!activeCampaign) return
@@ -412,6 +490,7 @@ const DMToolsPage = () => {
     setNpcEditForm((prev) => ({ ...prev, [name]: value }))
   }
 
+
   const submitNpc = async (event) => {
     event.preventDefault()
     if (!activeCampaign) return
@@ -440,6 +519,7 @@ const DMToolsPage = () => {
     }
   }
 
+
   const startNpcEdit = (npc) => {
     setEditingNpcId(npc.id)
     setNpcEditForm({
@@ -460,6 +540,7 @@ const DMToolsPage = () => {
   }
 
   const submitNpcEdit = async (event) => {
+
     event.preventDefault()
     if (!activeCampaign || !editingNpcId) return
 
@@ -472,10 +553,12 @@ const DMToolsPage = () => {
     setNpcEditError(null)
 
     try {
+
       const payload = buildNpcPayload(npcEditForm)
       await updateNpc(activeCampaign.id, editingNpcId, payload)
       await refetch()
       cancelNpcEdit()
+
     } catch (updateError) {
       const message =
         updateError.response?.data?.message ??
@@ -486,6 +569,7 @@ const DMToolsPage = () => {
       setIsUpdatingNpc(false)
     }
   }
+
 
   const handleDeleteNpc = async (npcId) => {
     if (!activeCampaign) return
@@ -583,16 +667,20 @@ const DMToolsPage = () => {
       await loadItems()
       await refetch()
       cancelItemEdit()
+
     } catch (updateError) {
       const message =
         updateError.response?.data?.message ??
         updateError.message ??
+
         'No se pudo actualizar el objeto.'
       setItemEditError(message)
+
     } finally {
       setIsUpdatingItem(false)
     }
   }
+
 
   const renderCampaignsTab = () => (
     <div className="space-y-6">
@@ -600,6 +688,7 @@ const DMToolsPage = () => {
         <h2 className="text-lg font-semibold text-parchment">Crear nueva campaña</h2>
         <p className="mt-1 text-sm text-slate-400">
           Define el nombre y estado inicial. Puedes actualizar detalles avanzados más tarde.
+
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleCreateCampaign}>
@@ -1505,6 +1594,7 @@ const DMToolsPage = () => {
                         className="inline-flex rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/50"
                         disabled={isUpdatingItem}
                       >
+
                         {isUpdatingItem ? 'Guardando...' : 'Guardar cambios'}
                       </button>
                       <button
@@ -1613,6 +1703,7 @@ const DMToolsPage = () => {
           {activeTab === 'scenarios' && renderScenariosTab()}
           {activeTab === 'npcs' && renderNpcsTab()}
           {activeTab === 'items' && renderItemsTab()}
+
         </div>
       )}
     </section>
