@@ -7,6 +7,7 @@ import RegisterPage from '../pages/auth/RegisterPage'
 import HomePage from '../pages/HomePage'
 import ProfilePage from '../pages/ProfilePage'
 import DMView from '../pages/DMView'
+import DMToolsPage from '../pages/dm/DMToolsPage'
 import PlayerView from '../pages/PlayerView'
 import PlayerCharactersPage from '../pages/player/PlayerCharactersPage'
 import { DMEntryPage, PlayerEntryPage } from '../pages/SessionEntryPage'
@@ -95,6 +96,11 @@ export const router = createBrowserRouter([
         path: 'dm',
         loader: requireDmLoader,
         element: <DMView />,
+      },
+      {
+        path: 'tools',
+        loader: requireDmLoader,
+        element: <DMToolsPage />,
       },
       {
         path: 'player',
