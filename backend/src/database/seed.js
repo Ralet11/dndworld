@@ -1,16 +1,23 @@
+import bcrypt from 'bcrypt'
 import { Campaign } from '../models/Campaign.js'
+import { CampaignMembership } from '../models/CampaignMembership.js'
+import { Item } from '../models/Item.js'
 import { Npc } from '../models/Npc.js'
 import { Scenario } from '../models/Scenario.js'
 import { User } from '../models/User.js'
+
+const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? 12)
 
 export const ensureSeedData = async () => {
   const campaignCount = await Campaign.count()
   if (campaignCount > 0) return
 
+  const passwordHash = await bcrypt.hash('dev-placeholder', saltRounds)
+
   const dm = await User.create({
     username: 'arch-dm',
     email: 'dm@example.com',
-    passwordHash: 'dev-placeholder',
+    passwordHash,
     displayName: 'Arch DM',
     role: 'dm',
   })
@@ -30,6 +37,13 @@ export const ensureSeedData = async () => {
       allowRandomEncounters: true,
       weatherSystem: 'dynamic',
     },
+  })
+
+  await CampaignMembership.create({
+    campaignId: campaign.id,
+    userId: dm.id,
+    roleInCampaign: 'dm',
+    status: 'accepted',
   })
 
   const scenario = await Scenario.create({
@@ -55,56 +69,28 @@ export const ensureSeedData = async () => {
     },
   })
 
-  await Npc.bulkCreate([
+  await Npc.bulkCreate([])
+
+  await Item.bulkCreate([
     {
       campaignId: campaign.id,
-      scenarioId: scenario.id,
-      name: 'Keeper Solenne',
-      title: 'Chronomancer Guild Liaison',
-      creatureType: 'Humanoid',
-      disposition: 'friendly',
-      statBlock: {
-        ac: 15,
-        hp: 44,
-        abilities: {
-          intel: 18,
-          charisma: 16,
-        },
+      name: 'Chronal Compass',
+      type: 'consumable',
+      data: {
+        rarity: 'rare',
+        description: 'Allows the bearer to re-roll a failed navigation check once per session.'
       },
-      hooks: {
-        goals: ['Secure allies against rogue time bandits'],
-        secrets: ['Knows of a hidden time gate beneath the bazaar'],
-      },
-      lootProfile: {
-        guaranteed: ['Chronal Compass'],
-        rareChance: 0.25,
-      },
-      portraitUrl: 'https://example.com/assets/solenne.png',
     },
     {
       campaignId: campaign.id,
-      scenarioId: scenario.id,
-      name: 'Vrax the Time-Warped',
-      title: 'Temporal Smuggler',
-      creatureType: 'Tiefling',
-      disposition: 'neutral',
-      statBlock: {
-        ac: 14,
-        hp: 52,
-        abilities: {
-          dex: 17,
-          charisma: 18,
-        },
+      name: 'Starlit Edge',
+      type: 'weapon',
+      data: {
+        rarity: 'uncommon',
+        damage: '1d8 slashing',
+        effect: 'Emits dim light and reveals invisible creatures on a hit.'
       },
-      hooks: {
-        motivations: ['Profit from rare chrono-artifacts'],
-        leverage: ['Possesses a time-shard map fragment'],
-      },
-      lootProfile: {
-        guaranteed: ['Bag of Folded Moments'],
-        rareChance: 0.35,
-      },
-      portraitUrl: 'https://example.com/assets/vrax.png',
     },
   ])
 }
+

@@ -5,7 +5,7 @@ dotenv.config()
 const requiredEnv = (key) => {
   const value = process.env[key]
   if (!value) {
-    throw new Error("Missing required environment variable" )
+    throw new Error(`Missing required environment variable: ${key}`)
   }
   return value
 }
@@ -21,6 +21,8 @@ export const env = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
   },
+  jwtSecret: process.env.JWT_SECRET ?? (process.env.NODE_ENV === 'production' ? requiredEnv('JWT_SECRET') : 'dev-secret'),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
   get isUsingUrl() {
     return Boolean(this.databaseUrl)
   },

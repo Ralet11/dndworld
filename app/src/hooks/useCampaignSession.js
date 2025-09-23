@@ -4,6 +4,9 @@ import { useSessionStore } from '../store/useSessionStore'
 
 const isAbortError = (error) => error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError'
 
+const isUuid = (value) =>
+  typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
 export const useCampaignSession = (campaignId, { role } = {}) => {
   const session = useSessionStore((state) => state.session)
   const assignCampaign = useSessionStore((state) => state.assignCampaign)
@@ -14,7 +17,7 @@ export const useCampaignSession = (campaignId, { role } = {}) => {
 
   const fetchCampaign = useCallback(
     async ({ signal } = {}) => {
-      if (!campaignId) return null
+      if (!campaignId || !isUuid(campaignId)) return null
 
       setLoading(true)
       setError(null)
@@ -61,3 +64,5 @@ export const useCampaignSession = (campaignId, { role } = {}) => {
     refetch: () => fetchCampaign(),
   }
 }
+
+
