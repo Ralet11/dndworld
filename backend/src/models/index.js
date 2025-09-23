@@ -26,6 +26,9 @@ const applyAssociations = () => {
   Item.belongsTo(Campaign, { as: 'campaign', foreignKey: 'campaignId', onDelete: 'CASCADE' })
   Campaign.hasMany(Item, { as: 'items', foreignKey: 'campaignId' })
 
+  Item.belongsTo(Scenario, { as: 'scenario', foreignKey: 'scenarioId', onDelete: 'SET NULL' })
+  Scenario.hasMany(Item, { as: 'items', foreignKey: 'scenarioId' })
+
   Npc.belongsTo(Campaign, { as: 'campaign', foreignKey: 'campaignId', onDelete: 'CASCADE' })
   Campaign.hasMany(Npc, { as: 'npcs', foreignKey: 'campaignId' })
 

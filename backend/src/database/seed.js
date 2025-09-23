@@ -74,6 +74,7 @@ export const ensureSeedData = async () => {
   await Item.bulkCreate([
     {
       campaignId: campaign.id,
+      scenarioId: scenario.id,
       name: 'Chronal Compass',
       type: 'consumable',
       data: {
@@ -83,6 +84,7 @@ export const ensureSeedData = async () => {
     },
     {
       campaignId: campaign.id,
+      scenarioId: scenario.id,
       name: 'Starlit Edge',
       type: 'weapon',
       data: {

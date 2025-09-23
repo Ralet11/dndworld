@@ -51,3 +51,10 @@ export const createItem = async (campaignId, payload, config = {}) => {
   const response = await apiClient.post(`/campaigns/${campaignId}/items`, payload, config)
   return response.data.item
 }
+
+export const updateItem = async (campaignId, itemId, payload, config = {}) => {
+  if (!campaignId) throw new Error('campaignId is required')
+  if (!itemId) throw new Error('itemId is required')
+  const response = await apiClient.put(`/campaigns/${campaignId}/items/${itemId}`, payload, config)
+  return response.data.item
+}

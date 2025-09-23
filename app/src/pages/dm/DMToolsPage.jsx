@@ -1,7 +1,7 @@
 // app/src/pages/dm/DMToolsPage.jsx
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { createNpc, createScenario } from '../../api/campaigns'
+import { createItem, createNpc, createScenario, updateItem } from '../../api/campaigns'
 import { useCampaignSession } from '../../hooks/useCampaignSession'
 
 const scenarioInitialState = {
@@ -20,10 +20,17 @@ const npcInitialState = {
   portraitUrl: '',
 }
 
+const itemInitialState = {
+  name: '',
+  type: 'misc',
+  scenarioId: '',
+}
+
 const DMToolsPage = () => {
   const { campaignId } = useParams()
   const { campaign: activeCampaign, isLoading, error, refetch } = useCampaignSession(campaignId, { role: 'dm' })
 
+  const [activeTab, setActiveTab] = useState('prep')
   const [scenarioForm, setScenarioForm] = useState(scenarioInitialState)
   const [scenarioError, setScenarioError] = useState(null)
   const [isCreatingScenario, setIsCreatingScenario] = useState(false)
@@ -32,13 +39,21 @@ const DMToolsPage = () => {
   const [npcError, setNpcError] = useState(null)
   const [isCreatingNpc, setIsCreatingNpc] = useState(false)
 
+  const [itemForm, setItemForm] = useState(itemInitialState)
+  const [itemError, setItemError] = useState(null)
+  const [isSavingItem, setIsSavingItem] = useState(false)
+  const [editingItemId, setEditingItemId] = useState(null)
+
   const scenarios = activeCampaign?.scenarios ?? []
   const allNpcs = activeCampaign?.npcs ?? []
+  const items = activeCampaign?.items ?? []
 
   const scenarioLookup = useMemo(() => {
     const entries = scenarios.map((scenario) => [scenario.id, scenario.title])
     return Object.fromEntries(entries)
   }, [scenarios])
+
+  const isEditingItem = Boolean(editingItemId)
 
   const handleScenarioInputChange = (event) => {
     const { name, value } = event.target
@@ -48,6 +63,72 @@ const DMToolsPage = () => {
   const handleNpcInputChange = (event) => {
     const { name, value } = event.target
     setNpcForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleItemInputChange = (event) => {
+    const { name, value } = event.target
+    setItemForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const startNewItem = () => {
+    setEditingItemId(null)
+    setItemError(null)
+    setItemForm(itemInitialState)
+  }
+
+  const startEditItem = (item) => {
+    setEditingItemId(item.id)
+    setItemError(null)
+    setItemForm({
+      name: item.name ?? '',
+      type: item.type ?? 'misc',
+      scenarioId: item.scenarioId ?? item.scenario?.id ?? '',
+    })
+  }
+
+  const submitItem = async (event) => {
+    event.preventDefault()
+    if (!activeCampaign) return
+
+    if (!itemForm.name.trim()) {
+      setItemError('El nombre del objeto es obligatorio.')
+      return
+    }
+
+    setIsSavingItem(true)
+    setItemError(null)
+
+    try {
+      const allowedTypes = ['consumable', 'weapon', 'misc']
+      const payload = {
+        name: itemForm.name.trim(),
+        type: allowedTypes.includes(itemForm.type) ? itemForm.type : 'misc',
+      }
+
+      const normalizedScenarioId = itemForm.scenarioId?.trim()
+      if (normalizedScenarioId) {
+        payload.scenarioId = normalizedScenarioId
+      } else {
+        payload.scenarioId = null
+      }
+
+      if (editingItemId) {
+        await updateItem(activeCampaign.id, editingItemId, payload)
+      } else {
+        await createItem(activeCampaign.id, payload)
+      }
+
+      startNewItem()
+      await refetch()
+    } catch (creationError) {
+      const message =
+        creationError.response?.data?.message ??
+        creationError.message ??
+        'No se pudo guardar el objeto.'
+      setItemError(message)
+    } finally {
+      setIsSavingItem(false)
+    }
   }
 
   const submitScenario = async (event) => {
@@ -168,7 +249,36 @@ const DMToolsPage = () => {
 
       {activeCampaign && (
         <div className="space-y-6">
-          <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-lg">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('prep')}
+              className={`rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-widest transition ${
+                activeTab === 'prep'
+                  ? 'border-emerald-400 bg-emerald-400/10 text-emerald-200'
+                  : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-emerald-300 hover:text-emerald-200'
+              }`}
+            >
+              Escenarios y NPCs
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('items')
+                startNewItem()
+              }}
+              className={`rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-widest transition ${
+                activeTab === 'items'
+                  ? 'border-emerald-400 bg-emerald-400/10 text-emerald-200'
+                  : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-emerald-300 hover:text-emerald-200'
+              }`}
+            >
+              Objetos
+            </button>
+          </div>
+
+          {activeTab === 'prep' ? (
+            <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-lg">
             <header className="space-y-2">
               <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Herramientas de gestion</p>
               <h2 className="text-xl font-semibold text-parchment">Escenarios y NPCs</h2>
@@ -428,7 +538,136 @@ const DMToolsPage = () => {
                 </div>
               </section>
             </div>
-          </section>
+            </section>
+          ) : (
+            <section className="space-y-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-6 shadow-lg">
+              <header className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.35em] text-emerald-300">Biblioteca de objetos</p>
+                <h2 className="text-xl font-semibold text-parchment">Objetos de la campana</h2>
+                <p className="text-sm text-slate-400">
+                  Registra tesoros, equipo clave y recursos narrativos. Vincula cada objeto a un escenario para mantener la
+                  preparacion organizada.
+                </p>
+              </header>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+                  <h3 className="text-lg font-semibold text-parchment">{isEditingItem ? 'Editar objeto' : 'Nuevo objeto'}</h3>
+                  <form className="space-y-4" onSubmit={submitItem}>
+                    <div>
+                      <label className="text-xs uppercase tracking-widest text-slate-400" htmlFor="item-name">
+                        Nombre
+                      </label>
+                      <input
+                        id="item-name"
+                        name="name"
+                        type="text"
+                        value={itemForm.name}
+                        onChange={handleItemInputChange}
+                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                        placeholder="Amuleto de las mareas"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs uppercase tracking-widest text-slate-400" htmlFor="item-type">
+                          Tipo
+                        </label>
+                        <select
+                          id="item-type"
+                          name="type"
+                          value={itemForm.type}
+                          onChange={handleItemInputChange}
+                          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                        >
+                          <option value="misc">Miscelaneo</option>
+                          <option value="consumable">Consumible</option>
+                          <option value="weapon">Arma</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-widest text-slate-400" htmlFor="item-scenario">
+                          Escenario vinculado
+                        </label>
+                        <select
+                          id="item-scenario"
+                          name="scenarioId"
+                          value={itemForm.scenarioId}
+                          onChange={handleItemInputChange}
+                          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                        >
+                          <option value="">Sin asignar</option>
+                          {scenarios.map((scenario) => (
+                            <option key={scenario.id} value={scenario.id}>
+                              {scenario.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {itemError && <p className="text-sm text-red-300">{itemError}</p>}
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="submit"
+                        className="inline-flex rounded-full bg-emerald-500 px-5 py-2 text-sm font-semibold uppercase tracking-widest text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/50"
+                        disabled={isSavingItem}
+                      >
+                        {isSavingItem ? 'Guardando...' : isEditingItem ? 'Guardar cambios' : 'Agregar objeto'}
+                      </button>
+                      {isEditingItem && (
+                        <button
+                          type="button"
+                          onClick={startNewItem}
+                          className="rounded-full border border-slate-500 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-200 transition hover:border-emerald-300 hover:text-emerald-200"
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                </section>
+
+                <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+                  <h3 className="text-sm font-semibold text-parchment">Objetos registrados</h3>
+                  <div className="space-y-2">
+                    {items.length ? (
+                      items.map((item) => (
+                        <article
+                          key={item.id}
+                          className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-200"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <div>
+                                <h4 className="font-semibold text-parchment">{item.name}</h4>
+                                <p className="text-[10px] uppercase tracking-[0.35em] text-amber-300">Tipo: {item.type}</p>
+                              </div>
+                              <p className="text-[10px] uppercase tracking-[0.35em] text-emerald-300">
+                                Escenario: {item.scenario?.title ?? scenarioLookup[item.scenarioId] ?? 'Sin asignar'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => startEditItem(item)}
+                              className="rounded-full border border-emerald-300 px-3 py-1 text-[10px] uppercase tracking-[0.35em] text-emerald-200 transition hover:bg-emerald-300/10"
+                            >
+                              Editar
+                            </button>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400">Todavia no hay objetos registrados.</p>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </section>
+          )}
         </div>
       )}
     </section>

@@ -15,6 +15,16 @@ Item.init(
       allowNull: false,
       field: 'campaign_id',
     },
+    scenarioId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      field: 'scenario_id',
+      references: {
+        model: 'scenarios',
+        key: 'id',
+      },
+      onDelete: 'SET NULL',
+    },
     name: {
       type: DataTypes.STRING(160),
       allowNull: false,
@@ -39,6 +49,9 @@ Item.init(
       },
       {
         fields: ['campaign_id', 'name'],
+      },
+      {
+        fields: ['scenario_id'],
       },
     ],
   },

@@ -28,6 +28,12 @@ const scenarioImagesInclude = {
   ],
 }
 
+const itemScenarioInclude = {
+  model: Scenario,
+  as: 'scenario',
+  attributes: ['id', 'title'],
+}
+
 const summarizeCampaignInclude = [
   { model: User, as: 'dm', attributes: ['id', 'username', 'displayName'] },
   { model: Scenario, as: 'scenarios', attributes: ['id', 'title'] },
@@ -38,7 +44,7 @@ const fullCampaignInclude = [
   { model: User, as: 'dm', attributes: ['id', 'username', 'displayName'] },
   { model: Scenario, as: 'scenarios', include: [scenarioImagesInclude] },
   { model: Npc, as: 'npcs' },
-  { model: Item, as: 'items' },
+  { model: Item, as: 'items', include: [itemScenarioInclude] },
   { model: CampaignMembership, as: 'memberships', include: [membershipUserInclude] },
 ]
 
@@ -67,6 +73,16 @@ const normalizeJsonField = (value) => {
     }
   }
   return null
+}
+
+const normalizeScenarioId = (value) => {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : null
+  }
+  return value
 }
 
 const loadMembership = (membership) =>
@@ -344,6 +360,7 @@ export const getCampaignItems = async (req, res, next) => {
 
     const items = await Item.findAll({
       where,
+      include: [itemScenarioInclude],
       order: [
         ['name', 'ASC'],
         ['createdAt', 'ASC'],
@@ -359,7 +376,7 @@ export const getCampaignItems = async (req, res, next) => {
 export const createItem = async (req, res, next) => {
   try {
     const { campaignId } = req.params
-    const { name, type = 'misc', data } = req.body ?? {}
+    const { name, type = 'misc', data, scenarioId } = req.body ?? {}
 
     if (!req.user) {
       return res.status(401).json({ message: 'Authentication required' })
@@ -379,15 +396,96 @@ export const createItem = async (req, res, next) => {
     }
 
     const itemType = itemTypes.includes(type) ? type : 'misc'
+    const normalizedScenarioId = normalizeScenarioId(scenarioId)
+
+    let scenarioReference = null
+    if (normalizedScenarioId) {
+      const scenario = await Scenario.findOne({
+        where: { id: normalizedScenarioId, campaignId },
+      })
+
+      if (!scenario) {
+        return res.status(400).json({ message: 'Scenario does not belong to this campaign' })
+      }
+
+      scenarioReference = scenario.id
+    }
 
     const item = await Item.create({
       campaignId,
+      scenarioId: scenarioReference,
       name: name.trim(),
       type: itemType,
       data: normalizeJsonField(data),
     })
 
+    await item.reload({ include: [itemScenarioInclude] })
+
     res.status(201).json({ item })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateItem = async (req, res, next) => {
+  try {
+    const { campaignId, itemId } = req.params
+    const { name, type, data, scenarioId } = req.body ?? {}
+
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const campaign = await Campaign.findByPk(campaignId)
+    if (!campaign) {
+      return res.status(404).json({ message: 'Campaign not found' })
+    }
+
+    if (campaign.dmId !== req.user.id) {
+      return res.status(403).json({ message: 'Only the campaign DM can update items' })
+    }
+
+    const item = await Item.findOne({ where: { id: itemId, campaignId } })
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' })
+    }
+
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: 'Item name is required' })
+      }
+      item.name = name.trim()
+    }
+
+    if (type !== undefined) {
+      item.type = itemTypes.includes(type) ? type : 'misc'
+    }
+
+    if (data !== undefined) {
+      item.data = normalizeJsonField(data)
+    }
+
+    const normalizedScenarioId = normalizeScenarioId(scenarioId)
+    if (normalizedScenarioId !== undefined) {
+      if (normalizedScenarioId) {
+        const scenario = await Scenario.findOne({
+          where: { id: normalizedScenarioId, campaignId },
+        })
+
+        if (!scenario) {
+          return res.status(400).json({ message: 'Scenario does not belong to this campaign' })
+        }
+
+        item.scenarioId = scenario.id
+      } else {
+        item.scenarioId = null
+      }
+    }
+
+    await item.save()
+    await item.reload({ include: [itemScenarioInclude] })
+
+    res.json({ item })
   } catch (error) {
     next(error)
   }

@@ -3,6 +3,7 @@ import {
   acceptCampaignInvite,
   createCampaign,
   createItem,
+  updateItem,
   createNpc,
   createScenario,
   getCampaignById,
@@ -27,5 +28,6 @@ router.post('/:campaignId/scenarios', createScenario)
 router.post('/:campaignId/npcs', createNpc)
 router.get('/:campaignId/items', requireAuth, getCampaignItems)
 router.post('/:campaignId/items', requireAuth, createItem)
+router.put('/:campaignId/items/:itemId', requireAuth, updateItem)
 
 export default router
