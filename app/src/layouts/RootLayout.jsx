@@ -8,6 +8,7 @@ const RootLayout = () => {
   const location = useLocation()
 
   const session = useSessionStore((state) => state.session)
+  const activeCampaignId = useSessionStore((state) => state.session.activeCampaignId)
   const logout = useSessionStore((state) => state.logout)
   const setActiveMode = useSessionStore((state) => state.setActiveMode)
 
@@ -24,15 +25,68 @@ const RootLayout = () => {
   const handleModeChange = (mode) => {
     if (session.activeMode === mode) return
     setActiveMode(mode)
-    if (session.user) {
-      navigate(mode === 'dm' ? '/dm' : '/player')
-    }
   }
 
   // Helpers de navegación/modo
   const isActive = (pathPrefix) => location.pathname.startsWith(pathPrefix)
   const isPlayerMode = session.activeMode === 'player'
   const isDmMode = session.activeMode === 'dm'
+
+  const dmToolsPath = activeCampaignId ? `/session/${activeCampaignId}/dm` : '/dm'
+  const dmToolsTitle = activeCampaignId
+    ? 'Abrir herramientas del DM para la campaña activa.'
+    : 'Selecciona una campaña para habilitar las herramientas del DM.'
+
+  const modeAwareLinks = []
+
+  if (session.user) {
+    if (isDmMode) {
+      modeAwareLinks.push({
+        key: 'dm-campaigns',
+        label: 'Campañas',
+        to: '/dm',
+        isActive: isActive('/dm'),
+      })
+
+      modeAwareLinks.push({
+        key: 'dm-tools',
+        label: 'Herramientas DM',
+        to: dmToolsPath,
+        isActive: activeCampaignId ? location.pathname.startsWith(`/session/${activeCampaignId}/dm`) : false,
+        muted: !activeCampaignId,
+        title: dmToolsTitle,
+      })
+    }
+
+    if (isPlayerMode) {
+      modeAwareLinks.push({
+        key: 'player-campaigns',
+        label: 'Campañas',
+        to: '/player/campaigns',
+        isActive: isActive('/player'),
+      })
+
+      modeAwareLinks.push({
+        key: 'player-characters',
+        label: 'Personajes',
+        to: '/player/characters',
+        isActive: isActive('/player/characters'),
+      })
+    }
+
+    modeAwareLinks.push({
+      key: 'profile',
+      label: 'Perfil',
+      to: '/profile',
+      isActive: isActive('/profile'),
+    })
+  }
+
+  const buildNavLinkClassName = (isLinkActive, isMuted = false) => {
+    if (isLinkActive) return 'transition text-emerald-300'
+    if (isMuted) return 'transition text-slate-500 hover:text-emerald-200'
+    return 'transition hover:text-emerald-200'
+  }
 
   const firstName =
     (session.user?.displayName || session.user?.name || '')
@@ -57,33 +111,11 @@ const RootLayout = () => {
               Overview
             </Link>
 
-            {session.user && isPlayerMode ? (
-              <>
-                <Link
-                  to="/player/campaigns"
-                  className={`transition ${isActive('/player') ? 'text-emerald-300' : 'hover:text-emerald-200'}`}
-                >
-                  Campañas
-                </Link>
-                <Link
-                  to="/player/characters"
-                  className={`transition ${
-                    isActive('/player/characters') ? 'text-emerald-300' : 'hover:text-emerald-200'
-                  }`}
-                >
-                  Personajes
-                </Link>
-              </>
-            ) : null}
-
-            {session.user && isDmMode ? (
-              <Link
-                to="/dm"
-                className={`transition ${isActive('/dm') ? 'text-emerald-300' : 'hover:text-emerald-200'}`}
-              >
-                Consola DM
+            {modeAwareLinks.map(({ key, label, to, isActive: linkIsActive, muted, title }) => (
+              <Link key={key} to={to} title={title} className={buildNavLinkClassName(linkIsActive, muted)}>
+                {label}
               </Link>
-            ) : null}
+            ))}
 
             <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 p-1 text-xs">
               <button
@@ -112,9 +144,6 @@ const RootLayout = () => {
 
             {session.user ? (
               <>
-                <Link to="/profile" className="transition hover:text-emerald-300">
-                  Perfil
-                </Link>
                 <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200">
                   {firstName}
                 </span>
