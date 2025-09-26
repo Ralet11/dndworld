@@ -69,6 +69,68 @@ const normalizeJsonField = (value) => {
   return null
 }
 
+const normalizeArrayInput = (value, fieldName) => {
+  if (value === undefined) {
+    return { skip: true }
+  }
+
+  if (value === null) {
+    return { value: null }
+  }
+
+  if (Array.isArray(value)) {
+    return { value }
+  }
+
+  if (typeof value === 'string') {
+    return { value: normalizeArrayField(value) }
+  }
+
+  return {
+    error: `${fieldName} must be an array, comma-separated string, or null`,
+  }
+}
+
+const normalizeJsonInput = (value, fieldName) => {
+  if (value === undefined) {
+    return { skip: true }
+  }
+
+  if (value === null) {
+    return { value: null }
+  }
+
+  if (typeof value === 'object') {
+    return { value }
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      if (typeof parsed === 'object' && parsed !== null) {
+        return { value: parsed }
+      }
+      return { error: `${fieldName} must be a valid JSON object` }
+    } catch (error) {
+      return { error: `${fieldName} must be valid JSON` }
+    }
+  }
+
+  return {
+    error: `${fieldName} must be an object or JSON string`,
+  }
+}
+
+const toTrimmedOrNull = (value) => {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const trimmed = typeof value === 'string' ? value.trim() : value
+  if (typeof trimmed === 'string') {
+    return trimmed.length > 0 ? trimmed : null
+  }
+  return trimmed
+}
+
 const loadMembership = (membership) =>
   membership.reload({
     include: [membershipUserInclude],
@@ -392,6 +454,472 @@ export const createItem = async (req, res, next) => {
     })
 
     res.status(201).json({ item })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateCampaign = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const { campaignId } = req.params
+    const { name, description, status, dmId, clockState, settings } = req.body ?? {}
+
+    const access = await ensureCampaignAccess({
+      campaignId,
+      userId: req.user.id,
+      requireAccepted: false,
+    })
+
+    if (access.error) {
+      return res.status(access.error.status).json({ message: access.error.message })
+    }
+
+    if (!access.isDm) {
+      return res.status(403).json({ message: 'Only the campaign DM can update the campaign' })
+    }
+
+    const updates = {}
+
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: 'Campaign name cannot be empty' })
+      }
+      updates.name = name.trim()
+    }
+
+    if (description !== undefined) {
+      updates.description = toTrimmedOrNull(description)
+    }
+
+    if (status !== undefined) {
+      if (!['draft', 'active', 'archived'].includes(status)) {
+        return res.status(400).json({ message: 'Invalid campaign status' })
+      }
+      updates.status = status
+    }
+
+    if (dmId !== undefined && dmId !== access.campaign.dmId) {
+      const nextDm = await User.findByPk(dmId)
+      if (!nextDm) {
+        return res.status(404).json({ message: 'Dungeon master not found' })
+      }
+      if (nextDm.role !== 'dm') {
+        return res.status(400).json({ message: 'Assigned user must have the dm role' })
+      }
+      updates.dmId = dmId
+    }
+
+    if (clockState !== undefined) {
+      const normalized = normalizeJsonInput(clockState, 'clockState')
+      if (normalized.error) {
+        return res.status(400).json({ message: normalized.error })
+      }
+      updates.clockState = normalized.value
+    }
+
+    if (settings !== undefined) {
+      const normalized = normalizeJsonInput(settings, 'settings')
+      if (normalized.error) {
+        return res.status(400).json({ message: normalized.error })
+      }
+      updates.settings = normalized.value
+    }
+
+    if (!Object.keys(updates).length) {
+      await access.campaign.reload({ include: fullCampaignInclude })
+      return res.json({ campaign: access.campaign })
+    }
+
+    await access.campaign.update(updates)
+
+    const updatedCampaign = await Campaign.findByPk(campaignId, {
+      include: fullCampaignInclude,
+      order: [
+        [{ model: Scenario, as: 'scenarios' }, 'createdAt', 'ASC'],
+        [{ model: Npc, as: 'npcs' }, 'createdAt', 'ASC'],
+        [{ model: Item, as: 'items' }, 'createdAt', 'ASC'],
+        [{ model: CampaignMembership, as: 'memberships' }, 'createdAt', 'ASC'],
+      ],
+    })
+
+    res.json({ campaign: updatedCampaign })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateScenario = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const { campaignId, scenarioId } = req.params
+    const {
+      campaignId: nextCampaignId,
+      title,
+      summary,
+      environmentTags,
+      triggerConditions,
+      objective,
+      lootTable,
+      tacticalMap,
+      mediaRefs,
+    } = req.body ?? {}
+
+    const access = await ensureCampaignAccess({
+      campaignId,
+      userId: req.user.id,
+      requireAccepted: false,
+    })
+
+    if (access.error) {
+      return res.status(access.error.status).json({ message: access.error.message })
+    }
+
+    if (!access.isDm) {
+      return res.status(403).json({ message: 'Only the campaign DM can update scenarios' })
+    }
+
+    const scenario = await Scenario.findOne({
+      where: { id: scenarioId, campaignId },
+    })
+
+    if (!scenario) {
+      return res.status(404).json({ message: 'Scenario not found' })
+    }
+
+    let targetCampaignId = campaignId
+    if (nextCampaignId !== undefined && nextCampaignId !== campaignId) {
+      const targetCampaign = await Campaign.findByPk(nextCampaignId)
+      if (!targetCampaign) {
+        return res.status(404).json({ message: 'Target campaign not found' })
+      }
+      if (targetCampaign.dmId !== req.user.id) {
+        return res
+          .status(403)
+          .json({ message: 'You must be the DM of the target campaign to reassign scenarios' })
+      }
+      targetCampaignId = targetCampaign.id
+    }
+
+    const updates = {}
+
+    if (title !== undefined) {
+      if (!title || !title.trim()) {
+        return res.status(400).json({ message: 'Scenario title cannot be empty' })
+      }
+      updates.title = title.trim()
+    }
+
+    if (summary !== undefined) {
+      updates.summary = toTrimmedOrNull(summary)
+    }
+
+    if (objective !== undefined) {
+      updates.objective = toTrimmedOrNull(objective)
+    }
+
+    const normalizedTags = normalizeArrayInput(environmentTags, 'environmentTags')
+    if (normalizedTags.error) {
+      return res.status(400).json({ message: normalizedTags.error })
+    }
+    if (!normalizedTags.skip) {
+      updates.environmentTags = normalizedTags.value
+    }
+
+    const normalizedTrigger = normalizeJsonInput(triggerConditions, 'triggerConditions')
+    if (normalizedTrigger.error) {
+      return res.status(400).json({ message: normalizedTrigger.error })
+    }
+    if (!normalizedTrigger.skip) {
+      updates.triggerConditions = normalizedTrigger.value
+    }
+
+    const normalizedLoot = normalizeJsonInput(lootTable, 'lootTable')
+    if (normalizedLoot.error) {
+      return res.status(400).json({ message: normalizedLoot.error })
+    }
+    if (!normalizedLoot.skip) {
+      updates.lootTable = normalizedLoot.value
+    }
+
+    const normalizedTactical = normalizeJsonInput(tacticalMap, 'tacticalMap')
+    if (normalizedTactical.error) {
+      return res.status(400).json({ message: normalizedTactical.error })
+    }
+    if (!normalizedTactical.skip) {
+      updates.tacticalMap = normalizedTactical.value
+    }
+
+    const normalizedMedia = normalizeJsonInput(mediaRefs, 'mediaRefs')
+    if (normalizedMedia.error) {
+      return res.status(400).json({ message: normalizedMedia.error })
+    }
+    if (!normalizedMedia.skip) {
+      updates.mediaRefs = normalizedMedia.value
+    }
+
+    if (targetCampaignId !== scenario.campaignId || nextCampaignId !== undefined) {
+      updates.campaignId = targetCampaignId
+    }
+
+    if (!Object.keys(updates).length) {
+      const reloaded = await Scenario.findByPk(scenario.id, { include: [scenarioImagesInclude] })
+      return res.json({ scenario: reloaded })
+    }
+
+    await scenario.update(updates)
+
+    const updatedScenario = await Scenario.findByPk(scenario.id, {
+      include: [scenarioImagesInclude],
+    })
+
+    res.json({ scenario: updatedScenario })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateNpc = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const { campaignId, npcId } = req.params
+    const {
+      campaignId: nextCampaignId,
+      name,
+      title,
+      creatureType,
+      disposition,
+      scenarioId,
+      statBlock,
+      hooks,
+      lootProfile,
+      portraitUrl,
+    } = req.body ?? {}
+
+    const access = await ensureCampaignAccess({
+      campaignId,
+      userId: req.user.id,
+      requireAccepted: false,
+    })
+
+    if (access.error) {
+      return res.status(access.error.status).json({ message: access.error.message })
+    }
+
+    if (!access.isDm) {
+      return res.status(403).json({ message: 'Only the campaign DM can update NPCs' })
+    }
+
+    const npc = await Npc.findOne({
+      where: { id: npcId, campaignId },
+    })
+
+    if (!npc) {
+      return res.status(404).json({ message: 'NPC not found' })
+    }
+
+    let targetCampaignId = campaignId
+    if (nextCampaignId !== undefined && nextCampaignId !== campaignId) {
+      const targetCampaign = await Campaign.findByPk(nextCampaignId)
+      if (!targetCampaign) {
+        return res.status(404).json({ message: 'Target campaign not found' })
+      }
+      if (targetCampaign.dmId !== req.user.id) {
+        return res
+          .status(403)
+          .json({ message: 'You must be the DM of the target campaign to reassign NPCs' })
+      }
+      targetCampaignId = targetCampaign.id
+    }
+
+    const updates = {}
+
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: 'NPC name cannot be empty' })
+      }
+      updates.name = name.trim()
+    }
+
+    if (title !== undefined) {
+      updates.title = toTrimmedOrNull(title)
+    }
+
+    if (creatureType !== undefined) {
+      updates.creatureType = toTrimmedOrNull(creatureType)
+    }
+
+    if (disposition !== undefined) {
+      if (!npcDispositions.includes(disposition)) {
+        return res.status(400).json({ message: 'Invalid disposition value' })
+      }
+      updates.disposition = disposition
+    }
+
+    let scenarioReference = npc.scenarioId
+    if (scenarioId !== undefined) {
+      if (!scenarioId) {
+        scenarioReference = null
+      } else {
+        const scenario = await Scenario.findOne({
+          where: { id: scenarioId, campaignId: targetCampaignId },
+        })
+        if (!scenario) {
+          return res.status(400).json({ message: 'Scenario does not belong to the target campaign' })
+        }
+        scenarioReference = scenario.id
+      }
+      updates.scenarioId = scenarioReference
+    }
+
+    const normalizedStatBlock = normalizeJsonInput(statBlock, 'statBlock')
+    if (normalizedStatBlock.error) {
+      return res.status(400).json({ message: normalizedStatBlock.error })
+    }
+    if (!normalizedStatBlock.skip) {
+      updates.statBlock = normalizedStatBlock.value
+    }
+
+    const normalizedHooks = normalizeJsonInput(hooks, 'hooks')
+    if (normalizedHooks.error) {
+      return res.status(400).json({ message: normalizedHooks.error })
+    }
+    if (!normalizedHooks.skip) {
+      updates.hooks = normalizedHooks.value
+    }
+
+    const normalizedLootProfile = normalizeJsonInput(lootProfile, 'lootProfile')
+    if (normalizedLootProfile.error) {
+      return res.status(400).json({ message: normalizedLootProfile.error })
+    }
+    if (!normalizedLootProfile.skip) {
+      updates.lootProfile = normalizedLootProfile.value
+    }
+
+    if (portraitUrl !== undefined) {
+      updates.portraitUrl = toTrimmedOrNull(portraitUrl)
+    }
+
+    if (targetCampaignId !== npc.campaignId || nextCampaignId !== undefined) {
+      updates.campaignId = targetCampaignId
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.json({ npc })
+    }
+
+    await npc.update(updates)
+
+    const updatedNpc = await Npc.findByPk(npc.id)
+
+    res.json({ npc: updatedNpc })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const updateItem = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const { campaignId, itemId } = req.params
+    const { campaignId: nextCampaignId, name, type, data, scenarioId } = req.body ?? {}
+
+    const access = await ensureCampaignAccess({
+      campaignId,
+      userId: req.user.id,
+      requireAccepted: false,
+    })
+
+    if (access.error) {
+      return res.status(access.error.status).json({ message: access.error.message })
+    }
+
+    if (!access.isDm) {
+      return res.status(403).json({ message: 'Only the campaign DM can update items' })
+    }
+
+    const item = await Item.findOne({ where: { id: itemId, campaignId } })
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' })
+    }
+
+    let targetCampaignId = campaignId
+    if (nextCampaignId !== undefined && nextCampaignId !== campaignId) {
+      const targetCampaign = await Campaign.findByPk(nextCampaignId)
+      if (!targetCampaign) {
+        return res.status(404).json({ message: 'Target campaign not found' })
+      }
+      if (targetCampaign.dmId !== req.user.id) {
+        return res
+          .status(403)
+          .json({ message: 'You must be the DM of the target campaign to reassign items' })
+      }
+      targetCampaignId = targetCampaign.id
+    }
+
+    const updates = {}
+
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: 'Item name cannot be empty' })
+      }
+      updates.name = name.trim()
+    }
+
+    if (type !== undefined) {
+      if (!itemTypes.includes(type)) {
+        return res.status(400).json({ message: 'Invalid item type' })
+      }
+      updates.type = type
+    }
+
+    const normalizedData = normalizeJsonInput(data, 'data')
+    if (normalizedData.error) {
+      return res.status(400).json({ message: normalizedData.error })
+    }
+    if (!normalizedData.skip) {
+      updates.data = normalizedData.value
+    }
+
+    if (scenarioId !== undefined) {
+      if (!scenarioId) {
+        updates.scenarioId = null
+      } else {
+        const scenario = await Scenario.findOne({
+          where: { id: scenarioId, campaignId: targetCampaignId },
+        })
+        if (!scenario) {
+          return res.status(400).json({ message: 'Scenario does not belong to the target campaign' })
+        }
+        updates.scenarioId = scenario.id
+      }
+    }
+
+    if (targetCampaignId !== item.campaignId || nextCampaignId !== undefined) {
+      updates.campaignId = targetCampaignId
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.json({ item })
+    }
+
+    await item.update(updates)
+
+    const updatedItem = await Item.findByPk(item.id)
+
+    res.json({ item: updatedItem })
   } catch (error) {
     next(error)
   }
