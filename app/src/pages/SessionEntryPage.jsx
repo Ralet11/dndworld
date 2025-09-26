@@ -1,32 +1,48 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { createCampaign } from '../api/campaigns'
 import { useCampaignList } from '../hooks/useCampaignList'
 import { useSessionStore } from '../store/useSessionStore'
 
 const SessionEntryPage = ({ role }) => {
   const navigate = useNavigate()
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  const stayOnList = params.get('view') === 'list'
   const { campaigns = [], isLoading, error, refetch } = useCampaignList()
   const activeCampaignId = useSessionStore((state) => state.session.activeCampaignId)
   const assignCampaign = useSessionStore((state) => state.assignCampaign)
+  const setActiveCampaign = useSessionStore((state) => state.setActiveCampaign)
 
   const [campaignForm, setCampaignForm] = useState({ name: '', description: '', status: 'draft' })
   const [campaignError, setCampaignError] = useState(null)
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
 
-  const buildPreparationPath = (id) => `/session/${id}/${role === 'dm' ? 'tools' : 'player'}`
+  const buildPreparationPath = (id) => (role === 'dm' ? '/dm/tools/scenarios' : `/session/${id}/player`)
   const buildLiveSessionPath = (id) => `/session/${id}/dm`
 
   useEffect(() => {
     if (!activeCampaignId) return
-    navigate(`/session/${activeCampaignId}/${role === 'dm' ? 'tools' : 'player'}`, { replace: true })
-  }, [activeCampaignId, navigate, role])
+    if (role === 'dm') {
+      if (!stayOnList) {
+        navigate('/dm/tools/scenarios', { replace: true })
+      }
+    } else {
+      navigate(`/session/${activeCampaignId}/player`, { replace: true })
+    }
+  }, [activeCampaignId, navigate, role, stayOnList])
 
   const handlePreparation = (campaignId) => {
+    if (role === 'dm') {
+      setActiveCampaign(campaignId)
+    }
     navigate(buildPreparationPath(campaignId))
   }
 
   const handleGoLive = (campaignId) => {
+    if (role === 'dm') {
+      setActiveCampaign(campaignId)
+    }
     navigate(buildLiveSessionPath(campaignId))
   }
 

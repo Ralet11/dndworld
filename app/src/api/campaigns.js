@@ -1,53 +1,68 @@
+// app/src/api/campaigns.js
 import { apiClient } from './client'
 
+// LISTAR CAMPAÑAS
 export const getCampaigns = async (config = {}) => {
-  const response = await apiClient.get('/campaigns', config)
-  return response.data.campaigns
+  const { data } = await apiClient.get('/campaigns', config)
+  // backend: { campaigns: [...] }
+  return data.campaigns
 }
 
+// OBTENER CAMPAÑA POR ID
 export const getCampaignById = async (campaignId, config = {}) => {
   if (!campaignId) throw new Error('campaignId is required')
-  const response = await apiClient.get(`/campaigns/${campaignId}`, config)
-  return response.data.campaign
+  const { data } = await apiClient.get(`/campaigns/${campaignId}`, config)
+  // backend: { campaign: {...} }
+  return data.campaign
 }
 
+// CREAR CAMPAÑA
 export const createCampaign = async (payload, config = {}) => {
-  const response = await apiClient.post('/campaigns', payload, config)
-  return response.data.campaign
+  const { data } = await apiClient.post('/campaigns', payload, config)
+  // backend: { campaign: {...} }
+  return data.campaign
 }
 
+// ESCENARIOS
 export const createScenario = async (campaignId, payload, config = {}) => {
   if (!campaignId) throw new Error('campaignId is required')
-  const response = await apiClient.post(`/campaigns/${campaignId}/scenarios`, payload, config)
-  return response.data.scenario
+  const { data } = await apiClient.post(`/campaigns/${campaignId}/scenarios`, payload, config)
+  // backend: { scenario: {...} }
+  return data.scenario
 }
 
+// NPCs
 export const createNpc = async (campaignId, payload, config = {}) => {
   if (!campaignId) throw new Error('campaignId is required')
-  const response = await apiClient.post(`/campaigns/${campaignId}/npcs`, payload, config)
-  return response.data.npc
+  const { data } = await apiClient.post(`/campaigns/${campaignId}/npcs`, payload, config)
+  // backend: { npc: {...} }
+  return data.npc
 }
 
 export const getCampaignNpcs = async (campaignId, params = {}, config = {}) => {
   if (!campaignId) throw new Error('campaignId is required')
-  const response = await apiClient.get(`/campaigns/${campaignId}/npcs`, {
+  const { data } = await apiClient.get(`/campaigns/${campaignId}/npcs`, {
     params,
     ...config,
   })
-  return response.data.npcs
+  // backend: { npcs: [...] }
+  return data.npcs
 }
 
+// ÍTEMS
 export const getCampaignItems = async (campaignId, params = {}, config = {}) => {
   if (!campaignId) throw new Error('campaignId is required')
-  const response = await apiClient.get(`/campaigns/${campaignId}/items`, {
+  const { data } = await apiClient.get(`/campaigns/${campaignId}/items`, {
     params,
     ...config,
   })
-  return response.data.items
+  // backend: { items: [...] }
+  return data.items
 }
 
 export const createItem = async (campaignId, payload, config = {}) => {
   if (!campaignId) throw new Error('campaignId is required')
-  const response = await apiClient.post(`/campaigns/${campaignId}/items`, payload, config)
-  return response.data.item
+  const { data } = await apiClient.post(`/campaigns/${campaignId}/items`, payload, config)
+  // backend: { item: {...} }
+  return data.item
 }

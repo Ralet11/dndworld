@@ -1,8 +1,9 @@
 // app/src/pages/dm/DMToolsPage.jsx
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createNpc, createScenario } from '../../api/campaigns'
 import { useCampaignSession } from '../../hooks/useCampaignSession'
+import { useSocket } from '../../hooks/useSocket'
 
 const scenarioInitialState = {
   title: '',
@@ -23,6 +24,7 @@ const npcInitialState = {
 const DMToolsPage = () => {
   const { campaignId } = useParams()
   const { campaign: activeCampaign, isLoading, error, refetch } = useCampaignSession(campaignId, { role: 'dm' })
+  const socket = useSocket()
 
   const [scenarioForm, setScenarioForm] = useState(scenarioInitialState)
   const [scenarioError, setScenarioError] = useState(null)
@@ -35,6 +37,20 @@ const DMToolsPage = () => {
   const scenarios = activeCampaign?.scenarios ?? []
   const allNpcs = activeCampaign?.npcs ?? []
 
+  useEffect(() => {
+    if (!socket || !activeCampaign?.id) return undefined
+    const id = activeCampaign.id
+
+    socket.emit('join:campaign', { campaignId: id }, (ack) => {
+      if (ack?.status !== 'ok') console.warn('Unable to join campaign room', ack)
+    })
+
+    return () => {
+      if (!socket) return
+      socket.emit('leave:campaign', { campaignId: id }, () => {})
+    }
+  }, [socket, activeCampaign?.id])
+
   const scenarioLookup = useMemo(() => {
     const entries = scenarios.map((scenario) => [scenario.id, scenario.title])
     return Object.fromEntries(entries)
@@ -43,11 +59,13 @@ const DMToolsPage = () => {
   const handleScenarioInputChange = (event) => {
     const { name, value } = event.target
     setScenarioForm((prev) => ({ ...prev, [name]: value }))
+    if (scenarioError) setScenarioError(null)
   }
 
   const handleNpcInputChange = (event) => {
     const { name, value } = event.target
     setNpcForm((prev) => ({ ...prev, [name]: value }))
+    if (npcError) setNpcError(null)
   }
 
   const submitScenario = async (event) => {
@@ -178,6 +196,7 @@ const DMToolsPage = () => {
             </header>
 
             <div className="grid gap-6 lg:grid-cols-2">
+              {/* Nuevo escenario */}
               <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
                 <h3 className="text-lg font-semibold text-parchment">Nuevo escenario</h3>
                 <form className="space-y-4" onSubmit={submitScenario}>
@@ -254,6 +273,7 @@ const DMToolsPage = () => {
                 </form>
               </section>
 
+              {/* Nuevo NPC */}
               <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
                 <h3 className="text-lg font-semibold text-parchment">Nuevo NPC</h3>
                 <form className="space-y-4" onSubmit={submitNpc}>

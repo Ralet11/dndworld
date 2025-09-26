@@ -220,6 +220,10 @@ export const createScenario = async (req, res, next) => {
       return res.status(404).json({ message: 'Campaign not found' })
     }
 
+    if (!req.user || campaign.dmId !== req.user.id) {
+      return res.status(403).json({ message: 'Only the campaign DM can create scenarios' })
+    }
+
     const scenario = await Scenario.create({
       campaignId,
       title: title.trim(),
@@ -519,3 +523,5 @@ export const acceptCampaignInvite = async (req, res, next) => {
     next(error)
   }
 }
+
+
