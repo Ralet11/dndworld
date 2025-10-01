@@ -1,0 +1,2267 @@
+{
+  "resources": [
+    {
+      "_id": "wrk_dungeonworld",
+      "parentId": null,
+      "_type": "workspace",
+      "scope": "collection",
+      "name": "DungeonWorld API",
+      "description": "Coleccion generada automaticamente para todas las rutas HTTP del backend."
+    },
+    {
+      "_id": "env_dungeonworld_base",
+      "parentId": "wrk_dungeonworld",
+      "_type": "environment",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3001/api",
+        "auth_token": "",
+        "sampleUserId": "replace-user-id",
+        "sampleCampaignId": "replace-campaign-id",
+        "sampleCampaignMemberId": "replace-campaign-member-id",
+        "sampleCharacterId": "replace-character-id",
+        "sampleOfferId": "replace-offer-id",
+        "sampleDeckId": "replace-deck-id",
+        "sampleDeckCardId": "replace-deck-card-id",
+        "sampleInventoryId": "replace-inventory-id",
+        "sampleItemId": "replace-item-id",
+        "sampleMediaId": "replace-media-id",
+        "sampleRaceId": "replace-race-id",
+        "sampleClassId": "replace-class-id",
+        "sampleCardId": "replace-card-id",
+        "sampleTalentId": "replace-talent-id",
+        "sampleAbilityId": "replace-ability-id",
+        "sampleNpcId": "replace-npc-id",
+        "sampleNpcSoundId": "replace-npc-sound-id",
+        "sampleQuestId": "replace-quest-id",
+        "sampleQuestStepId": "replace-quest-step-id",
+        "sampleQuestRewardId": "replace-quest-reward-id",
+        "sampleSessionId": "replace-session-id",
+        "sampleCreatureId": "replace-creature-id",
+        "sampleScenarioId": "replace-scenario-id",
+        "sampleLayerId": "replace-layer-id",
+        "sampleMapId": "replace-map-id",
+        "sampleTokenId": "replace-token-id",
+        "sampleDmApplicationId": "replace-dm-application-id",
+        "sampleNewsId": "replace-news-id"
+      }
+    },
+    {
+      "_id": "fld_health",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Health",
+      "description": ""
+    },
+    {
+      "_id": "req_health",
+      "parentId": "fld_health",
+      "_type": "request",
+      "name": "Health Check",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health",
+      "description": "Ping basico para comprobar que la API esta viva.",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "fld_auth",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Auth",
+      "description": "Registro y flujo de autenticacion."
+    },
+    {
+      "_id": "req_auth_signup",
+      "parentId": "fld_auth",
+      "_type": "request",
+      "name": "Signup",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/signup",
+      "description": "Crear un nuevo usuario con rol PLAYER.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Hero Example\",\n  \"email\": \"hero@example.com\",\n  \"password\": \"ChangeMe123!\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_login",
+      "parentId": "fld_auth",
+      "_type": "request",
+      "name": "Login",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/login",
+      "description": "Obtener un token JWT.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"hero@example.com\",\n  \"password\": \"ChangeMe123!\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_auth_me",
+      "parentId": "fld_auth",
+      "_type": "request",
+      "name": "Me",
+      "method": "GET",
+      "url": "{{ _.base_url }}/auth/me",
+      "description": "Devuelve los datos del usuario autenticado.",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_auth_request_dm",
+      "parentId": "fld_auth",
+      "_type": "request",
+      "name": "Request DM Role",
+      "method": "POST",
+      "url": "{{ _.base_url }}/auth/request-dm",
+      "description": "Solicitar el rol de DM.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"note\": \"Quiero dirigir una campana.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_auth_review_dm",
+      "parentId": "fld_auth",
+      "_type": "request",
+      "name": "Review DM Application",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/auth/dm-applications/{{ _.sampleDmApplicationId }}",
+      "description": "Revisar solicitudes de DM (solo ADMIN).",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"APPROVED\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_catalog",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Catalog",
+      "description": "Consultas publicas de catalogo."
+    },
+    {
+      "_id": "req_catalog_races",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "List Races",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/races",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_catalog_race",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "Get Race",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/races/{{ _.sampleRaceId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_catalog_classes",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "List Classes",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/classes",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_catalog_class",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "Get Class",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/classes/{{ _.sampleClassId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_catalog_class_talents",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "Get Class Talents",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/classes/{{ _.sampleClassId }}/talents",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_catalog_abilities",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "List Abilities",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/abilities",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_catalog_card",
+      "parentId": "fld_catalog",
+      "_type": "request",
+      "name": "Get Card",
+      "method": "GET",
+      "url": "{{ _.base_url }}/catalog/cards/{{ _.sampleCardId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "fld_campaigns",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Campaigns",
+      "description": "Gestion de campanas y miembros."
+    },
+    {
+      "_id": "req_campaign_create",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Create Campaign",
+      "method": "POST",
+      "url": "{{ _.base_url }}/campaigns",
+      "description": "Requiere rol DM.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Campana del Norte\",\n  \"description\": \"Cronicas de invierno\",\n  \"notesAssetId\": \"{{ _.sampleMediaId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_list",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "List Campaigns",
+      "method": "GET",
+      "url": "{{ _.base_url }}/campaigns",
+      "description": "Filtra por rol con ?role=DM para ver campanas como DM.",
+      "body": {},
+      "headers": [],
+      "parameters": [
+        {
+          "name": "role",
+          "value": "DM",
+          "disabled": true
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_get",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Get Campaign",
+      "method": "GET",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_patch",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Update Campaign",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"ACTIVE\",\n  \"description\": \"Actualizamos la descripcion.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_invite",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Create Invite",
+      "method": "POST",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/invites",
+      "description": "Genera un token de invitacion (DM).",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"player@example.com\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_request_join",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Request Join",
+      "method": "POST",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/requests",
+      "description": "Un jugador solicita unirse.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_member_add",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Add Member",
+      "method": "POST",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/members",
+      "description": "Anadir miembro (DM).",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"userId\": \"{{ _.sampleUserId }}\",\n  \"role\": \"PLAYER\",\n  \"characterId\": \"{{ _.sampleCharacterId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_member_patch",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Update Member",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/members/{{ _.sampleCampaignMemberId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"characterId\": \"{{ _.sampleCharacterId }}\",\n  \"status\": \"ACTIVE\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_member_delete",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Remove Member",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/members/{{ _.sampleCampaignMemberId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_campaign_news_list",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "List News",
+      "method": "GET",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/news",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_campaign_news_create",
+      "parentId": "fld_campaigns",
+      "_type": "request",
+      "name": "Create News",
+      "method": "POST",
+      "url": "{{ _.base_url }}/campaigns/{{ _.sampleCampaignId }}/news",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"kind\": \"SESSION\",\n  \"title\": \"Sesion inaugural\",\n  \"summary\": \"Resumen breve de la sesion.\",\n  \"body\": \"La mesa acordo reunirse cada jueves para continuar la historia.\",\n  \"images\": [\n    \"{{ _.sampleMediaId }}\"\n  ],\n  \"characters\": [\n    \"{{ _.sampleCharacterId }}\"\n  ],\n  \"npcs\": [\n    \"{{ _.sampleNpcId }}\"\n  ],\n  \"tags\": [\n    \"cronica\"\n  ]\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_characters",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Characters",
+      "description": "Creacion y mantenimiento de personajes."
+    },
+    {
+      "_id": "req_character_create",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Create Character",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Lyra\",\n  \"raceId\": \"{{ _.sampleRaceId }}\",\n  \"classId\": \"{{ _.sampleClassId }}\",\n  \"alignment\": \"Neutral\",\n  \"portraitAssetId\": \"{{ _.sampleMediaId }}\",\n  \"background\": \"Exploradora del bosque\",\n  \"fears\": \"Perder a su clan\",\n  \"goalsShort\": \"Cartografiar la region\",\n  \"goalsLong\": \"Recuperar la reliquia\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_list_mine",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "List My Characters",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/mine",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_get",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Get Character",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_update",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Update Character",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"portraitAssetId\": \"{{ _.sampleMediaId }}\",\n  \"background\": \"Historia ampliada\",\n  \"fears\": \"Ser corrompida por la magia\",\n  \"goalsShort\": \"Reunir un nuevo equipo\",\n  \"goalsLong\": \"Derrotar al archimago\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_set_attributes",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Set Attributes",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/attributes",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"str\": 12,\n  \"dex\": 14,\n  \"con\": 11,\n  \"int\": 10,\n  \"wis\": 9,\n  \"cha\": 13\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_get_resources",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Get Resources",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/resources",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_patch_resources",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Update Resources",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/resources",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "[\n  {\n    \"resource\": \"ENERGY\",\n    \"current\": 7,\n    \"max\": 10\n  }\n]"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_get_wallet",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Get Wallet",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/wallet",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_patch_wallet",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Add Gold",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/wallet",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"deltaGold\": 150\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_respec",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Respec",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/respec",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_get_talents",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Get Talents",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/talents",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_assign_talent",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Assign Talent",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/talents/assign",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"talentId\": \"{{ _.sampleTalentId }}\",\n  \"points\": 1\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_get_pool",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Get Ability Pool",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/pool",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_create_choice",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Create Choice Offer",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/choices",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_select_choice",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Select Choice",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/choices/{{ _.sampleOfferId }}/select",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"abilityId\": \"{{ _.sampleAbilityId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_list_decks",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "List Decks",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/decks",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_create_deck",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Create Deck",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/decks",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Sideboard\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_list_deck_cards",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "List Deck Cards",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/decks/{{ _.sampleDeckId }}/cards",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_add_deck_card",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Add Card To Deck",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/decks/{{ _.sampleDeckId }}/cards",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cardId\": \"{{ _.sampleCardId }}\",\n  \"copies\": 1\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_patch_deck_card",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Update Deck Card",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/characters/decks/{{ _.sampleDeckId }}/cards/{{ _.sampleDeckCardId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"copies\": 2\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_delete_deck_card",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Delete Deck Card",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/characters/decks/{{ _.sampleDeckId }}/cards/{{ _.sampleDeckCardId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_list_inventory",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "List Inventory",
+      "method": "GET",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/inventory",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_add_inventory",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Add Inventory Item",
+      "method": "POST",
+      "url": "{{ _.base_url }}/characters/{{ _.sampleCharacterId }}/inventory",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"itemId\": \"{{ _.sampleItemId }}\",\n  \"qty\": 1\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_patch_inventory",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Update Inventory Qty",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/characters/inventory/{{ _.sampleInventoryId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"qty\": 2\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_character_delete_inventory",
+      "parentId": "fld_characters",
+      "_type": "request",
+      "name": "Delete Inventory Item",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/characters/inventory/{{ _.sampleInventoryId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_items",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Items",
+      "description": "Catalogo de items personalizable."
+    },
+    {
+      "_id": "req_item_create",
+      "parentId": "fld_items",
+      "_type": "request",
+      "name": "Create Item",
+      "method": "POST",
+      "url": "{{ _.base_url }}/items",
+      "description": "Requiere rol DM.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Pocion de curacion\",\n  \"description\": \"Restaura 2d8 PV\",\n  \"iconAssetId\": \"{{ _.sampleMediaId }}\",\n  \"meta\": {\n    \"rarity\": \"COMMON\"\n  }\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_item_list",
+      "parentId": "fld_items",
+      "_type": "request",
+      "name": "List Items",
+      "method": "GET",
+      "url": "{{ _.base_url }}/items",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_item_get",
+      "parentId": "fld_items",
+      "_type": "request",
+      "name": "Get Item",
+      "method": "GET",
+      "url": "{{ _.base_url }}/items/{{ _.sampleItemId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_item_patch",
+      "parentId": "fld_items",
+      "_type": "request",
+      "name": "Update Item",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/items/{{ _.sampleItemId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"description\": \"Restaura 3d8 PV\",\n  \"meta\": {\n    \"rarity\": \"RARE\"\n  }\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_item_delete",
+      "parentId": "fld_items",
+      "_type": "request",
+      "name": "Delete Item",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/items/{{ _.sampleItemId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_media",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Media",
+      "description": ""
+    },
+    {
+      "_id": "req_media_create",
+      "parentId": "fld_media",
+      "_type": "request",
+      "name": "Create Media",
+      "method": "POST",
+      "url": "{{ _.base_url }}/media",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"kind\": \"image\",\n  \"url\": \"https://example.com/asset.png\",\n  \"meta\": {\n    \"notes\": \"Subida manual\"\n  }\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_media_get",
+      "parentId": "fld_media",
+      "_type": "request",
+      "name": "Get Media",
+      "method": "GET",
+      "url": "{{ _.base_url }}/media/{{ _.sampleMediaId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_npcs",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "NPCs",
+      "description": "Gestion completa de NPCs."
+    },
+    {
+      "_id": "req_npc_create",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Create NPC",
+      "method": "POST",
+      "url": "{{ _.base_url }}/npcs",
+      "description": "Requiere rol DM.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Guardia de la ciudad\",\n  \"raceId\": \"{{ _.sampleRaceId }}\",\n  \"classId\": \"{{ _.sampleClassId }}\",\n  \"level\": 2,\n  \"portraitAssetId\": \"{{ _.sampleMediaId }}\",\n  \"tier\": \"ELITE\",\n  \"behaviorNotes\": \"Leal al capitan\",\n  \"resources\": [\n    {\n      \"resource\": \"ENERGY\",\n      \"current\": 8,\n      \"max\": 8\n    }\n  ]\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_list",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "List NPCs",
+      "method": "GET",
+      "url": "{{ _.base_url }}/npcs",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_get",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Get NPC",
+      "method": "GET",
+      "url": "{{ _.base_url }}/npcs/{{ _.sampleNpcId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_patch",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Update NPC",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/npcs/{{ _.sampleNpcId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Guardia veterano\",\n  \"tier\": \"BOSS\",\n  \"behaviorNotes\": \"Tiene una cicatriz en la cara.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_delete",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Delete NPC",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/npcs/{{ _.sampleNpcId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_add_sound",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Add NPC Sound",
+      "method": "POST",
+      "url": "{{ _.base_url }}/npcs/{{ _.sampleNpcId }}/sounds",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"assetId\": \"{{ _.sampleMediaId }}\",\n  \"caption\": \"Grito de guerra\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_delete_sound",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Delete NPC Sound",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/npcs/sounds/{{ _.sampleNpcSoundId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_attach_quest",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Attach Quest",
+      "method": "POST",
+      "url": "{{ _.base_url }}/npcs/{{ _.sampleNpcId }}/quests",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"questId\": \"{{ _.sampleQuestId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_npc_detach_quest",
+      "parentId": "fld_npcs",
+      "_type": "request",
+      "name": "Detach Quest",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/npcs/{{ _.sampleNpcId }}/quests/{{ _.sampleQuestId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_quests",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Quests",
+      "description": "Misiones y recompensas."
+    },
+    {
+      "_id": "req_quest_create",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Create Quest",
+      "method": "POST",
+      "url": "{{ _.base_url }}/quests",
+      "description": "Requiere rol DM.",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Salvar al pueblo\",\n  \"description\": \"La aldea esta en peligro.\",\n  \"recommendedLevel\": 3\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_list",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "List Quests",
+      "method": "GET",
+      "url": "{{ _.base_url }}/quests",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_get",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Get Quest",
+      "method": "GET",
+      "url": "{{ _.base_url }}/quests/{{ _.sampleQuestId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_patch",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Update Quest",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/quests/{{ _.sampleQuestId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"description\": \"Anadimos detalles adicionales.\",\n  \"recommendedLevel\": 4\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_delete",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Delete Quest",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/quests/{{ _.sampleQuestId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_add_step",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Add Step",
+      "method": "POST",
+      "url": "{{ _.base_url }}/quests/{{ _.sampleQuestId }}/steps",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"stepOrder\": 1,\n  \"text\": \"Hablar con el alcalde.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_add_reward",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Add Reward",
+      "method": "POST",
+      "url": "{{ _.base_url }}/quests/{{ _.sampleQuestId }}/rewards",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"rewardType\": \"ITEM\",\n  \"payload\": {\n    \"itemId\": \"{{ _.sampleItemId }}\",\n    \"qty\": 1\n  }\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_delete_step",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Delete Step",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/quests/steps/{{ _.sampleQuestStepId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_delete_reward",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Delete Reward",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/quests/rewards/{{ _.sampleQuestRewardId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_quest_complete_session",
+      "parentId": "fld_quests",
+      "_type": "request",
+      "name": "Complete Quest In Session",
+      "method": "POST",
+      "url": "{{ _.base_url }}/quests/complete/{{ _.sampleSessionId }}/{{ _.sampleQuestId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_scenarios",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Scenarios",
+      "description": "Escenarios, capas, mapas y tokens."
+    },
+    {
+      "_id": "req_scenario_create",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Create Scenario",
+      "method": "POST",
+      "url": "{{ _.base_url }}/scenarios/{{ _.sampleCampaignId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Mazmorra inicial\",\n  \"shortDescription\": \"Primer reto de la campana.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_list_by_campaign",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "List Scenarios By Campaign",
+      "method": "GET",
+      "url": "{{ _.base_url }}/scenarios/by-campaign/{{ _.sampleCampaignId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_get",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Get Scenario",
+      "method": "GET",
+      "url": "{{ _.base_url }}/scenarios/{{ _.sampleScenarioId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_delete",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Delete Scenario",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/scenarios/{{ _.sampleScenarioId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_create_layer",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Create Layer",
+      "method": "POST",
+      "url": "{{ _.base_url }}/scenarios/{{ _.sampleScenarioId }}/layers",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"sortOrder\": 1,\n  \"layerType\": \"TACTICAL\",\n  \"imageAssetId\": \"{{ _.sampleMediaId }}\",\n  \"audioAssetId\": \"{{ _.sampleMediaId }}\",\n  \"notes\": \"Mapa principal.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_list_layers",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "List Layers",
+      "method": "GET",
+      "url": "{{ _.base_url }}/scenarios/{{ _.sampleScenarioId }}/layers",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_patch_layer",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Update Layer",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/scenarios/layers/{{ _.sampleLayerId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"sortOrder\": 2,\n  \"notes\": \"Notas actualizadas.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_delete_layer",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Delete Layer",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/scenarios/layers/{{ _.sampleLayerId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_create_map",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Create Map",
+      "method": "POST",
+      "url": "{{ _.base_url }}/scenarios/layers/{{ _.sampleLayerId }}/map",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"gridSize\": 50,\n  \"widthCells\": 30,\n  \"heightCells\": 20,\n  \"backgroundAssetId\": \"{{ _.sampleMediaId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_get_map",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Get Map",
+      "method": "GET",
+      "url": "{{ _.base_url }}/scenarios/maps/{{ _.sampleMapId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_patch_map",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Update Map",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/scenarios/maps/{{ _.sampleMapId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"gridSize\": 60\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_delete_map",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Delete Map",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/scenarios/maps/{{ _.sampleMapId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_list_tokens",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "List Tokens",
+      "method": "GET",
+      "url": "{{ _.base_url }}/scenarios/maps/{{ _.sampleMapId }}/tokens",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_create_token",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Create Token",
+      "method": "POST",
+      "url": "{{ _.base_url }}/scenarios/maps/{{ _.sampleMapId }}/tokens",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"tokenType\": \"CREATURE\",\n  \"creatureId\": \"{{ _.sampleCreatureId }}\",\n  \"label\": \"Orco explorador\",\n  \"x\": 4,\n  \"y\": 7,\n  \"meta\": {\n    \"color\": \"#00FF00\"\n  }\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_patch_token",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Update Token",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/scenarios/tokens/{{ _.sampleTokenId }}",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"x\": 5,\n  \"y\": 6,\n  \"label\": \"Orco herido\",\n  \"meta\": {\n    \"hp\": 8\n  },\n  \"sessionId\": \"{{ _.sampleSessionId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_scenario_delete_token",
+      "parentId": "fld_scenarios",
+      "_type": "request",
+      "name": "Delete Token",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/scenarios/tokens/{{ _.sampleTokenId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_sessions",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Sessions",
+      "description": "Sesiones de juego y utilidades del DM."
+    },
+    {
+      "_id": "req_session_create",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "Create Session",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleCampaignId }}",
+      "description": "Genera una sesion activa (DM).",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_get",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "Get Session",
+      "method": "GET",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_end",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "End Session",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/end",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_list_participants",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "List Participants",
+      "method": "GET",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/participants",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_add_participant",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "Add Participant",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/participants",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"creatureId\": \"{{ _.sampleCreatureId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_set_layer",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "Set Active Layer",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/layer",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"scenarioId\": \"{{ _.sampleScenarioId }}\",\n  \"layerId\": \"{{ _.sampleLayerId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_change_hp",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "Change Creature HP",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/creatures/{{ _.sampleCreatureId }}/hp",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"delta\": -4\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_session_play_card",
+      "parentId": "fld_sessions",
+      "_type": "request",
+      "name": "Play Card",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/characters/{{ _.sampleCharacterId }}/play-card",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cardId\": \"{{ _.sampleCardId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_sessions_realtime",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "Sessions Realtime",
+      "description": "Endpoints auxiliares usados por la capa realtime."
+    },
+    {
+      "_id": "req_realtime_get_me",
+      "parentId": "fld_sessions_realtime",
+      "_type": "request",
+      "name": "RT Get Me",
+      "method": "GET",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/me",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_realtime_get_layers",
+      "parentId": "fld_sessions_realtime",
+      "_type": "request",
+      "name": "RT Get Layers",
+      "method": "GET",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/layers",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_realtime_get_participants",
+      "parentId": "fld_sessions_realtime",
+      "_type": "request",
+      "name": "RT Get Participants",
+      "method": "GET",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/participants",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_realtime_change_layer",
+      "parentId": "fld_sessions_realtime",
+      "_type": "request",
+      "name": "RT Change Layer",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/change-layer",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"layerId\": \"{{ _.sampleLayerId }}\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_realtime_get_dm_message",
+      "parentId": "fld_sessions_realtime",
+      "_type": "request",
+      "name": "RT Get DM Message",
+      "method": "GET",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/dm-message",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "req_realtime_post_dm_message",
+      "parentId": "fld_sessions_realtime",
+      "_type": "request",
+      "name": "RT Post DM Message",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sessions/{{ _.sampleSessionId }}/dm-message",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"text\": \"Recordad traer dados.\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    },
+    {
+      "_id": "fld_news",
+      "parentId": "wrk_dungeonworld",
+      "_type": "request_group",
+      "name": "News",
+      "description": "Noticias globales accesibles desde el home."
+    },
+    {
+      "_id": "req_news_list",
+      "parentId": "fld_news",
+      "_type": "request",
+      "name": "List Global News",
+      "method": "GET",
+      "url": "{{ _.base_url }}/news",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "20",
+          "description": "",
+          "disabled": true
+        }
+      ],
+      "authentication": {}
+    },
+    {
+      "_id": "req_news_get",
+      "parentId": "fld_news",
+      "_type": "request",
+      "name": "Get News Item",
+      "method": "GET",
+      "url": "{{ _.base_url }}/news/{{ _.sampleNewsId }}",
+      "description": "",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {}
+    },
+    {
+      "_id": "req_news_create",
+      "parentId": "fld_news",
+      "_type": "request",
+      "name": "Create News (DM)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/news",
+      "description": "",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"campaignId\": \"{{ _.sampleCampaignId }}\",\n  \"kind\": \"QUEST_COMPLETED\",\n  \"title\": \"Informe de la sesion\",\n  \"summary\": \"La party sello el portal demonico.\",\n  \"body\": \"Tras horas de combate, los heroes cerraron el portal y rescataron a la aldea.\",\n  \"images\": [\n    \"{{ _.sampleMediaId }}\"\n  ],\n  \"characters\": [\n    \"{{ _.sampleCharacterId }}\"\n  ],\n  \"npcs\": [\n    \"{{ _.sampleNpcId }}\"\n  ],\n  \"tags\": [\n    \"cronica\",\n    \"sesion\"\n  ]\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.auth_token }}"
+      }
+    }
+  ]
+}
