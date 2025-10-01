@@ -246,6 +246,8 @@ export default function NpcDetail() {
     { label: "Nivel", value: creature.level ?? 1 },
   ]
 
+  const goToEdit = () => navigate(`/dm/npcs/${id}/editar`)
+
   return (
     <div className="min-h-screen space-y-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
       <button
@@ -330,6 +332,13 @@ export default function NpcDetail() {
                     <span className="rounded-full border border-slate-600/50 bg-slate-900/80 px-3 py-1 text-xs font-semibold text-slate-200 shadow-md">
                       {alignmentLabel}
                     </span>
+                    <button
+                      type="button"
+                      onClick={goToEdit}
+                      className="rounded-md border border-cyan-400/50 bg-cyan-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-md transition-all duration-200 hover:scale-105 hover:border-cyan-300/60 hover:shadow-lg hover:shadow-cyan-500/40"
+                    >
+                      Editar
+                    </button>
                   </div>
                 </div>
 
