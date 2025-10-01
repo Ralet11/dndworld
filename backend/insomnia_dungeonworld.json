@@ -1377,7 +1377,7 @@
       "description": "Requiere rol DM.",
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"name\": \"Pocion de curacion\",\n  \"description\": \"Restaura 2d8 PV\",\n  \"iconAssetId\": \"{{ _.sampleMediaId }}\",\n  \"meta\": {\n    \"rarity\": \"COMMON\"\n  }\n}"
+        "text": "{\n  \"name\": \"Pocion de curacion\",\n  \"description\": \"Restaura 2d8 PV\",\n  \"iconAssetId\": \"{{ _.sampleMediaId }}\",\n  \"meta\": {\n    \"rarity\": \"COMMON\",\n    \"prompt\": \"Frasco diminuto con líquido carmesí que brilla suavemente\"\n  }\n}"
       },
       "headers": [
         {
@@ -1451,7 +1451,7 @@
       "description": "",
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"description\": \"Restaura 3d8 PV\",\n  \"meta\": {\n    \"rarity\": \"RARE\"\n  }\n}"
+        "text": "{\n  \"description\": \"Restaura 3d8 PV\",\n  \"meta\": {\n    \"rarity\": \"RARE\",\n    \"prompt\": \"Frasco decorado con filigrana dorada que late con energía arcana\"\n  }\n}"
       },
       "headers": [
         {
