@@ -4,6 +4,7 @@ const http = require("http");
 const cors = require("cors");
 const morgan = require("morgan");
 const db = require("./models");
+const { startEquipWorker } = require("./workers/equipPortrait");
 const { init: initRealtime } = require("./realtime/io");
 
 const authRoutes = require("./routes/auth");
@@ -52,6 +53,7 @@ async function start() {
   try {
     await db.ensureSchema();
     await db.sequelize.authenticate();
+    await startEquipWorker();
     const port = process.env.PORT || 3001;
     server = http.createServer(app);
     initRealtime(server);
