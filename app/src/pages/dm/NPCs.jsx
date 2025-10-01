@@ -161,6 +161,15 @@ function NpcCardArcane({ npc, raceName, className: classNameLabel, onDelete }) {
         </span>
         <div className="flex items-center gap-1">
           <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (npc?.id) navigate(`/dm/npcs/${npc.id}/editar`)
+            }}
+            className="rounded-md border border-indigo-400/50 bg-indigo-600/80 px-2 py-[3px] text-[10px] font-semibold text-white shadow hover:brightness-110"
+          >
+            Editar
+          </button>
+          <button
             onClick={(e) => { e.stopPropagation(); openDetail() }}
             className="rounded-md border border-cyan-400/50 bg-cyan-600 px-2 py-[3px] text-[10px] font-bold text-white shadow hover:brightness-110"
           >

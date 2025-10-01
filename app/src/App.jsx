@@ -28,6 +28,7 @@ import Items from './pages/dm/Items.jsx'
 import Quests from './pages/dm/Quests.jsx'
 import NpcCreate from './pages/dm/NpcCreate.jsx'
 import NpcDetail from './pages/dm/NpcDetail.jsx'
+import NpcEdit from './pages/dm/NpcEdit.jsx'
 
 import { ProtectedRoute } from './components/ProtectedRoute.jsx'
 import { RoleGate } from './components/RoleGate.jsx'
@@ -63,6 +64,7 @@ export default function App(){
         <Route path="dm/npcs" element={<ProtectedRoute><RoleGate role="DM"><NPCs /></RoleGate></ProtectedRoute>} />
         <Route path="dm/npcs/nuevo" element={<ProtectedRoute><RoleGate role="DM"><NpcCreate /></RoleGate></ProtectedRoute>} />
         <Route path="dm/npcs/:id" element={<ProtectedRoute><RoleGate role="DM"><NpcDetail /></RoleGate></ProtectedRoute>} />
+        <Route path="dm/npcs/:id/editar" element={<ProtectedRoute><RoleGate role="DM"><NpcEdit /></RoleGate></ProtectedRoute>} />
         <Route path="dm/items" element={<ProtectedRoute><RoleGate role="DM"><Items /></RoleGate></ProtectedRoute>} />
         <Route path="dm/quests" element={<ProtectedRoute><RoleGate role="DM"><Quests /></RoleGate></ProtectedRoute>} />
 
