@@ -3,10 +3,19 @@ import api from '../../api/client'
 
 export default function Items(){
   const [list, setList] = useState([])
-  const [form, setForm] = useState({ name:'', description:'' })
+  const [form, setForm] = useState({ name:'', description:'', prompt:'' })
   const load = ()=> api.get('/items').then(r=>setList(r.data))
   useEffect(()=>{ load() },[])
-  const create = async()=>{ await api.post('/items', form); setForm({ name:'', description:'' }); load() }
+  const create = async()=>{
+    const payload = {
+      name: form.name,
+      description: form.description,
+      meta: { prompt: form.prompt }
+    }
+    await api.post('/items', payload)
+    setForm({ name:'', description:'', prompt:'' })
+    load()
+  }
   const del = async(id)=>{ await api.delete(`/items/${id}`); load() }
   return (
     <div className="space-y-3">
@@ -14,6 +23,7 @@ export default function Items(){
       <div className="card grid md:grid-cols-3 gap-2">
         <input placeholder="Nombre" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} />
         <input placeholder="Descripción" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} />
+        <textarea className="md:col-span-3" rows={3} placeholder="Prompt de render" value={form.prompt} onChange={e=>setForm(f=>({...f,prompt:e.target.value}))}></textarea>
         <button className="btn" onClick={create} disabled={!form.name}>Crear</button>
       </div>
       <div className="grid md:grid-cols-2 gap-3">
@@ -21,6 +31,10 @@ export default function Items(){
           <div key={i.id} className="card">
             <div className="font-semibold">{i.name}</div>
             <div className="text-sm opacity-70">{i.description}</div>
+            <div className="mt-2 text-xs">
+              <div className="font-semibold">Prompt de render</div>
+              <div className="opacity-80 whitespace-pre-wrap">{i.meta?.prompt || '—'}</div>
+            </div>
             <button className="btn mt-2" onClick={()=>del(i.id)}>Eliminar</button>
           </div>
         ))}
