@@ -3,9 +3,10 @@ const {
   Creature, CreatureAttribute, CreatureResource, Character,
   Race, Class: Klass, Wallet, CharacterTalent, Talent,
   Ability, AbilityCost, ClassAbility, RaceAbility, Card,
-  CharacterDeck, CharacterCard, Item, CharacterInventory
+  CharacterDeck, CharacterCard, Item, CharacterInventory, MediaAsset
 } = require("../models");
 const { pickRandom } = require("../utils/pickRandom");
+const { enqueuePortraitRefresh } = require("../workers/equipPortrait");
 
 function ensureOwner(req, character) {
   if (req.user.roles.includes("ADMIN")) return true;
@@ -45,14 +46,25 @@ exports.createCharacter = async (req, res, next) => {
 
 exports.listMine = async (req, res, next) => {
   try {
-    const list = await Character.findAll({ where:{ userId: req.user.id }, include:[{ model: Creature }] });
+    const list = await Character.findAll({
+      where:{ userId: req.user.id },
+      include:[{
+        model: Creature,
+        include: [{ model: MediaAsset, as: "portrait" }]
+      }]
+    });
     res.json(list);
   } catch (e) { next(e); }
 };
 
 exports.getCharacter = async (req, res, next) => {
   try {
-    const ch = await Character.findByPk(req.params.id, { include:[Creature] });
+    const ch = await Character.findByPk(req.params.id, {
+      include:[{
+        model: Creature,
+        include: [{ model: MediaAsset, as: "portrait" }]
+      }]
+    });
     if (!ch) return res.status(404).json({ error:"Not found" });
     ensureOwner(req, ch);
     res.json(ch);
@@ -294,8 +306,16 @@ exports.patchInventoryItem = async (req, res, next) => {
   try {
     const row = await CharacterInventory.findByPk(req.params.invId);
     if (!row) return res.status(404).json({ error:"Not found" });
+    const prevEquipped = row.equipped;
     if (typeof req.body.qty === "number") row.qty = req.body.qty;
-    await row.save(); res.json(row);
+    if (typeof req.body.equipped === "boolean") row.equipped = req.body.equipped;
+    await row.save();
+    if (typeof req.body.equipped === "boolean" && prevEquipped !== row.equipped) {
+      enqueuePortraitRefresh(row.characterId).catch((err) => {
+        console.error("Failed to enqueue portrait refresh", err);
+      });
+    }
+    res.json(row);
   } catch (e) { next(e); }
 };
 exports.deleteInventoryItem = async (req, res, next) => {
