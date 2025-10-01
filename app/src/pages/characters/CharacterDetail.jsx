@@ -15,13 +15,28 @@ export default function CharacterDetail(){
     api.post(`/characters/${id}/attributes`, {}).then(r=>setAttrs(r.data)).catch(()=>{})
   },[id])
   if (!ch) return <div>Cargando…</div>
+
+  const portrait = ch.Creature?.portrait
+  const portraitUrl = portrait?.meta?.secureUrl
+
   return (
     <div className="space-y-3">
       <div className="card">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">{ch.Creature?.name}</h2>
-            <div className="text-sm opacity-70">Nivel {ch.Creature?.level}</div>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-28 h-28 border border-slate-700 rounded overflow-hidden flex items-center justify-center bg-slate-900">
+              {portraitUrl ? (
+                <img src={portraitUrl} alt={`Retrato de ${ch.Creature?.name ?? 'personaje'}`} className="w-full h-full object-cover" />
+              ) : portrait ? (
+                <div className="text-xs text-center px-2">Retrato en proceso…</div>
+              ) : (
+                <div className="text-xs text-center px-2 opacity-70">Sin retrato</div>
+              )}
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">{ch.Creature?.name}</h2>
+              <div className="text-sm opacity-70">Nivel {ch.Creature?.level}</div>
+            </div>
           </div>
           <div className="flex gap-2">
             <Link to={`/personajes/${id}/talentos`} className="btn">Talentos</Link>
