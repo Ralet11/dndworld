@@ -69,17 +69,93 @@ exports.listMine = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+function buildPublicProfile(instance, { includePrivate = false } = {}) {
+  const data = typeof instance.toJSON === "function" ? instance.toJSON() : instance;
+  const creature = data.Creature || {};
+  const race = creature.Race ? {
+    id: creature.Race.id,
+    name: creature.Race.name
+  } : null;
+  const klass = creature.Class ? {
+    id: creature.Class.id,
+    name: creature.Class.name
+  } : null;
+  const portrait = creature.portrait || null;
+  const equippedItems = (data.CharacterInventories || [])
+    .filter(it => it && it.equipped)
+    .map(it => ({
+      id: it.id,
+      qty: it.qty,
+      equipped: it.equipped,
+      updatedAt: it.updatedAt,
+      item: it.Item ? {
+        id: it.Item.id,
+        name: it.Item.name,
+        description: it.Item.description,
+        iconAssetId: it.Item.iconAssetId
+      } : null
+    }));
+  const activity = equippedItems
+    .filter(it => it.item)
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+    .slice(0, 5)
+    .map(it => ({
+      id: `equip-${it.id}`,
+      type: "equipment",
+      label: `Equipó ${it.item?.name}`,
+      timestamp: it.updatedAt
+    }));
+
+  return {
+    id: data.id,
+    name: creature.name,
+    level: creature.level,
+    alignment: creature.alignment,
+    race,
+    class: klass,
+    portrait,
+    background: creature.background || "",
+    goalsShort: creature.goalsShort || "",
+    goalsLong: creature.goalsLong || "",
+    ...(includePrivate ? { fears: creature.fears || "" } : {}),
+    equipment: equippedItems,
+    activity
+  };
+}
+
 exports.getCharacter = async (req, res, next) => {
   try {
     const ch = await Character.findByPk(req.params.id, {
       include:[{
         model: Creature,
-        include: [{ model: MediaAsset, as: "portrait" }]
+        include: [
+          { model: MediaAsset, as: "portrait" },
+          Race,
+          Klass
+        ]
+      },{
+        model: CharacterInventory,
+        required: false,
+        where: { equipped: true },
+        include: [Item]
       }]
     });
     if (!ch) return res.status(404).json({ error:"Not found" });
-    ensureOwner(req, ch);
-    res.json(ch);
+    const isAdmin = req.user.roles.includes("ADMIN");
+    const isOwner = isAdmin || ch.userId === req.user.id;
+    const profile = buildPublicProfile(ch, { includePrivate: isOwner });
+    const meta = {
+      isOwner,
+      canEdit: isOwner,
+      visibility: isOwner ? "private" : "public"
+    };
+    if (isOwner) {
+      const data = ch.toJSON();
+      data.meta = meta;
+      data.profile = profile;
+      return res.json(data);
+    }
+    return res.json({ id: ch.id, profile, meta });
   } catch (e) { next(e); }
 };
 

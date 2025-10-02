@@ -39,6 +39,7 @@ export default function CharacterDetail(){
             </div>
           </div>
           <div className="flex gap-2">
+            <Link to={`/personajes/${id}/perfil`} className="btn">Perfil</Link>
             <Link to={`/personajes/${id}/talentos`} className="btn">Talentos</Link>
             <Link to={`/personajes/${id}/mazo`} className="btn">Mazo</Link>
             <Link to={`/personajes/${id}/inventario`} className="btn">Inventario</Link>
