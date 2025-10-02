@@ -29,10 +29,16 @@ export default function Characters(){
       )}
       <div className="grid gap-3 md:grid-cols-2">
         {list.map(ch=>(
-          <Link key={ch.id} to={`/personajes/${ch.id}`} className="card block">
-            <div className="font-semibold">{ch.Creature?.name}</div>
-            <div className="text-sm opacity-70">Nivel {ch.Creature?.level}</div>
-          </Link>
+          <div key={ch.id} className="card space-y-3">
+            <div>
+              <div className="font-semibold">{ch.Creature?.name}</div>
+              <div className="text-sm opacity-70">Nivel {ch.Creature?.level}</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/personajes/${ch.id}/perfil`} className="btn">Ver perfil</Link>
+              <Link to={`/personajes/${ch.id}`} className="btn">Panel privado</Link>
+            </div>
+          </div>
         ))}
         {list.length===0 && <div className="opacity-70">Aún no tenés personajes.</div>}
       </div>

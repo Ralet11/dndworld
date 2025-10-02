@@ -7,6 +7,7 @@ import Profile from './pages/Profile.jsx'
 import Characters from './pages/characters/Characters.jsx'
 import CreateCharacter from './pages/characters/CreateCharacter.jsx'
 import CharacterDetail from './pages/characters/CharacterDetail.jsx'
+import CharacterProfile from './pages/characters/CharacterProfile.jsx'
 import TalentTree from './pages/characters/TalentTree.jsx'
 import DeckManager from './pages/characters/DeckManager.jsx'
 import OfferPicker from './pages/characters/OfferPicker.jsx'
@@ -45,6 +46,7 @@ export default function App(){
         {/* Personajes */}
         <Route path="personajes" element={<ProtectedRoute><Characters /></ProtectedRoute>} />
         <Route path="personajes/crear" element={<ProtectedRoute><CreateCharacter /></ProtectedRoute>} />
+        <Route path="personajes/:id/perfil" element={<ProtectedRoute><CharacterProfile /></ProtectedRoute>} />
         <Route path="personajes/:id" element={<ProtectedRoute><CharacterDetail /></ProtectedRoute>} />
         <Route path="personajes/:id/talentos" element={<ProtectedRoute><TalentTree /></ProtectedRoute>} />
         <Route path="personajes/:id/mazo" element={<ProtectedRoute><DeckManager /></ProtectedRoute>} />
