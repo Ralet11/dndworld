@@ -13,10 +13,22 @@ function ensureOwner(req, character) {
   if (character.userId !== req.user.id) throw Object.assign(new Error("Forbidden"), { status:403 });
 }
 
+const CHARACTER_LIMIT = 3;
+
+async function hasReachedCharacterLimit(userId) {
+  const total = await Character.count({ where: { userId } });
+  return total >= CHARACTER_LIMIT;
+}
+
+exports.__test__ = { hasReachedCharacterLimit, CHARACTER_LIMIT };
+
 exports.createCharacter = async (req, res, next) => {
   try {
     const { name, raceId, classId, alignment, portraitAssetId, background, fears, goalsShort, goalsLong } = req.body;
     if (!name || !raceId || !classId) return res.status(400).json({ error:"Missing fields" });
+    if (await hasReachedCharacterLimit(req.user.id)) {
+      return res.status(400).json({ error: "Ya alcanzaste el máximo de 3 personajes." });
+    }
     const cr = await Creature.create({
       kind:"CHARACTER", name, raceId, classId, alignment: alignment || null,
       portraitAssetId: portraitAssetId || null,
