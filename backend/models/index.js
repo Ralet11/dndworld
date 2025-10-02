@@ -83,9 +83,13 @@ Card.belongsTo(Ability, { foreignKey: "abilityId" });
 
 Class.belongsToMany(Ability, { through: ClassAbility, foreignKey: "classId" });
 Ability.belongsToMany(Class, { through: ClassAbility, foreignKey: "abilityId" });
+ClassAbility.belongsTo(Ability, { foreignKey: "abilityId" });
+ClassAbility.belongsTo(Class, { foreignKey: "classId" });
 
 Race.belongsToMany(Ability, { through: RaceAbility, foreignKey: "raceId" });
 Ability.belongsToMany(Race, { through: RaceAbility, foreignKey: "abilityId" });
+RaceAbility.belongsTo(Ability, { foreignKey: "abilityId" });
+RaceAbility.belongsTo(Race, { foreignKey: "raceId" });
 
 Talent.hasMany(Card, { foreignKey: "talentId" });
 Card.belongsTo(Talent, { foreignKey: "talentId" });
