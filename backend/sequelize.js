@@ -1,4 +1,4 @@
-const { Sequelize } = require("sequelize");
+const { Sequelize, DataTypes } = require("sequelize");
 
 const {
   DATABASE_URL,
@@ -29,6 +29,29 @@ logging: console.log,
 
 async function ensureSchema() {
   await sequelize.query('CREATE SCHEMA IF NOT EXISTS "dwd";');
+  const qi = sequelize.getQueryInterface();
+  try {
+    const columns = await qi.describeTable('character_inventory', { schema: 'dwd' });
+    if (!columns || !columns.equipped) {
+      await qi.addColumn({ tableName: 'character_inventory', schema: 'dwd' }, 'equipped', {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false
+      });
+      await sequelize.query('UPDATE "dwd"."character_inventory" SET "equipped" = false WHERE "equipped" IS NULL;');
+      await qi.changeColumn({ tableName: 'character_inventory', schema: 'dwd' }, 'equipped', {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+      });
+    }
+  } catch (error) {
+    const code = error?.original?.code || error?.parent?.code || error?.code;
+    const message = String(error?.message || '');
+    if (code !== '42P01' && !/does not exist/i.test(message)) {
+      throw error;
+    }
+  }
 }
 
 module.exports = { sequelize, ensureSchema };
