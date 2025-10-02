@@ -40,6 +40,7 @@ export default function CreateCharacter() {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState(INITIAL_FORM)
   const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function CreateCharacter() {
     event.preventDefault()
     if (!canAdvance || submitting) return
     setSubmitting(true)
+    setErrorMessage('')
     try {
       const trimmedHistory = form.history.trim()
       const trimmedFears = form.fears.trim()
@@ -136,6 +138,12 @@ export default function CreateCharacter() {
       navigate(`/personajes/${data.characterId}/oferta`)
     } catch (error) {
       console.error('Error creating character', error)
+      const message = error?.response?.data?.error
+      if (error?.response?.status === 400 && message) {
+        setErrorMessage(message)
+      } else {
+        setErrorMessage('No se pudo crear el personaje. Intentá nuevamente más tarde.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -147,6 +155,14 @@ export default function CreateCharacter() {
       <p className="mt-1 text-sm text-slate-300">
         Completá el asistente paso a paso para definir tu nuevo héroe.
       </p>
+      {errorMessage && (
+        <div
+          role="alert"
+          className="mt-4 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+        >
+          {errorMessage}
+        </div>
+      )}
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {STEPS.map((item, index) => {
           const isCompleted = index < step
