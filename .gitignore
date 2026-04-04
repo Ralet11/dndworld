@@ -1,0 +1,59 @@
+# --- Node / JS ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# No ignores el lockfile: conviene commitear package-lock.json
+# package-lock.json
+
+# --- Env / credenciales (mantener .env.example) ---
+.env
+.env.*
+!.env.example
+backend/.env
+app/.env
+
+# --- Builds / caches / coverage ---
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+out/
+
+# --- Expo / React Native ---
+.expo/
+.expo-shared/
+# Si usás proyectos nativos (bare/ prebuild):
+android/.gradle/
+android/app/build/
+android/local.properties
+android/.idea/
+ios/Pods/
+ios/build/
+ios/*.xcworkspace/xcuserdata/
+*.xcuserstate
+
+# --- Uploads temporales / dumps ---
+uploads/
+tmp/
+*.pid
+*.seed
+*.dump
+dump.sql
+*.sqlite
+*.db
+
+# --- Logs ---
+logs/
+*.log
+*.log.*
+
+# --- SO / editores ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

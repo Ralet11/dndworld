@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --glass-bg: rgba(15, 23, 42, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+  @apply bg-background text-slate-100 min-h-screen overflow-x-hidden;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(30, 41, 59, 0.5) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(15, 23, 42, 0.8) 0%, transparent 50%);
+}
+
+.glass-panel {
+  @apply backdrop-blur-md border border-[var(--glass-border)] rounded-2xl;
+  background: var(--glass-bg);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.text-gold {
+  @apply text-accent-gold drop-shadow-[0_0_8px_rgba(250,204,21,0.4)];
+}
+
+.btn-primary {
+  @apply px-6 py-2 rounded-lg bg-accent-gold/10 border border-accent-gold/30 text-accent-gold 
+  hover:bg-accent-gold/20 transition-all duration-300 active:scale-95 font-medium;
+}
+
+.stat-bar-container {
+  @apply w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-white/5;
+}
+
+.stat-bar-fill {
+  @apply h-full transition-all duration-500 ease-out;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(250, 204, 21, 0.3);
+}
