@@ -4,11 +4,44 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { ActionSheetProvider } from '@expo/react-native-action-sheet';
-import { GameProvider } from '../context/GameContext';
+import { GameProvider, useGame } from '../context/GameContext';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { useFonts } from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
+import { COLORS } from '../constants/Theme';
+
+// ⚠️ TOOL DE DEV — botón flotante para alternar modo DM sin cambiar de cuenta.
+// Quitar antes de producción (borrar este componente y su uso en ProtectedLayout).
+const DevModeToggle = () => {
+    const { isDmMode, toggleRole } = useGame();
+    return (
+        <TouchableOpacity
+            onPress={toggleRole}
+            activeOpacity={0.85}
+            style={{
+                position: 'absolute',
+                right: 0,
+                top: '42%',
+                backgroundColor: isDmMode ? '#A855F7' : 'rgba(11,15,25,0.92)',
+                borderTopLeftRadius: 14,
+                borderBottomLeftRadius: 14,
+                borderWidth: 1,
+                borderRightWidth: 0,
+                borderColor: isDmMode ? '#A855F7' : 'rgba(245,158,11,0.5)',
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                alignItems: 'center',
+                zIndex: 9999,
+            }}
+        >
+            <Text style={{ color: isDmMode ? '#0B0B0B' : '#F59E0B', fontWeight: '800', fontSize: 13 }}>
+                {isDmMode ? 'DM' : 'PJ'}
+            </Text>
+            <Text style={{ color: isDmMode ? 'rgba(0,0,0,0.6)' : '#6B7280', fontSize: 8, marginTop: 1, letterSpacing: 1 }}>DEV</Text>
+        </TouchableOpacity>
+    );
+};
 
 export {
     // Catch any errors thrown by the Layout component.
@@ -42,19 +75,23 @@ const ProtectedLayout = () => {
 
     if (isLoading) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e' }}>
-                <ActivityIndicator size="large" color="#e056fd" />
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+                <ActivityIndicator size="large" color={COLORS.amber} />
             </View>
         );
     }
 
     return (
-        <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="register" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="+not-found" />
-        </Stack>
+        <View style={{ flex: 1 }}>
+            <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="login" options={{ headerShown: false }} />
+                <Stack.Screen name="register" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="+not-found" />
+            </Stack>
+            {/* ⚠️ DEV: toggle de modo DM (quitar en producción) */}
+            {user && <DevModeToggle />}
+        </View>
     );
 };
 

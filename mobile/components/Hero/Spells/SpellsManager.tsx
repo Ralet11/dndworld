@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, FlatList, Modal, Image, ActivityIndicator, SectionList } from 'react-native';
-import { Sparkles, Search, BookOpen, Plus, Minus, Check, X, Flame, Scroll as ScrollIcon, ChevronDown, ChevronRight } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, FlatList, Modal, Image, ActivityIndicator, SectionList, Alert } from 'react-native';
+import { Sparkles, Search, BookOpen, Plus, Minus, Check, X, Flame, Scroll as ScrollIcon, ChevronDown, ChevronRight, Languages } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { COLORS } from '../../../constants/Theme';
 
@@ -35,6 +35,8 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
     const [classSpells, setClassSpells] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSpell, setSelectedSpell] = useState<any>(null);
+    const [showTrans, setShowTrans] = useState(false);
+    const [translating, setTranslating] = useState(false);
     const [isFetching, setIsFetching] = useState(true);
     const [isSwitchingTab, setIsSwitchingTab] = useState(false);
 
@@ -63,9 +65,12 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
 
     useEffect(() => {
         setIsFetching(true);
-        const classTarget = character.class_slug || character.class;
-        if (classTarget) {
-            socket.emit('get-class-spells', { class_name: classTarget });
+        // Multiclase: combinar la lista de conjuros de TODAS las clases.
+        const slugs = (character.classes && character.classes.length)
+            ? character.classes.map((c: any) => c.slug)
+            : (character.class_slug ? [character.class_slug] : (character.class ? [character.class] : []));
+        if (slugs.length) {
+            socket.emit('get-class-spells', { class_names: slugs });
         }
 
         const handleSpells = (spells: any[]) => {
@@ -78,7 +83,7 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
         return () => {
             socket.off('class-spells-result', handleSpells);
         };
-    }, [character.class, character.class_slug]);
+    }, [character.class, character.class_slug, character.classes]);
 
 
 
@@ -95,16 +100,53 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
         };
     }, []);
 
+    // Traducción (cacheada): respuesta de la IA / del caché del server.
+    useEffect(() => {
+        const onTranslated = ({ slug, translation }: any) => {
+            if (activeSpellRef.current?.slug === slug) {
+                setSelectedSpell((prev: any) => (prev && prev.slug === slug ? { ...prev, translation } : prev));
+                setShowTrans(true);
+            }
+            setTranslating(false);
+        };
+        const onError = ({ message }: any) => {
+            setTranslating(false);
+            if (message) Alert.alert('No se pudo traducir', message);
+        };
+        socket.on('spell-translated', onTranslated);
+        socket.on('spell-translate-error', onError);
+        return () => {
+            socket.off('spell-translated', onTranslated);
+            socket.off('spell-translate-error', onError);
+        };
+    }, []);
+
     // Helper ref to avoid race conditions with selected spell
     const activeSpellRef = React.useRef<any>(null);
 
     const openSpellDetail = (spell: any) => {
         setSelectedSpell(spell); // Set initial data (name, level, etc.)
         activeSpellRef.current = spell;
+        setShowTrans(false);
+        setTranslating(false);
         if (!spell.desc) {
             socket.emit('get-spell-details', { slug: spell.slug });
         }
     };
+
+    // Botón traducir: si ya tiene traducción COMPLETA (con descripción), alterna;
+    // si solo tiene el nombre (o nada), pide la traducción completa a la IA.
+    const handleTranslate = () => {
+        if (!selectedSpell) return;
+        if (selectedSpell.translation?.desc) { setShowTrans((s) => !s); return; }
+        setTranslating(true);
+        socket.emit('translate-spell', { slug: selectedSpell.slug });
+    };
+
+    // Nombre: siempre en español si está traducido. Descripción: solo al togglear.
+    const trName = selectedSpell?.translation?.name || selectedSpell?.name;
+    const trDesc = (showTrans && selectedSpell?.translation?.desc) ? selectedSpell.translation.desc : selectedSpell?.desc;
+    const trHL = (showTrans && selectedSpell?.translation?.higher_level) ? selectedSpell.translation.higher_level : selectedSpell?.higher_level;
 
     // Lists
     const mySpellsSlugs = useMemo(() => character.spells_known || [], [character.spells_known]);
@@ -155,13 +197,13 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                             <Text style={styles.slotLevel}>Lvl {lvl}</Text>
                             <View style={styles.slotControls}>
                                 <TouchableOpacity onPress={() => updateSlots(lvl, -1)}>
-                                    <Minus size={14} color="#94a3b8" />
+                                    <Minus size={14} color="#A89F8E" />
                                 </TouchableOpacity>
-                                <Text style={[styles.slotVal, slotData.used > 0 && { color: '#f472b6' }]}>
+                                <Text style={[styles.slotVal, slotData.used > 0 && { color: '#E06A9A' }]}>
                                     {slotData.used}
                                 </Text>
                                 <TouchableOpacity onPress={() => updateSlots(lvl, 1)}>
-                                    <Plus size={14} color="#94a3b8" />
+                                    <Plus size={14} color="#A89F8E" />
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -187,8 +229,13 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
             if (activeTab === 'book' && !isKnown) return false;
             if (activeTab === 'prepared' && !isPrepared) return false;
 
-            // Search Filter
-            if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            // Search Filter (bilingüe: nombre en inglés o traducción cacheada)
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                const enName = (s.name || '').toLowerCase();
+                const esName = (s.translation?.name || '').toLowerCase();
+                if (!enName.includes(q) && !esName.includes(q)) return false;
+            }
 
             return true;
         });
@@ -211,7 +258,7 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         style={[styles.tab, activeTab === 'book' && styles.activeTab]}
                         onPress={() => handleTabChange('book')}
                     >
-                        <BookOpen size={16} color={activeTab === 'book' ? '#f472b6' : '#94a3b8'} />
+                        <BookOpen size={16} color={activeTab === 'book' ? '#E06A9A' : '#A89F8E'} />
                         <Text style={[styles.tabText, activeTab === 'book' && styles.activeTabText]}>
                             {casterType === 'wizard' ? 'Libro' : 'Conocidos'}
                         </Text>
@@ -224,7 +271,7 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         style={[styles.tab, activeTab === 'prepared' && styles.activeTab]}
                         onPress={() => handleTabChange('prepared')}
                     >
-                        <Flame size={16} color={activeTab === 'prepared' ? '#f472b6' : '#94a3b8'} />
+                        <Flame size={16} color={activeTab === 'prepared' ? '#E06A9A' : '#A89F8E'} />
                         <Text style={[styles.tabText, activeTab === 'prepared' && styles.activeTabText]}>Preparados</Text>
                     </TouchableOpacity>
                 )}
@@ -234,7 +281,7 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                     style={[styles.tab, activeTab === 'library' && styles.activeTab]}
                     onPress={() => handleTabChange('library')}
                 >
-                    <Search size={16} color={activeTab === 'library' ? '#f472b6' : '#94a3b8'} />
+                    <Search size={16} color={activeTab === 'library' ? '#E06A9A' : '#A89F8E'} />
                     <Text style={[styles.tabText, activeTab === 'library' && styles.activeTabText]}>
                         {casterType === 'wizard' ? 'Arcanos' : casterType === 'divine' ? 'Divinos' : 'Clase'}
                     </Text>
@@ -258,13 +305,13 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         style={[styles.actionBtn, isKnown ? styles.btnKnown : styles.btnAdd]}
                         onPress={() => toggleKnown(item.slug)}
                     >
-                        {isKnown ? <Check size={16} color="#fff" /> : <Plus size={16} color="#94a3b8" />}
+                        {isKnown ? <Check size={16} color="#EDE6D8" /> : <Plus size={16} color="#A89F8E" />}
                     </TouchableOpacity>
                 );
             } else {
                 ActionButton = (
                     <TouchableOpacity style={styles.actionBtn} onPress={() => toggleKnown(item.slug)}>
-                        <X size={16} color="#ef4444" />
+                        <X size={16} color="#C2452F" />
                     </TouchableOpacity>
                 );
             }
@@ -276,13 +323,13 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         style={[styles.actionBtn, isPrepared ? styles.btnPrepared : styles.btnAdd]}
                         onPress={() => togglePrepared(item.slug)}
                     >
-                        {isPrepared ? <Flame size={16} color="#fff" /> : <Plus size={16} color="#94a3b8" />}
+                        {isPrepared ? <Flame size={16} color="#EDE6D8" /> : <Plus size={16} color="#A89F8E" />}
                     </TouchableOpacity>
                 );
             } else {
                 ActionButton = (
                     <TouchableOpacity style={styles.actionBtn} onPress={() => togglePrepared(item.slug)}>
-                        <X size={16} color="#fbbf24" />
+                        <X size={16} color="#F59E0B" />
                     </TouchableOpacity>
                 );
             }
@@ -294,7 +341,7 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         style={[styles.actionBtn, isKnown ? styles.btnKnown : styles.btnAdd]}
                         onPress={() => toggleKnown(item.slug)}
                     >
-                        {isKnown ? <ScrollIcon size={16} color="#fff" /> : <Plus size={16} color="#94a3b8" />}
+                        {isKnown ? <ScrollIcon size={16} color="#EDE6D8" /> : <Plus size={16} color="#A89F8E" />}
                     </TouchableOpacity>
                 );
             } else if (activeTab === 'book') {
@@ -303,13 +350,13 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         style={[styles.actionBtn, isPrepared ? styles.btnPrepared : styles.btnAdd]}
                         onPress={() => togglePrepared(item.slug)}
                     >
-                        {isPrepared ? <Flame size={16} color="#000" /> : <Flame size={16} color="#94a3b8" />}
+                        {isPrepared ? <Flame size={16} color="#000" /> : <Flame size={16} color="#A89F8E" />}
                     </TouchableOpacity>
                 );
             } else {
                 ActionButton = (
                     <TouchableOpacity style={styles.actionBtn} onPress={() => togglePrepared(item.slug)}>
-                        <X size={16} color="#fbbf24" />
+                        <X size={16} color="#F59E0B" />
                     </TouchableOpacity>
                 );
             }
@@ -326,7 +373,7 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         styles.spellName,
                         (activeTab === 'library' && (isKnown || isPrepared)) && styles.spellNameKnown
                     ]}>
-                        {item.name}
+                        {item.translation?.name || item.name}
                     </Text>
                     <Text style={styles.spellSchool}>
                         {item.school} {item.ritual === 'yes' ? '• Ritual' : ''} {item.concentration === 'yes' ? '• Conc.' : ''}
@@ -365,11 +412,11 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
             {renderTabs()}
 
             <View style={styles.searchBar}>
-                <Search size={16} color="#64748b" />
+                <Search size={16} color="#6B6557" />
                 <TextInput
                     style={styles.input}
                     placeholder="Buscar hechizo..."
-                    placeholderTextColor="#64748b"
+                    placeholderTextColor="#6B6557"
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
@@ -392,33 +439,32 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                         const isCollapsed = collapsedGroups[lvl];
 
                         return (
-                            <View key={lvl} style={{ mb: 16 }}>
-                                <View style={styles.levelGroup}>
-                                    <TouchableOpacity
-                                        onPress={() => toggleGroup(lvl)}
-                                        style={styles.groupHeader}
-                                        activeOpacity={0.7}
-                                    >
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                            {isCollapsed ?
-                                                <ChevronRight size={18} color={COLORS.textMuted} /> :
-                                                <ChevronDown size={18} color={COLORS.blue} />
-                                            }
-                                            <Text style={[styles.groupTitle, !isCollapsed && { color: COLORS.blue }]}>
-                                                {lvl === 0 ? 'Trucos' : `Nivel ${lvl}`}
-                                            </Text>
-                                            <View style={styles.badge}>
-                                                <Text style={styles.badgeText}>{count}</Text>
-                                            </View>
-                                        </View>
-                                    </TouchableOpacity>
-                                </View>
-
-                                {!isCollapsed && spells.map(spell => (
-                                    <View key={spell.slug}>
-                                        {renderSpellRow(spell)}
+                            <View key={lvl} style={[styles.levelGroup, !isCollapsed && styles.levelGroupOpen]}>
+                                <TouchableOpacity
+                                    onPress={() => toggleGroup(lvl)}
+                                    style={styles.groupHeader}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={styles.groupHeaderLeft}>
+                                        {isCollapsed
+                                            ? <ChevronRight size={18} color={COLORS.textMuted} />
+                                            : <ChevronDown size={18} color={COLORS.blue} />}
+                                        <Text style={[styles.groupTitle, !isCollapsed && { color: COLORS.blue }]}>
+                                            {lvl === 0 ? 'Trucos' : `Nivel ${lvl}`}
+                                        </Text>
                                     </View>
-                                ))}
+                                    <View style={styles.badge}>
+                                        <Text style={styles.badgeText}>{count}</Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                {!isCollapsed && (
+                                    <View style={styles.groupBody}>
+                                        {spells.map(spell => (
+                                            <View key={spell.slug}>{renderSpellRow(spell)}</View>
+                                        ))}
+                                    </View>
+                                )}
                             </View>
                         );
                     })}
@@ -443,15 +489,36 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.modalTitle}>{selectedSpell?.name}</Text>
+                                <Text style={styles.modalTitle}>{trName}</Text>
                                 <Text style={styles.modalSubtitle}>
                                     {selectedSpell?.level === 0 ? 'Truco' : `Nivel ${selectedSpell?.level}`} • {selectedSpell?.school}
                                 </Text>
                             </View>
                             <TouchableOpacity onPress={() => setSelectedSpell(null)} style={styles.closeBtn}>
-                                <X size={24} color="#94a3b8" />
+                                <X size={24} color="#A89F8E" />
                             </TouchableOpacity>
                         </View>
+
+                        {/* Botón traducir al español (con caché) */}
+                        <TouchableOpacity
+                            onPress={handleTranslate}
+                            disabled={translating}
+                            style={styles.translateBtn}
+                            activeOpacity={0.8}
+                        >
+                            {translating ? (
+                                <ActivityIndicator size="small" color={COLORS.amber} />
+                            ) : (
+                                <Languages size={15} color={COLORS.amber} />
+                            )}
+                            <Text style={styles.translateBtnText}>
+                                {translating
+                                    ? 'Traduciendo…'
+                                    : selectedSpell?.translation?.desc
+                                        ? (showTrans ? 'Ver original (inglés)' : 'Ver en español')
+                                        : 'Traducir al español'}
+                            </Text>
+                        </TouchableOpacity>
 
                         <ScrollView showsVerticalScrollIndicator={false}>
                             <View style={styles.statsGrid}>
@@ -482,16 +549,16 @@ export default function SpellsManager({ character, socket }: SpellsManagerProps)
 
                             <View style={styles.divider} />
 
-                            {selectedSpell?.desc ? (
-                                <Text style={styles.modalDesc}>{selectedSpell.desc}</Text>
+                            {trDesc ? (
+                                <Text style={styles.modalDesc}>{trDesc}</Text>
                             ) : (
                                 <Text style={[styles.modalDesc, { fontStyle: 'italic', opacity: 0.7 }]}>Cargando descripción detallada...</Text>
                             )}
 
-                            {selectedSpell?.higher_level ? (
+                            {trHL ? (
                                 <View style={styles.higherLevelBox}>
                                     <Text style={styles.hlTitle}>A Niveles Superiores</Text>
-                                    <Text style={styles.hlText}>{selectedSpell?.higher_level}</Text>
+                                    <Text style={styles.hlText}>{trHL}</Text>
                                 </View>
                             ) : null}
 
@@ -682,6 +749,23 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.surfaceHighlight,
         borderRadius: 20,
     },
+    translateBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: COLORS.bronze,
+        backgroundColor: COLORS.surfaceHighlight,
+        marginBottom: 16,
+    },
+    translateBtnText: {
+        color: COLORS.amber,
+        fontSize: 13,
+        fontWeight: '700',
+    },
     statsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -735,6 +819,13 @@ const styles = StyleSheet.create({
     hlText: {
         color: COLORS.textSecondary, // Was c7d2fe
         fontSize: 14,
+        lineHeight: 21,
+    },
+    modalDesc: {
+        color: COLORS.textPrimary,
+        fontSize: 15,
+        lineHeight: 23,
+        marginBottom: 8,
     },
     loadingContainer: {
         flex: 1,
@@ -771,67 +862,79 @@ const styles = StyleSheet.create({
         fontSize: 11,
     },
     levelGroup: {
-        marginBottom: 16,
+        marginBottom: 10,
+        marginHorizontal: 12,
         backgroundColor: COLORS.surface,
-        borderRadius: 8,
+        borderRadius: 12,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: COLORS.border,
-        borderLeftWidth: 4,
-        borderLeftColor: COLORS.blue, // Magic Blue
-        marginHorizontal: 16,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+        borderLeftWidth: 3,
+        borderLeftColor: COLORS.border,
+    },
+    levelGroupOpen: {
+        borderLeftColor: COLORS.blue, // se ilumina al abrir
+        borderColor: 'rgba(62,132,214,0.35)',
     },
     groupHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.02)',
         justifyContent: 'space-between',
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+    },
+    groupHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
     },
     groupTitle: {
         color: COLORS.textPrimary,
         fontSize: 14,
-        fontWeight: 'bold',
+        fontWeight: '800',
         textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginLeft: 8,
+        letterSpacing: 1,
+    },
+    groupBody: {
+        borderTopWidth: 1,
+        borderTopColor: COLORS.border,
     },
     badge: {
-        backgroundColor: COLORS.surfaceHighlight,
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 12,
+        minWidth: 26,
+        height: 22,
+        paddingHorizontal: 7,
+        borderRadius: 11,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(62,132,214,0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(62,132,214,0.35)',
     },
     badgeText: {
-        flexWrap: 'wrap',
-        gap: 8,
-        marginBottom: 16,
+        color: COLORS.blue,
+        fontSize: 12,
+        fontWeight: '800',
     },
     statBox: {
         width: '48%',
-        backgroundColor: '#1e293b',
+        backgroundColor: '#16211F',
         padding: 10,
         borderRadius: 8,
     },
     statBoxLabel: {
-        color: '#64748b',
+        color: '#6B6557',
         fontSize: 10,
         fontWeight: 'bold',
         marginBottom: 4,
         textTransform: 'uppercase',
     },
     statBoxValue: {
-        color: '#e2e8f0',
+        color: '#A89F8E',
         fontSize: 13,
         fontWeight: '500',
     },
     materialText: {
-        color: '#94a3b8',
+        color: '#A89F8E',
         fontSize: 13,
         fontStyle: 'italic',
         marginBottom: 10,
@@ -839,7 +942,7 @@ const styles = StyleSheet.create({
     },
     divider: {
         height: 1,
-        backgroundColor: '#334155',
+        backgroundColor: '#2A332F',
         marginBottom: 16,
         marginTop: 8,
     },

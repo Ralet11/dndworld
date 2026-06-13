@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { COLORS } from '../../../constants/Theme';
 
 type TabType = 'COMBAT' | 'MAGIC' | 'CONSUMABLE';
 
@@ -41,8 +42,10 @@ export default function InventoryTabs({ activeTab, onTabChange }: InventoryTabsP
 const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
-        backgroundColor: '#1a1a1a',
-        borderRadius: 8,
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
         padding: 4,
         marginBottom: 16,
     },
@@ -50,17 +53,19 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingVertical: 8,
         alignItems: 'center',
-        borderRadius: 6,
+        borderRadius: 8,
     },
     activeTab: {
-        backgroundColor: '#333',
+        backgroundColor: COLORS.surfaceHighlight,
+        borderWidth: 1,
+        borderColor: COLORS.bronze,
     },
     label: {
-        color: '#666',
+        color: COLORS.textMuted,
         fontSize: 14,
         fontWeight: 'bold',
     },
     activeLabel: {
-        color: '#FFD700',
+        color: COLORS.amber,
     },
 });

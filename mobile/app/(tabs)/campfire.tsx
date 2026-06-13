@@ -1,78 +1,111 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
+import { LogOut, Flame, User, Mail, Shield } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Flame } from 'lucide-react-native';
+import Screen from '../../components/UI/Screen';
+import Panel from '../../components/UI/Panel';
+import Button from '../../components/UI/Button';
+import SectionHeader from '../../components/UI/SectionHeader';
+import { COLORS, SPACING, TYPO, RADIUS, GLOWS } from '../../constants/Theme';
 
 export default function CampfireScreen() {
     const { logout, user } = useAuth();
 
     const handleLogout = () => {
         Alert.alert(
-            "Cerrar Sesión",
-            "¿Estás seguro de que quieres salir?",
+            'Abandonar el campamento',
+            '¿Seguro que querés salir?',
             [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Salir", onPress: logout, style: "destructive" }
-            ]
+                { text: 'Quedarme', style: 'cancel' },
+                { text: 'Salir', onPress: logout, style: 'destructive' },
+            ],
         );
     };
 
+    const roleLabel = user?.role === 'DM' ? 'Dungeon Master' : user?.role === 'ADMIN' ? 'Administrador' : 'Aventurero';
+
     return (
-        <View style={styles.container}>
-            <View style={styles.content}>
-                <Flame size={64} color="#FFD700" style={styles.icon} />
+        <Screen scroll>
+            {/* Hero hoguera */}
+            <View style={styles.hero}>
+                <View style={[styles.flameRing, GLOWS.ember]}>
+                    <Flame size={40} color={COLORS.ember} />
+                </View>
                 <Text style={styles.title}>Campamento</Text>
-                <Text style={styles.subtitle}>Descansa aventurero, {user?.username}.</Text>
+                <Text style={styles.subtitle}>Descansa, {user?.username || 'aventurero'}.</Text>
             </View>
 
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <LogOut size={20} color="#ff4444" />
-                <Text style={styles.logoutText}>Cerrar Sesión</Text>
-            </TouchableOpacity>
+            {/* Perfil */}
+            <SectionHeader title="Tu cuenta" icon={<User size={14} color={COLORS.bronzeLight} />} />
+            <Panel>
+                <InfoRow icon={<User size={18} color={COLORS.bronzeLight} />} label="Usuario" value={user?.username} />
+                <View style={styles.divider} />
+                <InfoRow icon={<Mail size={18} color={COLORS.bronzeLight} />} label="Email" value={user?.email} />
+                <View style={styles.divider} />
+                <InfoRow icon={<Shield size={18} color={COLORS.bronzeLight} />} label="Rol" value={roleLabel} />
+            </Panel>
+
+            <View style={styles.logoutWrap}>
+                <Button
+                    title="Cerrar sesión"
+                    variant="danger"
+                    full
+                    icon={<LogOut size={18} color="#FDEDE9" />}
+                    onPress={handleLogout}
+                />
+            </View>
+        </Screen>
+    );
+}
+
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value?: string }) {
+    return (
+        <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>{icon}</View>
+            <View style={{ flex: 1 }}>
+                <Text style={styles.infoLabel}>{label}</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>{value || '—'}</Text>
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#111',
-        justifyContent: 'space-between',
-        padding: 40,
-    },
-    content: {
-        flex: 1,
-        justifyContent: 'center',
+    hero: {
         alignItems: 'center',
+        paddingVertical: SPACING.xl,
     },
-    icon: {
-        marginBottom: 20,
+    flameRing: {
+        width: 88,
+        height: 88,
+        borderRadius: RADIUS.pill,
+        borderWidth: 1.5,
+        borderColor: COLORS.bronze,
+        backgroundColor: COLORS.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: SPACING.lg,
     },
-    title: {
-        color: '#FFD700',
-        fontSize: 32,
-        fontWeight: 'bold',
-        marginBottom: 8,
-    },
-    subtitle: {
-        color: '#888',
-        fontSize: 16,
-    },
-    logoutButton: {
+    title: { ...TYPO.display, color: COLORS.textPrimary },
+    subtitle: { ...TYPO.body, color: COLORS.textSecondary, marginTop: SPACING.xs },
+    infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#2a1a1a',
-        padding: 16,
-        borderRadius: 12,
+        gap: SPACING.md,
+        paddingVertical: SPACING.sm,
+    },
+    infoIcon: {
+        width: 38,
+        height: 38,
+        borderRadius: RADIUS.sm,
+        backgroundColor: COLORS.surfaceHighlight,
         borderWidth: 1,
-        borderColor: '#442222',
-        gap: 10,
-        marginBottom: 20,
+        borderColor: COLORS.border,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    logoutText: {
-        color: '#ff4444',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
+    infoLabel: { ...TYPO.label, color: COLORS.textMuted },
+    infoValue: { ...TYPO.subtitle, color: COLORS.textPrimary, marginTop: 1 },
+    divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.xs },
+    logoutWrap: { marginTop: SPACING.xxl },
 });

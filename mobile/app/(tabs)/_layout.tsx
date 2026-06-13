@@ -2,13 +2,16 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { Platform, StyleSheet, View } from 'react-native';
-import { Scroll, Sword, Book, Map as MapIcon, Flame, Users, Skull, Clock } from 'lucide-react-native';
-import { useGame } from '../../context/GameContext';
+import { Scroll, Shield, Compass, Flame } from 'lucide-react-native';
+import { COLORS } from '../../constants/Theme';
 
+/**
+ * Navegación inferior del jugador (MVP fin de semana):
+ *   Chronicles · My Hero · Lore · Campfire
+ * Las pantallas de DM/dev (party, bestiary, session, grimoire, atlas) quedan
+ * como rutas ocultas (href: null) — su acceso es vía dev tools, no la barra.
+ */
 export default function TabLayout() {
-    const { userRole } = useGame();
-    const isDm = userRole === 'DM';
-
     return (
         <Tabs
             screenOptions={{
@@ -16,85 +19,51 @@ export default function TabLayout() {
                 tabBarStyle: styles.tabBar,
                 tabBarBackground: () => (
                     Platform.OS === 'ios'
-                        ? <BlurView intensity={80} style={StyleSheet.absoluteFill} tint="dark" />
-                        : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(11, 15, 25, 0.95)' }]} /> // Night Blue
+                        ? <BlurView intensity={40} style={StyleSheet.absoluteFill} tint="dark" />
+                        : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 21, 24, 0.96)' }]} />
                 ),
-                tabBarActiveTintColor: isDm ? '#A855F7' : '#38bdf8', // Purple for DM, Blue for Player
-                tabBarInactiveTintColor: '#64748b', // Slate 500
+                tabBarActiveTintColor: COLORS.amber,
+                tabBarInactiveTintColor: COLORS.textMuted,
                 tabBarShowLabel: true,
+                tabBarLabelStyle: styles.tabLabel,
                 tabBarHideOnKeyboard: true,
             }}>
 
-            {/* 1. CHRONICLE (Common) */}
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: 'Chronicle',
-                    tabBarIcon: ({ color }) => <Scroll size={24} color={color} />,
+                    title: 'Chronicles',
+                    tabBarIcon: ({ color }) => <Scroll size={22} color={color} />,
                 }}
             />
-
-            {/* PLAYER TABS */}
             <Tabs.Screen
                 name="hero"
                 options={{
-                    title: 'Hero',
-                    href: isDm ? null : '/hero', // Hide if DM
-                    tabBarIcon: ({ color }) => <Sword size={24} color={color} />,
+                    title: 'My Hero',
+                    tabBarIcon: ({ color }) => <Shield size={22} color={color} />,
                 }}
             />
             <Tabs.Screen
-                name="grimoire"
+                name="lore"
                 options={{
-                    href: null,
+                    title: 'Lore',
+                    tabBarIcon: ({ color }) => <Compass size={22} color={color} />,
                 }}
             />
-
-            {/* DM TABS */}
-            <Tabs.Screen
-                name="party"
-                options={{
-                    title: 'Party',
-                    href: isDm ? '/party' : null,
-                    tabBarIcon: ({ color }) => <Users size={24} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="bestiary"
-                options={{
-                    title: 'Cast',
-                    href: isDm ? '/bestiary' : null,
-                    tabBarIcon: ({ color }) => <Skull size={24} color={color} />,
-                }}
-            />
-
-            {/* ATLAS (Common) */}
-            <Tabs.Screen
-                name="atlas"
-                options={{
-                    title: 'Atlas',
-                    tabBarIcon: ({ color }) => <MapIcon size={24} color={color} />,
-                }}
-            />
-
-            {/* PLAYER: CAMPFIRE / DM: SESSION */}
             <Tabs.Screen
                 name="campfire"
                 options={{
                     title: 'Campfire',
-                    href: isDm ? null : '/campfire',
-                    tabBarIcon: ({ color }) => <Flame size={24} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="session"
-                options={{
-                    title: 'Session',
-                    href: isDm ? '/session' : null,
-                    tabBarIcon: ({ color }) => <Clock size={24} color={color} />,
+                    tabBarIcon: ({ color }) => <Flame size={22} color={color} />,
                 }}
             />
 
+            {/* --- Rutas ocultas (DM / dev / fuera de scope del MVP) --- */}
+            <Tabs.Screen name="atlas" options={{ href: null }} />
+            <Tabs.Screen name="grimoire" options={{ href: null }} />
+            <Tabs.Screen name="party" options={{ href: null }} />
+            <Tabs.Screen name="bestiary" options={{ href: null }} />
+            <Tabs.Screen name="session" options={{ href: null }} />
         </Tabs>
     );
 }
@@ -102,9 +71,16 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
     tabBar: {
         position: 'absolute',
-        borderTopWidth: 0,
+        borderTopWidth: 1,
+        borderTopColor: COLORS.bronzeDark,
         backgroundColor: 'transparent',
-        height: 80,
-        paddingBottom: 20,
-    }
+        height: 82,
+        paddingBottom: 22,
+        paddingTop: 8,
+    },
+    tabLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.3,
+    },
 });

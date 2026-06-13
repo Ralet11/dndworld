@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, SPACING, RADIUS, TYPO, GLOWS } from '../constants/Theme';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('test1@dev.local');
@@ -13,33 +14,33 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please fill in all fields');
+            Alert.alert('Error', 'Completá todos los campos');
             return;
         }
-
         try {
             await login(email, password);
             router.replace('/(tabs)');
         } catch (error: any) {
-            Alert.alert('Login Failed', error.message);
+            Alert.alert('No se pudo entrar', error.message);
         }
     };
 
     return (
-        <LinearGradient colors={['#1a1a2e', '#16213e']} style={styles.container}>
+        <LinearGradient colors={[COLORS.background, '#11191A']} style={styles.container}>
+            <LinearGradient colors={['transparent', 'rgba(255,122,26,0.08)']} style={styles.emberGlow} pointerEvents="none" />
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
                 <View style={styles.header}>
                     <Text style={styles.title}>DND World</Text>
-                    <Text style={styles.subtitle}>Enter the Realm</Text>
+                    <Text style={styles.subtitle}>Entra al reino</Text>
                 </View>
 
                 <View style={styles.form}>
                     <View style={styles.inputContainer}>
-                        <Ionicons name="mail-outline" size={20} color="#a5b1c2" style={styles.icon} />
+                        <Ionicons name="mail-outline" size={20} color={COLORS.bronzeLight} style={styles.icon} />
                         <TextInput
                             style={styles.input}
                             placeholder="Email"
-                            placeholderTextColor="#a5b1c2"
+                            placeholderTextColor={COLORS.textMuted}
                             value={email}
                             onChangeText={setEmail}
                             autoCapitalize="none"
@@ -48,11 +49,11 @@ export default function LoginScreen() {
                     </View>
 
                     <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color="#a5b1c2" style={styles.icon} />
+                        <Ionicons name="lock-closed-outline" size={20} color={COLORS.bronzeLight} style={styles.icon} />
                         <TextInput
                             style={styles.input}
-                            placeholder="Password"
-                            placeholderTextColor="#a5b1c2"
+                            placeholder="Contraseña"
+                            placeholderTextColor={COLORS.textMuted}
                             value={password}
                             onChangeText={setPassword}
                             secureTextEntry
@@ -61,17 +62,17 @@ export default function LoginScreen() {
 
                     <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading}>
                         {isLoading ? (
-                            <ActivityIndicator color="#fff" />
+                            <ActivityIndicator color="#1A0E04" />
                         ) : (
-                            <Text style={styles.buttonText}>Login</Text>
+                            <Text style={styles.buttonText}>Entrar</Text>
                         )}
                     </TouchableOpacity>
 
                     <View style={styles.footer}>
-                        <Text style={styles.footerText}>Don't have an account? </Text>
+                        <Text style={styles.footerText}>¿No tenés cuenta? </Text>
                         <Link href="/register" asChild>
                             <TouchableOpacity>
-                                <Text style={styles.link}>Register</Text>
+                                <Text style={styles.link}>Crear una</Text>
                             </TouchableOpacity>
                         </Link>
                     </View>
@@ -82,83 +83,46 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    keyboardView: {
-        flex: 1,
-        justifyContent: 'center',
-        padding: 20,
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: 50,
-    },
+    container: { flex: 1 },
+    emberGlow: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 260 },
+    keyboardView: { flex: 1, justifyContent: 'center', padding: SPACING.xl },
+    header: { alignItems: 'center', marginBottom: SPACING.xxxl },
     title: {
-        fontSize: 40,
+        fontSize: 42,
         fontWeight: 'bold',
-        color: '#e056fd',
-        textShadowColor: 'rgba(224, 86, 253, 0.5)',
+        color: COLORS.amber,
+        textShadowColor: 'rgba(245, 158, 11, 0.45)',
         textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 10,
+        textShadowRadius: 14,
         fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+        letterSpacing: 1,
     },
-    subtitle: {
-        fontSize: 18,
-        color: '#a5b1c2',
-        marginTop: 10,
-        fontStyle: 'italic',
-    },
-    form: {
-        width: '100%',
-    },
+    subtitle: { ...TYPO.subtitle, color: COLORS.textSecondary, marginTop: SPACING.sm, fontStyle: 'italic' },
+    form: { width: '100%' },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: 10,
-        marginBottom: 15,
-        paddingHorizontal: 15,
-        height: 50,
+        backgroundColor: COLORS.surface,
+        borderRadius: RADIUS.md,
+        marginBottom: SPACING.md,
+        paddingHorizontal: SPACING.lg,
+        height: 52,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: COLORS.border,
     },
-    icon: {
-        marginRight: 10,
-    },
-    input: {
-        flex: 1,
-        color: '#fff',
-        fontSize: 16,
-    },
+    icon: { marginRight: SPACING.md },
+    input: { flex: 1, color: COLORS.textPrimary, fontSize: 16 },
     button: {
-        backgroundColor: '#e056fd',
-        borderRadius: 10,
-        height: 50,
+        backgroundColor: COLORS.ember,
+        borderRadius: RADIUS.md,
+        height: 52,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 20,
-        shadowColor: '#e056fd',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
-        elevation: 5,
+        marginTop: SPACING.lg,
+        ...GLOWS.ember,
     },
-    buttonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 20,
-    },
-    footerText: {
-        color: '#a5b1c2',
-    },
-    link: {
-        color: '#e056fd',
-        fontWeight: 'bold',
-    },
+    buttonText: { color: '#1A0E04', fontSize: 18, fontWeight: '800' },
+    footer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.xl },
+    footerText: { color: COLORS.textSecondary },
+    link: { color: COLORS.amber, fontWeight: 'bold' },
 });

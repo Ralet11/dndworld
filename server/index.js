@@ -8,7 +8,9 @@ const { Op } = require('sequelize');
 const sequelize = require('./config/database');
 const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell } = require('./models');
 const StatEngine = require('./utils/statEngine');
+const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
+const { renderHero, buildSignature } = require('./utils/heroRenderer');
 
 const app = express();
 const server = http.createServer(app);
@@ -95,15 +97,21 @@ app.post('/api/characters/assign', verifyToken, async (req, res) => {
     }
 });
 
-app.post('/api/upload', upload.single('image'), (req, res) => {
-    console.log('Server: Upload request received');
-    if (!req.file) {
-        console.log('Server: No file in request');
-        return res.status(400).send('No file uploaded.');
-    }
-    console.log('Server: File uploaded to Cloudinary:', req.file.path);
-    // Cloudinary returns the URL in req.file.path
-    res.json({ url: req.file.path });
+app.post('/api/upload', (req, res) => {
+    // Llamamos a multer manualmente para CAPTURAR el error de Cloudinary/multer
+    // (si no, cae en el handler por defecto de Express y devuelve HTML, lo que
+    // rompe el res.json() del cliente con un falso "error de conexión").
+    upload.single('image')(req, res, (err) => {
+        if (err) {
+            console.error('Server: Upload error →', err);
+            return res.status(500).json({ message: err.message || 'Fallo al subir la imagen.' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ message: 'No se recibió ningún archivo.' });
+        }
+        console.log('Server: File uploaded to Cloudinary:', req.file.path);
+        res.json({ url: req.file.path });
+    });
 });
 
 // AI Narrator Endpoint (Architecture Ready)
@@ -123,6 +131,74 @@ app.post('/api/ai/narrate', verifyToken, async (req, res) => {
     } catch (err) {
         console.error('AI Error:', err);
         res.status(500).json({ message: "Failed to consult the Oracle." });
+    }
+});
+
+// Render del héroe con el equipo puesto (OpenAI gpt-image-1 → Cloudinary).
+app.post('/api/characters/:id/render', verifyToken, async (req, res) => {
+    try {
+        const character = await Character.findByPk(req.params.id, {
+            include: [
+                { model: Item, as: 'items' },
+                {
+                    model: EquipmentSlots,
+                    as: 'equipment',
+                    include: [
+                        { model: Item, as: 'helmet' },
+                        { model: Item, as: 'chest' },
+                        { model: Item, as: 'shoulders' },
+                        { model: Item, as: 'boots' },
+                        { model: Item, as: 'pants' },
+                        { model: Item, as: 'gloves' },
+                        { model: Item, as: 'primary_weapon' },
+                        { model: Item, as: 'secondary_weapon' },
+                    ]
+                }
+            ]
+        });
+
+        if (!character) return res.status(404).json({ message: 'Personaje no encontrado.' });
+
+        // Indicaciones libres del jugador: si vienen en el body, se guardan y se
+        // reaplicarán en este y los próximos renders.
+        if (req.body?.customPrompt !== undefined) {
+            character.render_prompt = String(req.body.customPrompt).slice(0, 1000);
+        }
+
+        // Si el equipo Y las indicaciones no cambiaron, devolvemos el cacheado.
+        const currentSig = buildSignature(character.equipment, character.items, character.render_prompt);
+        if (!req.body?.force && character.rendered_url && character.rendered_signature === currentSig) {
+            return res.json({ url: character.rendered_url, cached: true });
+        }
+
+        const quality = req.body?.quality || 'medium';
+        // review: auto-revisión con juez de visión (default on). maxAttempts: tope
+        // de regeneraciones del ciclo (cada una cuesta una imagen).
+        const review = req.body?.review !== false;
+        const maxAttempts = Math.min(Math.max(parseInt(req.body?.maxAttempts, 10) || 2, 1), 4);
+
+        // Reporta cada etapa por socket para alimentar la barra de carga del cliente.
+        const onProgress = ({ stage, pct }) =>
+            io.emit('render-progress', { characterId: character.id, stage, pct });
+        onProgress({ stage: 'Iniciando…', pct: 2 });
+
+        const { url, signature, verdict } = await renderHero(character, { quality, review, maxAttempts, onProgress });
+        onProgress({ stage: 'Listo', pct: 100 });
+
+        character.rendered_url = url;
+        character.rendered_signature = signature;
+        await character.save();
+
+        // Avisar a todos para que la figura se actualice en vivo.
+        const updatedStats = await getCalculatedPartyStats();
+        io.emit('stats-updated', updatedStats);
+
+        res.json({ url, cached: false, verdict });
+    } catch (err) {
+        console.error('Render hero error:', err);
+        if (err.code === 'NO_API_KEY') return res.status(503).json({ message: err.message });
+        if (err.code === 'NO_BASE_IMAGE') return res.status(400).json({ message: err.message });
+        res.status(500).json({ message: 'No se pudo renderizar el héroe.' });
     }
 });
 
@@ -161,8 +237,37 @@ const getCalculatedPartyStats = async () => {
         ]
     });
 
+    // Mapa de clases (para resolver multiclase desde char.classes).
+    const allClasses = await Class.findAll();
+    const classMap = {};
+    allClasses.forEach(c => { classMap[c.slug] = c; });
+
+    // Definiciones de elección de rasgos (Estilo de Combate, etc.) — viven en el
+    // compendio local (la tabla Class no las guarda).
+    const compendium = require('./data/compendium2024');
+    const choicesBySlug = {};
+    compendium.classes.forEach(c => { choicesBySlug[c.slug] = c.choices || []; });
+
     return characters.map(char => {
         const baseStats = StatEngine.calculate(char);
+
+        // Multiclase: lista de clases con su nivel. Fallback a clase única.
+        const classEntries = (Array.isArray(char.classes) && char.classes.length)
+            ? char.classes
+            : (char.class_slug ? [{ slug: char.class_slug, level: char.level }] : []);
+        const classesData = classEntries.map(e => {
+            const cm = classMap[e.slug];
+            if (!cm) return null;
+            return {
+                slug: cm.slug, name: cm.name, hit_dice: cm.hit_dice,
+                prof_armor: cm.prof_armor, prof_weapons: cm.prof_weapons,
+                prof_saving_throws: cm.prof_saving_throws, spellcasting_ability: cm.spellcasting_ability,
+                subtypes_name: cm.subtypes_name, archetypes: cm.archetypes,
+                table: cm.table, desc: cm.desc, level: e.level,
+                choices: choicesBySlug[cm.slug] || [],
+            };
+        }).filter(Boolean);
+
         return {
             ...baseStats,
             id: char.id,
@@ -174,12 +279,19 @@ const getCalculatedPartyStats = async () => {
             archetype_slug: char.archetype_slug,
             raceData: char.raceData,
             classData: char.classData,
+            classes: classesData,
             level: char.level,
+            xp: char.xp,
+            gold: char.gold,
             inventory: char.items, // Map 'items' to 'inventory' for frontend
             quests: char.quests,
             equipment: char.equipment,
             abilities_text: char.abilities_text,
             image_url: char.image_url,
+            base_body_url: char.base_body_url,
+            rendered_url: char.rendered_url,
+            rendered_signature: char.rendered_signature,
+            render_prompt: char.render_prompt,
             image_scale: char.image_scale,
             image_offset_x: char.image_offset_x,
             image_offset_x: char.image_offset_x,
@@ -188,6 +300,8 @@ const getCalculatedPartyStats = async () => {
             spell_slots: char.spell_slots,
             spells_known: char.spells_known,
             spells_prepared: char.spells_prepared,
+            talent_choices: char.talent_choices,
+            feature_choices: char.feature_choices,
             UserId: char.UserId, // Critical for frontend identity
         };
     });
@@ -561,6 +675,28 @@ io.on('connection', async (socket) => {
         socket.emit('all-items', items);
     });
 
+    // Editar propiedades de un item (DM): material/categoría de armadura, etc.
+    socket.on('update-item', async ({ itemId, updates }) => {
+        try {
+            const item = await Item.findByPk(itemId);
+            if (!item || !updates) return;
+
+            const allowed = ['name', 'description', 'image_url', 'rarity', 'type', 'slot', 'armor_weight', 'armor_material', 'level', 'weight', 'stat_bonuses', 'use_effects', 'size_hint', 'armor_type', 'ca_value', 'talent_stats', 'ability', 'weapon_category', 'damage', 'damage_type', 'properties', 'mastery'];
+            for (const key of allowed) {
+                if (updates[key] !== undefined) item.set(key, updates[key]);
+            }
+            await item.save();
+
+            // Refrescar a todos: inventarios (quien lo tenga) + lista global.
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+            const items = await Item.findAll();
+            io.emit('all-items', items);
+        } catch (err) {
+            console.error('Update-item error:', err);
+        }
+    });
+
     socket.on('get-all-players', async () => {
         const players = await Character.findAll({ where: { is_npc: false } });
         socket.emit('all-players', players);
@@ -584,8 +720,43 @@ io.on('connection', async (socket) => {
         }
     });
 
+    // El DM otorga XP. Si el total cruza un umbral, sube de nivel en el acto
+    // (puede subir varios niveles de una). characterIds: array de ids.
+    socket.on('award-xp', async ({ characterIds, amount }) => {
+        try {
+            const amt = parseInt(amount, 10);
+            if (!amt || !Array.isArray(characterIds) || !characterIds.length) return;
+            const XP_THRESHOLDS = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+                85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000];
+
+            for (const id of characterIds) {
+                const char = await Character.findByPk(id);
+                if (!char) continue;
+                char.xp = (char.xp || 0) + amt;
+
+                let leveled = false;
+                while (char.level < 20 && char.xp >= XP_THRESHOLDS[char.level]) {
+                    char.level += 1;
+                    leveled = true;
+                }
+                await char.save();
+
+                io.emit('notification', {
+                    text: leveled
+                        ? `¡${char.name} subió a nivel ${char.level}! (${amt > 0 ? '+' : ''}${amt} XP)`
+                        : `${char.name} ganó ${amt} XP.`,
+                });
+            }
+
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+        } catch (err) {
+            console.error('award-xp error:', err);
+        }
+    });
+
     socket.on('get-all-qs', async () => {
-        // Return distinct quests or all assigned quests? 
+        // Return distinct quests or all assigned quests?
         // Plan says "View and search all quests". 
         // Maybe we just want a list of defined quests? 
         // The current data model repeats Quest rows for each character assignment.
@@ -654,6 +825,90 @@ io.on('connection', async (socket) => {
             io.emit('stats-updated', updatedStats);
         } catch (err) {
             console.error('Update character image error:', err);
+        }
+    });
+
+    socket.on('update-character-base-body', async ({ characterId, imageUrl }) => {
+        try {
+            await Character.update({ base_body_url: imageUrl }, { where: { id: characterId } });
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+        } catch (err) {
+            console.error('Update character base body error:', err);
+        }
+    });
+
+    // Elegir (o limpiar) un talento en un umbral de un árbol de dote.
+    socket.on('choose-talent', async ({ characterId, tree, threshold, option }) => {
+        try {
+            const VALID_TREES = ['espiritu', 'agilidad', 'aguante'];
+            const VALID_OPTS = ['a', 'b', 'c'];
+            if (!VALID_TREES.includes(tree)) return;
+            const th = String(threshold);
+
+            const char = await Character.findByPk(characterId, {
+                include: [
+                    { model: Item, as: 'items' },
+                    {
+                        model: EquipmentSlots, as: 'equipment', include: [
+                            { model: Item, as: 'helmet' }, { model: Item, as: 'chest' }, { model: Item, as: 'shoulders' },
+                            { model: Item, as: 'boots' }, { model: Item, as: 'pants' }, { model: Item, as: 'gloves' },
+                        ]
+                    },
+                ],
+            });
+            if (!char) return;
+
+            // Validar que el umbral esté desbloqueado (talento del equipo >= umbral).
+            const armor = StatEngine.computeArmor(char, char.equipment || {}, 0);
+            if (Number(threshold) > (armor.talents[tree] || 0)) {
+                io.emit('notification', { text: 'Ese umbral aún no está desbloqueado.' });
+                return;
+            }
+
+            const choices = { ...(char.talent_choices || {}) };
+            const treeChoices = { ...(choices[tree] || {}) };
+            if (option === null || treeChoices[th] === option) {
+                delete treeChoices[th]; // toggle off / limpiar
+            } else if (VALID_OPTS.includes(option)) {
+                treeChoices[th] = option;
+            } else {
+                return;
+            }
+            choices[tree] = treeChoices;
+            char.talent_choices = choices;
+            await char.save();
+
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+        } catch (err) {
+            console.error('choose-talent error:', err);
+        }
+    });
+
+    // Elegir (o limpiar) un rasgo con opciones (Estilo de Combate, etc.).
+    socket.on('choose-feature', async ({ characterId, classSlug, feature, key, multi }) => {
+        try {
+            if (!classSlug || !feature) return;
+            const char = await Character.findByPk(characterId);
+            if (!char) return;
+            const k = `${classSlug}:${feature}`;
+            const choices = { ...(char.feature_choices || {}) };
+            if (multi) {
+                const arr = Array.isArray(choices[k]) ? [...choices[k]] : [];
+                const i = arr.indexOf(key);
+                if (i >= 0) arr.splice(i, 1); else arr.push(key);
+                choices[k] = arr;
+            } else {
+                if (choices[k] === key) delete choices[k]; // toggle off
+                else choices[k] = key;
+            }
+            char.feature_choices = choices;
+            await char.save();
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+        } catch (err) {
+            console.error('choose-feature error:', err);
         }
     });
 
@@ -784,40 +1039,60 @@ io.on('connection', async (socket) => {
     });
 
     // --- SPELL SYSTEM ---
-    socket.on('get-class-spells', async ({ class_name }) => {
+    socket.on('get-class-spells', async ({ class_name, class_names }) => {
         try {
-            console.log(`Fetching spells for class: ${class_name}`);
+            // Acepta una clase o varias (multiclase). Capitaliza para matchear el
+            // dnd_class del compendio (inglés): 'ranger' → 'Ranger'.
+            let names = Array.isArray(class_names) ? class_names : (class_name ? [class_name] : []);
+            names = names.filter(Boolean).map((n) => n.charAt(0).toUpperCase() + n.slice(1).toLowerCase());
+            if (!names.length) return;
 
-            if (!class_name) return;
-
-            // Capitalize first letter (e.g. "bard" -> "Bard") to match database format
-            const searchTerm = class_name.charAt(0).toUpperCase() + class_name.slice(1).toLowerCase();
-            console.log(`Searching spells for: ${searchTerm}`);
-
-            // Check Cache
-            if (classSpellCache[searchTerm]) {
-                console.log('Serving from cache');
-                socket.emit('class-spells-result', classSpellCache[searchTerm]);
+            const cacheKey = names.slice().sort().join('|');
+            if (classSpellCache[cacheKey]) {
+                socket.emit('class-spells-result', classSpellCache[cacheKey]);
                 return;
             }
 
-            // Search by class name in comma-separated string
+            // OR sobre todas las clases (un conjuro en ambas listas aparece una vez).
+            // Filtramos al SRD oficial (wotc-srd) para evitar duplicados y contenido
+            // de terceros que trae Open5e (a5e, Deep Magic, etc.).
             const spells = await Spell.findAll({
                 where: {
-                    dnd_class: {
-                        [Op.like]: `%${searchTerm}%`
-                    }
+                    document__slug: 'wotc-srd',
+                    [Op.or]: names.map((n) => ({ dnd_class: { [Op.like]: `%${n}%` } })),
                 },
-                // Optimized: Exclude 'desc' and 'higher_level' for the list view
-                attributes: ['slug', 'name', 'level', 'school', 'range', 'components', 'duration', 'concentration', 'ritual', 'casting_time']
+                attributes: ['slug', 'name', 'level', 'school', 'range', 'components', 'duration', 'concentration', 'ritual', 'casting_time', 'translation'],
             });
 
-            // Cache result
-            classSpellCache[searchTerm] = spells;
-
+            classSpellCache[cacheKey] = spells;
             socket.emit('class-spells-result', spells);
         } catch (err) {
             console.error('Error fetching class spells:', err);
+        }
+    });
+
+    // Traduce un conjuro al español (vía IA) y cachea el resultado en la base.
+    socket.on('translate-spell', async ({ slug }) => {
+        try {
+            const spell = await Spell.findOne({ where: { slug } });
+            if (!spell) return;
+            // Cacheado: si ya está la traducción COMPLETA (con descripción), directo.
+            if (spell.translation && spell.translation.desc) {
+                socket.emit('spell-translated', { slug, translation: spell.translation, cached: true });
+                return;
+            }
+            // Si solo tenía el nombre (traducción masiva), completamos lo demás.
+            const { translateSpell } = require('./utils/translateSpell');
+            const translation = await translateSpell(spell);
+            spell.translation = { ...(spell.translation || {}), ...translation };
+            await spell.save();
+            socket.emit('spell-translated', { slug, translation, cached: false });
+        } catch (err) {
+            console.error('translate-spell error:', err);
+            socket.emit('spell-translate-error', {
+                slug,
+                message: err.code === 'NO_API_KEY' ? 'OPENAI_API_KEY no configurada en el server.' : 'No se pudo traducir el conjuro.',
+            });
         }
     });
 
@@ -962,7 +1237,7 @@ io.on('connection', async (socket) => {
 
             const equipment = await EquipmentSlots.findOne({ where: { character_id: characterId } });
             if (equipment) {
-                equipment[`${slot} _id`] = null;
+                equipment.set(`${slot}_id`, null);
                 await equipment.save();
 
                 const updatedStats = await getCalculatedPartyStats();
@@ -974,7 +1249,7 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('equip-item', async ({ characterId, itemId }) => {
+    socket.on('equip-item', async ({ characterId, itemId, slot: explicitSlot }) => {
         try {
             const char = await Character.findByPk(characterId);
             const item = await Item.findByPk(itemId);
@@ -982,17 +1257,16 @@ io.on('connection', async (socket) => {
 
             const [equipment] = await EquipmentSlots.findOrCreate({ where: { character_id: characterId } });
 
-            // Auto-assign slot based on item characteristics
-            let slot = 'primary_weapon';
-            if (item.type === 'Armadura') {
-                if (item.name.toLowerCase().includes('casco')) slot = 'helmet';
-                else if (item.name.toLowerCase().includes('escudo')) slot = 'secondary_weapon';
-                else slot = 'chest';
-            } else if (item.type === 'Arma') {
-                slot = equipment.primary_weapon_id ? 'secondary_weapon' : 'primary_weapon';
+            // Slot lógico: explícito del cliente > el del item > deducido.
+            const logical = explicitSlot || item.slot || deriveSlot(item);
+            const slot = resolveSlotColumn(logical, equipment);
+
+            if (!slot) {
+                io.emit('notification', { text: `${item.name} no se puede equipar.` });
+                return;
             }
 
-            equipment[`${slot} _id`] = item.id;
+            equipment.set(`${slot}_id`, item.id);
             await equipment.save();
 
             const updatedStats = await getCalculatedPartyStats();

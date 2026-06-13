@@ -9,26 +9,30 @@ interface PressableScaleProps {
     scale?: number;
 }
 
-export default function PressableScale({ children, style, onPress, scale = 0.95 }: PressableScaleProps) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/**
+ * Pressable con micro-animación de escala al tocar.
+ *
+ * La animación se aplica directamente sobre el Pressable (no sobre una vista
+ * interna con height:'100%'), para que el área táctil se dimensione igual que
+ * el contenido y NO colapse cuando el hijo se mide solo (botones, tarjetas).
+ */
+export default function PressableScale({ children, style, onPress, scale = 0.96 }: PressableScaleProps) {
     const pressed = useSharedValue(0);
 
-    const animatedStyle = useAnimatedStyle(() => {
-        const scaleVal = pressed.value ? scale : 1;
-        return {
-            transform: [{ scale: withSpring(scaleVal, { damping: 10, stiffness: 200 }) }],
-        };
-    });
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: withSpring(pressed.value ? scale : 1, { damping: 12, stiffness: 220 }) }],
+    }));
 
     return (
-        <Pressable
+        <AnimatedPressable
             onPress={onPress}
             onPressIn={() => (pressed.value = 1)}
             onPressOut={() => (pressed.value = 0)}
-            style={style}
+            style={[style, animatedStyle]}
         >
-            <Animated.View style={[{ width: '100%', height: '100%' }, animatedStyle]}>
-                {children}
-            </Animated.View>
-        </Pressable>
+            {children}
+        </AnimatedPressable>
     );
 }

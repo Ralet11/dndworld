@@ -6,6 +6,7 @@ import socket from '../../services/socket';
 import CharacterSheet from '../../components/Hero/CharacterSheet';
 import { Swords } from 'lucide-react-native';
 import { COLORS } from '../../constants/Theme';
+import { API_URL } from '../../constants/Config';
 
 interface Character {
     id: number;
@@ -29,7 +30,7 @@ export default function HeroScreen() {
     const fetchAvailable = async () => {
         try {
             const token = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('token'));
-            const res = await fetch(`http://192.168.1.38:3001/api/characters/available`, {
+            const res = await fetch(`${API_URL}/api/characters/available`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -61,10 +62,19 @@ export default function HeroScreen() {
             setLoading(false);
         };
 
+        // Mantener al héroe en sync: tanto la lista de jugadores como cualquier
+        // cambio de stats (equipar, usar item, HP, etc.) llegan acá.
+        const handleStatsUpdated = (players: any[]) => {
+            const myChar = players.find((p: any) => p.UserId === user.id);
+            if (myChar) setMyCharacter(myChar);
+        };
+
         socket.on('players-data', handlePlayersData);
+        socket.on('stats-updated', handleStatsUpdated);
 
         return () => {
             socket.off('players-data', handlePlayersData);
+            socket.off('stats-updated', handleStatsUpdated);
         };
     }, [user]);
 
@@ -72,7 +82,7 @@ export default function HeroScreen() {
         setAssigning(true);
         try {
             const token = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('token'));
-            const res = await fetch(`http://192.168.1.38:3001/api/characters/assign`, {
+            const res = await fetch(`${API_URL}/api/characters/assign`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -98,7 +108,7 @@ export default function HeroScreen() {
     if (loading) {
         return (
             <View style={styles.center}>
-                <ActivityIndicator size="large" color="#FFD700" />
+                <ActivityIndicator size="large" color={COLORS.amber} />
             </View>
         );
     }

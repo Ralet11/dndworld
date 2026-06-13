@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { ChevronDown, ChevronUp, CheckCircle, Circle } from 'lucide-react-native';
+import { CheckCircle, Circle, Dices } from 'lucide-react-native';
+import { COLORS, SPACING, TYPO, RADIUS } from '../../constants/Theme';
 
 interface Skill {
     name: string;
@@ -11,103 +12,69 @@ interface Skill {
 
 interface SkillsSectionProps {
     skills: Skill[];
+    onRoll?: (skill: Skill) => void;
 }
 
-export default function SkillsSection({ skills }: SkillsSectionProps) {
+const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+export default function SkillsSection({ skills, onRoll }: SkillsSectionProps) {
     if (!skills || skills.length === 0) return null;
 
-    return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Habilidades</Text>
-            </View>
+    // Una sola lista con TODAS las habilidades, en orden alfabético para
+    // encontrarlas fácil. Las competentes quedan resaltadas (no separadas).
+    const ordered = [...skills].sort((a, b) => a.name.localeCompare(b.name));
 
-            <View style={styles.list}>
-                {skills.map((skill, index) => (
-                    <View key={index} style={styles.row}>
-                        <View style={styles.skillInfo}>
-                            {skill.proficient ? (
-                                <CheckCircle size={16} color="#fbbf24" style={styles.icon} />
-                            ) : (
-                                <Circle size={16} color="#444" style={styles.icon} />
-                            )}
-                            <Text style={[styles.name, skill.proficient && styles.proficientName]}>
-                                {skill.name}
-                            </Text>
-                            <Text style={styles.attr}>({skill.attr?.toUpperCase()})</Text>
-                        </View>
-                        <Text style={[styles.bonus, skill.proficient && styles.proficientBonus]}>
-                            {skill.bonus >= 0 ? '+' : ''}{skill.bonus}
+    return (
+        <View style={styles.group}>
+            {ordered.map((skill, i) => (
+                <TouchableOpacity
+                    key={`${skill.name}-${i}`}
+                    style={[styles.row, i === ordered.length - 1 && styles.lastRow]}
+                    activeOpacity={0.7}
+                    onPress={() => onRoll?.(skill)}
+                >
+                    <View style={styles.left}>
+                        {skill.proficient
+                            ? <CheckCircle size={16} color={COLORS.amber} />
+                            : <Circle size={16} color={COLORS.textMuted} />}
+                        <Text style={[styles.name, skill.proficient && styles.nameProf]} numberOfLines={1}>
+                            {skill.name}
                         </Text>
+                        <Text style={styles.attr}>{skill.attr?.toUpperCase()}</Text>
                     </View>
-                ))}
-            </View>
+                    <View style={styles.right}>
+                        <Text style={[styles.bonus, skill.proficient && styles.bonusProf]}>{sign(skill.bonus)}</Text>
+                        <Dices size={13} color={COLORS.textMuted} />
+                    </View>
+                </TouchableOpacity>
+            ))}
         </View>
     );
 }
 
-
 const styles = StyleSheet.create({
-    container: {
-        marginBottom: 24,
-        backgroundColor: '#1a1a1a',
-        borderRadius: 8,
+    group: {
+        backgroundColor: COLORS.surface,
+        borderRadius: RADIUS.lg,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: COLORS.border,
         overflow: 'hidden',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: '#222',
-    },
-    title: {
-        color: '#888',
-        fontSize: 14,
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        fontWeight: 'bold',
-    },
-    list: {
-        padding: 12,
     },
     row: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#222',
+        paddingVertical: SPACING.md,
+        paddingHorizontal: SPACING.md,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: COLORS.border,
     },
-    skillInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    icon: {
-        marginRight: 10,
-    },
-    name: {
-        color: '#aaa',
-        fontSize: 15,
-        marginRight: 6,
-    },
-    proficientName: {
-        color: '#fff',
-        fontWeight: 'bold',
-    },
-    attr: {
-        color: '#666',
-        fontSize: 12,
-    },
-    bonus: {
-        color: '#666',
-        fontSize: 15,
-        fontFamily: 'monospace',
-    },
-    proficientBonus: {
-        color: '#FFD700',
-        fontWeight: 'bold',
-    },
+    lastRow: { borderBottomWidth: 0 },
+    left: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flex: 1 },
+    name: { ...TYPO.body, color: COLORS.textSecondary },
+    nameProf: { color: COLORS.textPrimary, fontWeight: '700' },
+    attr: { fontSize: 10, color: COLORS.textMuted, letterSpacing: 0.5 },
+    right: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    bonus: { ...TYPO.subtitle, color: COLORS.textMuted, fontFamily: 'monospace' },
+    bonusProf: { color: COLORS.amber, fontWeight: '800' },
 });

@@ -51,6 +51,10 @@ const Character = sequelize.define('Character', {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },
+    gold: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    },
     hp_current: {
         type: DataTypes.INTEGER,
         defaultValue: 10
@@ -102,6 +106,32 @@ const Character = sequelize.define('Character', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // Imagen de CUERPO ENTERO del PJ, usada como referencia de identidad para la
+    // IA al renderizar el héroe con equipo. Es opcional: si falta, el renderer
+    // cae a image_url (el avatar cuadrado del header).
+    base_body_url: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Retrato generado por IA con el equipo puesto (composición de base_body_url/
+    // image_url + imágenes de los ítems equipados). Se regenera con el botón
+    // "Sincronizar héroe".
+    rendered_url: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Firma del equipo con el que se generó rendered_url. Sirve para detectar si
+    // el retrato quedó "desactualizado" respecto al equipo actual.
+    rendered_signature: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // Indicaciones libres del jugador para guiar el render de IA ("capa más
+    // larga", "pose de perfil", etc.). Se guardan y se reaplican en cada render.
+    render_prompt: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     image_scale: {
         type: DataTypes.FLOAT,
         defaultValue: 1.0
@@ -126,6 +156,26 @@ const Character = sequelize.define('Character', {
     spells_prepared: {
         type: DataTypes.JSON, // ['mage-armor'] - List of slugs (Subset of known or from class list)
         defaultValue: []
+    },
+    // Talentos elegidos en los árboles de dote. Estructura:
+    // { espiritu: { '5': 'a', '10': 'b' }, agilidad: {...}, aguante: {...} }
+    talent_choices: {
+        type: DataTypes.JSON,
+        defaultValue: {}
+    },
+    // Multiclase: lista de clases con su nivel propio.
+    // [{ slug: 'ranger', level: 4 }, { slug: 'sorcerer', level: 1 }]
+    // Si está vacío, se usa class_slug + level (clase única, retrocompat).
+    classes: {
+        type: DataTypes.JSON,
+        defaultValue: []
+    },
+    // Elecciones de rasgos de clase con opciones (Estilo de Combate, Metamagia…).
+    // Clave: "<classSlug>:<nombreRasgo>" → key elegida (o array si es multi).
+    // Ej.: { "ranger:Estilo de Combate": "defense" }
+    feature_choices: {
+        type: DataTypes.JSON,
+        defaultValue: {}
     }
 });
 

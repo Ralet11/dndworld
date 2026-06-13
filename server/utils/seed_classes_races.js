@@ -24,7 +24,7 @@ const seedClassesAndRaces = async () => {
 
         // --- CLASSES ---
         console.log('Fetching Classes from Open5e...');
-        const classResponse = await axios.get('https://api.open5e.com/classes/');
+        const classResponse = await axios.get('https://api.open5e.com/v1/classes/?limit=100');
         const classesIn = classResponse.data.results;
         console.log(`Fetched ${classesIn.length} classes.`);
 
@@ -53,7 +53,7 @@ const seedClassesAndRaces = async () => {
 
         // --- RACES ---
         console.log('Fetching Races from Open5e...');
-        const raceResponse = await axios.get('https://api.open5e.com/races/');
+        const raceResponse = await axios.get('https://api.open5e.com/v1/races/?limit=100');
         const racesIn = raceResponse.data.results;
         console.log(`Fetched ${racesIn.length} races.`);
 

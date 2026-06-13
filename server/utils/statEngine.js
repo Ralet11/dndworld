@@ -28,21 +28,19 @@ class StatEngine {
 
         // 2. Base Calculations
         const proficiencyBonus = Math.ceil(character.level / 4) + 1;
-        // Use database ac_base if available (allows DM override), otherwise 10
-        let effectiveAC = (character.ac_base || 10) + (mods.dex || 0);
 
-        // 3. Process Equipment Modifiers
+        // 3. Sistema de armaduras 2025 — CA modular por pieza (NO suma DES; la
+        // Destreza alimenta el pool de esquive, no la CA).
         const equippedItems = this.getEquippedItems(equipment);
-        equippedItems.forEach(item => {
-            if (item.stat_bonuses) {
-                if (item.stat_bonuses.ac) effectiveAC += item.stat_bonuses.ac;
-            }
-        });
+        const armor = this.computeArmor(character, equipment, mods.dex || 0);
+        let effectiveAC = armor.ac;
+        const talents = armor.talents;
 
         // 4. Process Status Effects (Buffs/Debuffs)
+        // Nota: el bonus de CA de los efectos ya se aplicó en computeArmor; acá
+        // solo procesamos el resto (p. ej. velocidad) para no duplicar.
         activeEffects.forEach(effect => {
             if (effect.stat_changes) {
-                if (effect.stat_changes.ac) effectiveAC += effect.stat_changes.ac;
                 if (effect.stat_changes.speed) character.speed += effect.stat_changes.speed;
             }
         });
@@ -118,6 +116,11 @@ class StatEngine {
             hp: character.hp_current,
             maxHp: character.hp_max,
             ac: effectiveAC,
+            // Sistema de armaduras 2025
+            armorType: armor.armorType,         // 'tela'|'cuero'|'malla'|null
+            dodge: armor.dodge,                 // { die: 6|4|null, pool }
+            talents,                            // { espiritu, agilidad, aguante }
+            talentThresholds: armor.talentThresholds, // dotes desbloqueados por árbol
             proficiencyBonus,
             initiative: mods.dex, // Dex mod is base initiative
             speed: character.speed || 30,
@@ -127,6 +130,70 @@ class StatEngine {
             savingThrows,
             skills: skillList
         };
+    }
+
+    /**
+     * Sistema de armaduras 2025 — calcula CA modular, categoría/dado de esquive
+     * y stats de talento acumulados a partir del equipo.
+     *
+     * CA = base(10) + Σ(ca_value de piezas de armadura) + Σ(stat_bonuses.ac, p.ej. escudos)
+     *      + bonus de efectos de estado, redondeado hacia abajo.
+     * Tipo de esquive = la pieza MÁS PESADA equipada (malla > cuero > tela).
+     */
+    static computeArmor(character, equipment, dexMod) {
+        const ARMOR_SLOTS = ['helmet', 'chest', 'gloves', 'pants', 'boots', 'shoulders'];
+        const TYPE_RANK = { tela: 1, cuero: 2, malla: 3 };
+        const DODGE_DIE = { tela: 6, cuero: 4, malla: null };
+        const THRESHOLDS = [5, 10, 15, 20];
+
+        // Jugadores: base fija 10 (CA_BASE del sistema modular). NPCs/monstruos:
+        // usan su ac_base como CA plana (no usan armadura modular).
+        const base = character.is_npc ? (character.ac_base || 10) : 10;
+        const talents = { espiritu: 0, agilidad: 0, aguante: 0 };
+
+        // 1) CA de piezas de armadura + tipo más pesado.
+        let caFromArmor = 0;
+        let heaviest = null;
+        for (const slot of ARMOR_SLOTS) {
+            const item = equipment[slot];
+            if (!item) continue;
+            if (typeof item.ca_value === 'number') caFromArmor += item.ca_value;
+            const t = item.armor_type;
+            if (t && (!heaviest || TYPE_RANK[t] > TYPE_RANK[heaviest])) heaviest = t;
+        }
+
+        // 2) CA plana de cualquier ítem equipado (escudos, anillos mágicos…).
+        let caFlat = 0;
+        const all = this.getEquippedItems(equipment);
+        all.forEach((item) => {
+            if (item.stat_bonuses && item.stat_bonuses.ac) caFlat += item.stat_bonuses.ac;
+            if (item.talent_stats) {
+                talents.espiritu += item.talent_stats.espiritu || 0;
+                talents.agilidad += item.talent_stats.agilidad || 0;
+                talents.aguante += item.talent_stats.aguante || 0;
+            }
+        });
+
+        // 3) Bonus de CA por efectos de estado activos.
+        let caEffects = 0;
+        (character.activeEffects || []).forEach((e) => {
+            if (e.stat_changes && e.stat_changes.ac) caEffects += e.stat_changes.ac;
+        });
+
+        const ac = Math.floor(base + caFromArmor + caFlat + caEffects);
+
+        // 4) Esquive según el tipo más pesado (malla = sin esquive).
+        const die = heaviest ? DODGE_DIE[heaviest] : null;
+        const dodge = { die, pool: die ? Math.max(0, dexMod) : 0 };
+
+        // 5) Umbrales de dote desbloqueados por cada árbol.
+        const talentThresholds = {
+            espiritu: THRESHOLDS.filter((t) => talents.espiritu >= t),
+            agilidad: THRESHOLDS.filter((t) => talents.agilidad >= t),
+            aguante: THRESHOLDS.filter((t) => talents.aguante >= t),
+        };
+
+        return { ac, armorType: heaviest, dodge, talents, talentThresholds };
     }
 
     static getEquippedItems(equipment) {

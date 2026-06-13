@@ -3,7 +3,14 @@ const UserPoiData = require('../models/UserPoiData');
 
 exports.getAllPointsOfInterest = async (req, res) => {
     try {
-        const pois = await PointOfInterest.findAll();
+        // Filtro por nivel: ?parent_id=null (mundo) | ?parent_id=<id> (hijos de
+        // una ciudad). Sin parámetro → todos (retrocompat).
+        const { parent_id } = req.query;
+        const where = {};
+        if (parent_id === 'null' || parent_id === '') where.parent_id = null;
+        else if (parent_id !== undefined) where.parent_id = parent_id;
+
+        const pois = await PointOfInterest.findAll({ where });
         res.status(200).json(pois);
     } catch (error) {
         console.error("Error fetching Points of Interest:", error);
@@ -13,8 +20,8 @@ exports.getAllPointsOfInterest = async (req, res) => {
 
 exports.createPointOfInterest = async (req, res) => {
     try {
-        const { title, top, left, color, type, image, description } = req.body;
-        const newPoi = await PointOfInterest.create({ title, top, left, color, type, image, description });
+        const { title, top, left, color, type, image, description, parent_id, map_image, level } = req.body;
+        const newPoi = await PointOfInterest.create({ title, top, left, color, type, image, description, parent_id: parent_id || null, map_image, level });
         res.status(201).json(newPoi);
     } catch (error) {
         console.error("Error creating Point of Interest:", error);
@@ -25,7 +32,7 @@ exports.createPointOfInterest = async (req, res) => {
 exports.updatePointOfInterest = async (req, res) => {
     try {
         const { id } = req.params;
-        const { top, left, title, image, description, type, color } = req.body;
+        const { top, left, title, image, description, type, color, map_image, level } = req.body;
 
         const poi = await PointOfInterest.findByPk(id);
         if (!poi) {
@@ -40,6 +47,8 @@ exports.updatePointOfInterest = async (req, res) => {
         if (description !== undefined) poi.description = description;
         if (type !== undefined) poi.type = type;
         if (color !== undefined) poi.color = color;
+        if (map_image !== undefined) poi.map_image = map_image;
+        if (level !== undefined) poi.level = level;
 
         await poi.save();
 

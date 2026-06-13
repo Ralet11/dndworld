@@ -78,6 +78,12 @@ const Spell = sequelize.define('Spell', {
     },
     document__title: {
         type: DataTypes.STRING
+    },
+    // Traducción al español cacheada (on-demand vía IA). null si no se tradujo.
+    // { name, desc, higher_level }
+    translation: {
+        type: DataTypes.JSONB,
+        allowNull: true
     }
 }, {
     tableName: 'spells',

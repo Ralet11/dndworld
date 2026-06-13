@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import GlassPanel from '../UI/GlassPanel';
+import { COLORS } from '../../constants/Theme';
 
 interface MetricCardProps {
     label: string;
@@ -9,7 +10,7 @@ interface MetricCardProps {
     color?: string;
 }
 
-export default function MetricCard({ label, value, icon, color = '#fff' }: MetricCardProps) {
+export default function MetricCard({ label, value, icon, color = COLORS.textPrimary }: MetricCardProps) {
     return (
         <GlassPanel style={styles.container}>
             <View style={styles.header}>
@@ -36,7 +37,7 @@ const styles = StyleSheet.create({
         marginBottom: 0, // No margin
     },
     label: {
-        color: '#94a3b8',
+        color: COLORS.bronzeLight,
         fontSize: 8, // Tiny top label
         fontWeight: 'bold',
         textTransform: 'uppercase',

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { ChevronDown, ChevronUp, Sword, Shield, Zap } from 'lucide-react-native';
+import { COLORS, rarityColor as rarityColorToken } from '../../../constants/Theme';
+import { isEquippable, slotLabel, armorLabel } from '../../../utils/DndUtils';
 
 if (Platform.OS === 'android') {
     if (UIManager.setLayoutAnimationEnabledExperimental) {
@@ -23,22 +25,10 @@ export default function ItemCard({ item, onEquip, onUse, isEquipped }: ItemCardP
         setExpanded(!expanded);
     };
 
-    // Helper to determine item category colors/icons
-    const getRarityColor = (rarity: string) => {
-        switch (rarity) {
-            case 'Común': return '#888';
-            case 'Poco Común': return '#4ade80'; // Green
-            case 'Raro': return '#3b82f6'; // Blue
-            case 'Muy Raro': return '#a855f7'; // Purple
-            case 'Legendario': return '#f59e0b'; // Gold
-            default: return '#888';
-        }
-    };
-
-    const rarityColor = getRarityColor(item.rarity);
+    const rarityColor = rarityColorToken(item.rarity);
 
     return (
-        <View style={[styles.card, { borderColor: expanded ? rarityColor : '#333' }]}>
+        <View style={[styles.card, { borderColor: expanded ? rarityColor : COLORS.border }]}>
             <TouchableOpacity style={styles.header} onPress={toggleExpand} activeOpacity={0.7}>
                 <View style={styles.iconContainer}>
                     {item.image_url ? (
@@ -52,11 +42,14 @@ export default function ItemCard({ item, onEquip, onUse, isEquipped }: ItemCardP
                 </View>
 
                 <View style={styles.info}>
-                    <Text style={[styles.name, { color: isEquipped ? '#FFD700' : '#fff' }]}>
-                        {item.name} {isEquipped && '(E)'}
+                    <Text style={[styles.name, { color: isEquipped ? COLORS.amber : COLORS.textPrimary }]} numberOfLines={1}>
+                        {item.name}{isEquipped ? ' (E)' : ''}
                     </Text>
-                    <Text style={[styles.type, { color: rarityColor }]}>
-                        {item.type} • {item.rarity}
+                    <Text style={styles.meta} numberOfLines={2}>
+                        <Text style={{ color: rarityColor, fontWeight: '700' }}>{item.rarity}</Text>
+                        <Text style={styles.metaMuted}>{` · ${item.type}`}</Text>
+                        {slotLabel(item) ? <Text style={styles.metaAccent}>{` · ${slotLabel(item)}`}</Text> : null}
+                        {armorLabel(item) ? <Text style={styles.metaAccent}>{` · ${armorLabel(item)}`}</Text> : null}
                     </Text>
                 </View>
 
@@ -66,7 +59,7 @@ export default function ItemCard({ item, onEquip, onUse, isEquipped }: ItemCardP
                     </View>
                 )}
 
-                {expanded ? <ChevronUp size={20} color="#666" /> : <ChevronDown size={20} color="#666" />}
+                {expanded ? <ChevronUp size={20} color={COLORS.textMuted} /> : <ChevronDown size={20} color={COLORS.textMuted} />}
             </TouchableOpacity>
 
             {expanded && (
@@ -96,7 +89,7 @@ export default function ItemCard({ item, onEquip, onUse, isEquipped }: ItemCardP
                                 <Text style={styles.actionBtnText}>USAR</Text>
                             </TouchableOpacity>
                         )}
-                        {(item.type === 'Arma' || item.type === 'Armadura') && onEquip && (
+                        {isEquippable(item) && onEquip && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, isEquipped && styles.unequipBtn]}
                                 onPress={() => onEquip(item)}
@@ -115,8 +108,8 @@ export default function ItemCard({ item, onEquip, onUse, isEquipped }: ItemCardP
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: '#1a1a1a',
-        borderRadius: 8,
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
         borderWidth: 1,
         marginBottom: 8,
         overflow: 'hidden',
@@ -131,7 +124,7 @@ const styles = StyleSheet.create({
         height: 40,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#111',
+        backgroundColor: COLORS.surfaceHighlight,
         borderRadius: 8,
         marginRight: 12,
     },
@@ -144,22 +137,29 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     name: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: 'bold',
     },
-    type: {
-        fontSize: 12,
+    meta: {
+        fontSize: 11,
+        lineHeight: 15,
         marginTop: 2,
     },
+    metaMuted: {
+        color: COLORS.textMuted,
+    },
+    metaAccent: {
+        color: COLORS.bronzeLight,
+    },
     badge: {
-        backgroundColor: '#333',
+        backgroundColor: COLORS.surfaceHighlight,
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 12,
         marginRight: 12,
     },
     badgeText: {
-        color: '#fff',
+        color: COLORS.textPrimary,
         fontSize: 12,
         fontWeight: 'bold',
     },
@@ -167,11 +167,11 @@ const styles = StyleSheet.create({
         padding: 12,
         paddingTop: 0,
         borderTopWidth: 1,
-        borderTopColor: '#222',
+        borderTopColor: COLORS.border,
         marginTop: 0,
     },
     description: {
-        color: '#ccc',
+        color: COLORS.textSecondary,
         fontSize: 14,
         lineHeight: 20,
         marginVertical: 8,
@@ -180,12 +180,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
         marginBottom: 12,
-        backgroundColor: '#111',
+        backgroundColor: COLORS.surfaceHighlight,
         padding: 8,
         borderRadius: 4,
     },
     statText: {
-        color: '#ddd',
+        color: COLORS.textSecondary,
         fontSize: 13,
     },
     actions: {
@@ -194,23 +194,25 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     actionBtn: {
-        backgroundColor: '#333',
+        backgroundColor: COLORS.surfaceHighlight,
+        borderWidth: 1,
+        borderColor: COLORS.bronze,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 6,
     },
     actionBtnText: {
-        color: '#fff',
+        color: COLORS.bronzeLight,
         fontWeight: 'bold',
         fontSize: 12,
     },
     unequipBtn: {
-        backgroundColor: '#421',
+        backgroundColor: 'rgba(194, 69, 47, 0.15)',
         borderWidth: 1,
-        borderColor: '#622',
+        borderColor: COLORS.danger,
     },
     unequipText: {
-        color: '#f88',
+        color: COLORS.danger,
     }
 
 });
