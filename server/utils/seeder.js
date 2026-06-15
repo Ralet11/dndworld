@@ -21,10 +21,11 @@ const seedDatabase = async () => {
             console.log(`Compendio 2024: ${compendium2024.classes.length} clases, ${compendium2024.races.length} razas (upsert).`);
         }
 
-        // 0.1 Create Users (DM and Player)
-        const passwordHash = bcrypt.hashSync('password', 8);
+        // 0.1 Create Users (DM and seeded players)
+        const seedPassword = '123456';
+        const passwordHash = bcrypt.hashSync(seedPassword, 8);
 
-        const [dmUser] = await User.findOrCreate({
+        await User.findOrCreate({
             where: { email: 'dm@dndworld.com' },
             defaults: {
                 username: 'DungeonMaster',
@@ -33,14 +34,31 @@ const seedDatabase = async () => {
             }
         });
 
-        const [playerUser] = await User.findOrCreate({
-            where: { email: 'player@dndworld.com' },
-            defaults: {
-                username: 'PlayerOne',
-                password_hash: passwordHash,
-                role: 'PLAYER'
+        const seededPlayers = [
+            { email: 'santi@player.com', username: 'santi', role: 'PLAYER' },
+            { email: 'emi@player.com', username: 'emi', role: 'PLAYER' },
+            { email: 'faber@player.com', username: 'faber', role: 'PLAYER' },
+            { email: 'chulina@player.com', username: 'chulina', role: 'PLAYER' }
+        ];
+        const playerUsers = {};
+        for (const player of seededPlayers) {
+            const [user, created] = await User.findOrCreate({
+                where: { email: player.email },
+                defaults: {
+                    username: player.username,
+                    password_hash: passwordHash,
+                    role: player.role
+                }
+            });
+            if (!created) {
+                const nextValues = {};
+                if (user.username !== player.username) nextValues.username = player.username;
+                if (user.role !== player.role) nextValues.role = player.role;
+                if (!bcrypt.compareSync(seedPassword, user.password_hash || '')) nextValues.password_hash = passwordHash;
+                if (Object.keys(nextValues).length) await user.update(nextValues);
             }
-        });
+            playerUsers[player.email] = user;
+        }
 
         // 1. Ensure Paleas Exists
         // 1. Ensure Paleas Exists
@@ -55,13 +73,13 @@ const seedDatabase = async () => {
                 ac_base: 14,
                 speed: 30,
                 is_npc: false,
-                UserId: playerUser.id // Assign to Player
+                UserId: playerUsers['emi@player.com'].id
             }
         });
 
-        // Ensure association if existed but not linked
-        if (paleas && !paleas.UserId) {
-            paleas.UserId = playerUser.id;
+        // Ensure the seeded owner stays assigned even if the character existed.
+        if (paleas && paleas.UserId !== playerUsers['emi@player.com'].id) {
+            paleas.UserId = playerUsers['emi@player.com'].id;
             await paleas.save();
         }
 
@@ -170,6 +188,7 @@ const seedDatabase = async () => {
                 hp_max: 10,
                 ac_base: 12,
                 speed: 30,
+                userId: playerUsers['chulina@player.com'].id,
                 stats: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 }
             },
             {
@@ -181,6 +200,7 @@ const seedDatabase = async () => {
                 hp_max: 10,
                 ac_base: 12,
                 speed: 30,
+                userId: playerUsers['santi@player.com'].id,
                 stats: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 }
             },
             {
@@ -192,6 +212,7 @@ const seedDatabase = async () => {
                 hp_max: 10,
                 ac_base: 12,
                 speed: 30,
+                userId: playerUsers['faber@player.com'].id,
                 stats: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 }
             }
         ];
@@ -208,12 +229,12 @@ const seedDatabase = async () => {
                     ac_base: charData.ac_base,
                     speed: charData.speed,
                     is_npc: false,
-                    UserId: playerUser.id // All new chars to Player for now
+                    UserId: charData.userId
                 }
             });
 
-            if (char && !char.UserId) {
-                char.UserId = playerUser.id;
+            if (char && char.UserId !== charData.userId) {
+                char.UserId = charData.userId;
                 await char.save();
             }
 
@@ -508,6 +529,161 @@ const seedDatabase = async () => {
             },
             { where: { name: 'Paleas Mucron' } }
         );
+
+        // 17. Actualizar NPCs existentes con tipo y origen correcto
+        await Character.update(
+            { npc_type: 'compañero', origin: 'Hachoverde' },
+            { where: { name: 'Albert Obrien' } }
+        );
+        await Character.update(
+            { npc_type: 'enemigo' },
+            { where: { name: 'Goblin Saboteador' } }
+        );
+
+        // 18. NPCs del Glosario de la Campaña
+        const campaignNpcs = [
+            // ── Prontera ──────────────────────────────────────────────────────
+            {
+                name: 'Lady Valet Fortimer',
+                origin: 'Prontera',
+                race: 'Humana',
+                npc_type: 'amigo',
+                notes: 'Esposa de Algius Fortimer y madre de Geren. Convocó a Zik, Rakion y Lucario para investigar la desaparición de Algius y la muerte de Geren. Sigue siendo el punto de partida emocional y político del caso Fortimer.',
+            },
+            {
+                name: 'Algius Fortimer',
+                origin: 'Prontera',
+                race: 'Humano',
+                class: 'Artificiero',
+                npc_type: 'enemigo',
+                notes: 'Noble, erudito y artificiero vinculado a la Universidad de Prontera; construyó el laúd rúnico de Lucario. Pasó de desaparecido a sospechoso central y luego a actor directo del ritual en la Torre del Don. Zik le disparó en la cabeza durante el sabotaje del ritual; su estado exacto sigue pendiente.',
+            },
+            {
+                name: 'Geren Fortimer',
+                origin: 'Prontera',
+                race: 'Humano',
+                npc_type: 'neutral',
+                hp_current: 0,
+                hp_max: 10,
+                notes: 'Hijo mayor de la familia Fortimer y víctima del ritual de los tres pilares. Su muerte dispara toda la investigación y su cuarto contenía el libro antiguo que solo Lucario podía leer. Muerto; sigue siendo una pieza clave para entender el ritual y el rol de Algius.',
+            },
+            // ── Hachoverde ────────────────────────────────────────────────────
+            {
+                name: 'Shila',
+                origin: 'Hachoverde',
+                race: 'Elfa',
+                npc_type: 'neutral',
+                notes: 'Cazadora elfa del campamento; se mueve con su lobo Camba y conoce el pantano mejor que nadie. Advirtió que los puñales ceremoniales élficos eran sacrilegos y marcó un tabú cultural importante. Sigue como posible aliada o futura enemiga, según cómo trate la party ese tabú.',
+            },
+            {
+                name: 'Guizhio',
+                origin: 'Hachoverde',
+                npc_type: 'neutral',
+                notes: 'Shampur del campamento, ligado al agua, la costa y la supervivencia local. Forma parte del equipo que la party conoció al llegar a Hachoverde. Sigue siendo un contacto secundario del campamento, sin choque directo con la party.',
+            },
+            {
+                name: 'Ébano',
+                origin: 'Hachoverde',
+                npc_type: 'neutral',
+                notes: 'Guardia que regresó del pantano tocado de la cabeza y balbuceando verdades incompletas. Funciona como testigo roto de algo que la party todavía no termina de entender. Sigue siendo una fuente potencial de pistas si se interpreta bien su trauma.',
+            },
+            {
+                name: 'Pelligrim',
+                origin: 'Hachoverde',
+                npc_type: 'enemigo',
+                notes: 'Bravucón y guardia ligado al pasado de Rakion. Apareció en el destacamento del campamento y Zik tuvo que camuflar a Rakion para evitar reconocimiento. Amenaza social latente que puede reaparecer para presionar, delatar o extorsionar.',
+            },
+            // ── Costa Oscura ──────────────────────────────────────────────────
+            {
+                name: 'Leandro Bonasera',
+                origin: 'Costa Oscura',
+                npc_type: 'neutral',
+                notes: 'Cabeza visible de la familia Bonasera y responsable de la Taberna del Tuerto. Les dio cama y refugio a la party a cambio de encargarse de un problema menor que terminó siendo Marco Bellucci. Sigue siendo contacto útil, pero su familia elige bando por supervivencia.',
+            },
+            {
+                name: 'Marco Bellucci',
+                origin: 'Costa Oscura',
+                npc_type: 'enemigo',
+                hp_current: 0,
+                hp_max: 10,
+                notes: 'Maleante que se escondía en la taberna sin pagar. Al intentar resolver el favor de los Bonasera, la party lo mató y descubrió que era sobrino de Don Nito Peltre. Muerto; antes de caer reveló la existencia de la cena importante en la Torre del Don.',
+            },
+            {
+                name: 'Don Nito Peltre',
+                origin: 'Costa Oscura',
+                npc_type: 'enemigo',
+                notes: 'Capo de Costa Oscura y poder central asociado a la Torre del Don. Sus negocios conectan con Algius, con el ritual y con la red política y criminal de la ciudad. Sobrevivió al sabotaje y apareció con unos 20 hombres antes de la llegada de Prontera; sigue siendo una amenaza viva.',
+            },
+            {
+                name: 'Leon Darsen',
+                origin: 'Costa Oscura',
+                race: 'Humano',
+                npc_type: 'amigo',
+                notes: 'Lord caído en desgracia, borracho pelirrojo y hermano mayor de Lady Darsen. Introdujo el arco del Molino Darsen y del Castillo Colmillo Oscuro, que ya quedó planteado como el primer gran dungeon del grupo. Sigue siendo una llave política y emocional para el futuro arco Darsen.',
+            },
+            {
+                name: 'Lady Darsen',
+                origin: 'Costa Oscura',
+                race: 'Humana',
+                npc_type: 'amigo',
+                notes: 'Noble de la familia Darsen y hermana menor de Leon. Fue liberada por la party en los calabozos de la Torre del Don. Quedó conectada de forma directa con la caída de su casa, con Peltre y con el futuro conflicto de Colmillo Oscuro.',
+            },
+            {
+                name: 'Salitre',
+                origin: 'Costa Oscura',
+                npc_type: 'enemigo',
+                hp_current: 0,
+                hp_max: 10,
+                notes: 'Capataz de minas que prometió acceso clandestino a la Torre del Don. Traicionó al grupo, intentó forzar musgo oscuro en la boca de Zik y dejó a Lucario y Paleas fuera de combate con un pergamino de fuego. Muerto; su traición terminó dándole a la party llaves, mapas y explosivos.',
+            },
+            {
+                name: 'Pereza',
+                origin: 'Costa Oscura',
+                npc_type: 'enemigo',
+                hp_current: 0,
+                hp_max: 10,
+                notes: 'Ayudante de Salitre en las minas. Participó de la emboscada en túneles y formó parte del acceso traicionero a la Torre del Don. Muerto junto con la resolución de la traición de minas.',
+            },
+            {
+                name: 'Tiefling Oscuro',
+                origin: 'Costa Oscura',
+                race: 'Tiefling',
+                npc_type: 'enemigo',
+                hp_current: 0,
+                hp_max: 10,
+                notes: 'Guardián o agente tiefling oscuro dentro de la Torre del Don. Fue atraído por la magia de Lucario y murió apenas entró en escena. Muerto; su armadura pasó a Lucario, que ganó +4 CA y perdió 10 pies de movimiento.',
+            },
+            {
+                name: 'Brujo Andi',
+                origin: 'Costa Oscura',
+                race: 'Tiefling',
+                class: 'Brujo',
+                npc_type: 'enemigo',
+                notes: 'Hechicero Andi asociado al ritual y al despliegue militar del puerto. Durmió a los hijos de los nobles para el sacrificio, reapareció en el puerto y superó al celestial invocado por Zik. Sigue suelto; es una de las amenazas abiertas más fuertes del frente Andi.',
+            },
+            {
+                name: 'Comandante de Prontera',
+                origin: 'Prontera',
+                race: 'Humano',
+                class: 'Guerrero',
+                npc_type: 'neutral',
+                notes: 'Líder militar que comandó el asalto de Prontera desde el zepelín. Llegó gracias al aviso enviado por Albert y cambió por completo el equilibrio de poder en Costa Oscura. Controla la nueva fase política y militar de Costa Oscura; puede transformarse en aliado, reclutador o problema.',
+            },
+        ];
+
+        for (const npcData of campaignNpcs) {
+            await Character.findOrCreate({
+                where: { name: npcData.name },
+                defaults: {
+                    ...npcData,
+                    is_npc: true,
+                    hp_current: npcData.hp_current ?? 10,
+                    hp_max: npcData.hp_max ?? 10,
+                    ac_base: 10,
+                    speed: 30,
+                }
+            });
+        }
 
         console.log('Database verification/seeding complete.');
     } catch (error) {

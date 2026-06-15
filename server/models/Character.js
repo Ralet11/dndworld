@@ -87,6 +87,15 @@ const Character = sequelize.define('Character', {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     },
+    npc_type: {
+        type: DataTypes.ENUM('neutral', 'amigo', 'compañero', 'enemigo'),
+        defaultValue: 'neutral',
+        allowNull: true
+    },
+    origin: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     notes: {
         type: DataTypes.TEXT
     },

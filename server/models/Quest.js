@@ -23,6 +23,10 @@ const Quest = sequelize.define('Quest', {
         type: DataTypes.ENUM('En Progreso', 'Completada', 'Bloqueada', 'Fallida'),
         defaultValue: 'En Progreso'
     },
+    npc_name: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     description: {
         type: DataTypes.TEXT
     },

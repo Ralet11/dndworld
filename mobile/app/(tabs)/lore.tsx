@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Map as MapIcon, BookMarked, ChevronRight, ArrowLeft } from 'lucide-react-native';
+import { Map as MapIcon, BookMarked, Scroll, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import Screen from '../../components/UI/Screen';
 import PressableScale from '../../components/UI/PressableScale';
 import InteractiveMap from '../../components/Atlas/InteractiveMap';
 import Bestiary from '../../components/Lore/Bestiary';
+import Quests from '../../components/Lore/Quests';
 import { COLORS, SPACING, TYPO, RADIUS, GLOWS } from '../../constants/Theme';
 
-type LoreView = 'menu' | 'map' | 'bestiary';
+type LoreView = 'menu' | 'map' | 'bestiary' | 'quests';
 
 /**
  * Lore — hub de conocimiento del mundo.
@@ -30,6 +31,10 @@ export default function LoreScreen() {
         return <Bestiary onBack={() => setView('menu')} />;
     }
 
+    if (view === 'quests') {
+        return <Quests onBack={() => setView('menu')} />;
+    }
+
     return (
         <Screen scroll>
             <Text style={styles.kicker}>Conocimiento del mundo</Text>
@@ -49,6 +54,13 @@ export default function LoreScreen() {
                     icon={<BookMarked size={30} color={COLORS.ember} />}
                     colors={['#2A1E18', '#11191A']}
                     onPress={() => setView('bestiary')}
+                />
+                <LoreCard
+                    title="Misiones"
+                    subtitle="Las misiones activas de la party"
+                    icon={<Scroll size={30} color={COLORS.amber} />}
+                    colors={['#1E2410', '#11191A']}
+                    onPress={() => setView('quests')}
                 />
             </View>
         </Screen>

@@ -1005,7 +1005,13 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('get-all-npcs', async () => {
-        const npcs = await Character.findAll({ where: { is_npc: true } });
+        const npcs = await Character.findAll({
+            where: { is_npc: true },
+            include: [
+                { model: AbilityScore, as: 'abilityScores' },
+                { model: Item, as: 'items' },
+            ],
+        });
         socket.emit('all-npcs', npcs);
     });
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { Platform, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Scroll, Shield, Compass, Flame } from 'lucide-react-native';
 import { COLORS } from '../../constants/Theme';
 
@@ -12,11 +13,16 @@ import { COLORS } from '../../constants/Theme';
  * como rutas ocultas (href: null) — su acceso es vía dev tools, no la barra.
  */
 export default function TabLayout() {
+    const insets = useSafeAreaInsets();
+
     return (
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarStyle: styles.tabBar,
+                tabBarStyle: [styles.tabBar, {
+                    height: 60 + insets.bottom,
+                    paddingBottom: insets.bottom + 8,
+                }],
                 tabBarBackground: () => (
                     Platform.OS === 'ios'
                         ? <BlurView intensity={40} style={StyleSheet.absoluteFill} tint="dark" />
@@ -74,8 +80,6 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: COLORS.bronzeDark,
         backgroundColor: 'transparent',
-        height: 82,
-        paddingBottom: 22,
         paddingTop: 8,
     },
     tabLabel: {
