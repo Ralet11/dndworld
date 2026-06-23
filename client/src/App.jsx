@@ -1,116 +1,59 @@
-import { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import PlayerBoard from './pages/PlayerBoard';
-import DMAdmin from './pages/DMAdmin';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import PlayerLayout from './layouts/PlayerLayout';
+import DmLayout from './layouts/DmLayout';
 
+function AppRoutes() {
+  const { user, isLoading } = useAuth();
 
-import API_URL from './config';
-
-const socket = io(API_URL);
-
-function App() {
-  const [partyStats, setPartyStats] = useState([]);
-  const [sharedMedia, setSharedMedia] = useState([]);
-  const [partyPosition, setPartyPosition] = useState({ x: 50, y: 50 });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    socket.on('init', (data) => {
-      setPartyStats(data.partyStats);
-      setSharedMedia(data.sharedMedia);
-      setPartyPosition(data.partyPosition || { x: 50, y: 50 });
-      setLoading(false);
-    });
-
-    socket.on('image-shared', (image) => {
-      setSharedMedia((prev) => [image, ...prev]);
-    });
-
-    socket.on('image-sharing-stopped', () => {
-      setSharedMedia([]);
-    });
-
-    socket.on('stats-updated', (newStats) => {
-      setPartyStats(newStats);
-    });
-
-    socket.on('party-position-updated', (pos) => {
-      setPartyPosition(pos);
-    });
-
-    return () => {
-      socket.off('init');
-      socket.off('image-shared');
-      socket.off('image-sharing-stopped');
-      socket.off('stats-updated');
-      socket.off('party-position-updated');
-    };
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center space-y-4">
-        <div className="w-16 h-16 border-4 border-accent-gold border-t-transparent rounded-full animate-spin"></div>
-        <div className="text-accent-gold font-black tracking-[0.3em] animate-pulse">CARGANDO AVENTURA...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#0F1518' }}>
+        <div className="w-12 h-12 rounded-full border-2 border-amber animate-spin" style={{ borderTopColor: 'transparent' }} />
+        <p className="label-caps" style={{ color: '#C8A36A' }}>Cargando aventura...</p>
       </div>
     );
   }
 
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  // DM y ADMIN van al panel maestro
+  if (user.role === 'DM' || user.role === 'ADMIN') {
+    return (
+      <Routes>
+        <Route path="/dm/*" element={<DmLayout />} />
+        <Route path="*" element={<Navigate to="/dm" replace />} />
+      </Routes>
+    );
+  }
+
+  // PLAYER va al layout con tabs
   return (
-    <BrowserRouter>
-      <div className="min-h-screen text-slate-100 font-inter">
-        <Routes>
-          <Route path="/" element={<MainWrapper partyStats={partyStats} sharedMedia={sharedMedia} partyPosition={partyPosition} socket={socket} />} />
-          <Route path="/dm" element={<DMAdmin partyStats={partyStats} sharedMedia={sharedMedia} partyPosition={partyPosition} socket={socket} />} />
-        </Routes>
-      </div>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/*" element={<PlayerLayout />} />
+    </Routes>
   );
 }
 
-// Wrapper component to handle Login vs Board logic
-function MainWrapper({ partyStats, sharedMedia, partyPosition, socket }) {
-  const [myCharacterId, setMyCharacterId] = useState(() => {
-    return localStorage.getItem('dnd_character_id') || null;
-  });
-
-  const handleSelectCharacter = (id) => {
-    setMyCharacterId(id);
-    localStorage.setItem('dnd_character_id', id);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('dnd_character_id');
-    setMyCharacterId(null);
-  };
-
-  // If no character selected, show login
-  if (!myCharacterId) {
-    return <LoginPage characters={partyStats} onSelect={handleSelectCharacter} />;
-  }
-
-  // Find the selected character object
-  const myCharacter = partyStats.find(c => c.id.toString() === myCharacterId.toString());
-
-  // Safety: If character not found (e.g. ID from bad localStorage), reset and show login
-  if (!myCharacter && partyStats.length > 0) {
-    return <LoginPage characters={partyStats} onSelect={handleSelectCharacter} />;
-  }
-
-  // Wait until we have the character data
-  if (!myCharacter) return null;
-
+export default function App() {
   return (
-    <PlayerBoard
-      sharedMedia={sharedMedia}
-      character={myCharacter}
-      partyPosition={partyPosition}
-      socket={socket}
-      onLogout={handleLogout}
-    />
+    <AuthProvider>
+      <SocketProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </SocketProvider>
+    </AuthProvider>
   );
 }
-
-export default App;

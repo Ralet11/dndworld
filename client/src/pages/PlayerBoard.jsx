@@ -900,12 +900,20 @@ function AbilitiesTab({ characterId, initialText, socket }) {
                 )}
             </div>
 
+            <div className="mb-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-accent-gold">Custom para el cheat</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                    Usa una seccion <code className="text-accent-gold">## Custom</code> y dentro bloques como <code className="text-accent-gold">### Furia Sombria</code>,
+                    <code className="text-accent-gold"> Tipo: Bonus</code> y la descripcion. Lo de afuera sigue siendo solo notas.
+                </p>
+            </div>
+
             <div className="flex-1 glass-panel p-0 overflow-hidden relative group">
                 <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     className="w-full h-[60vh] bg-transparent border-0 resize-none p-5 text-slate-300 focus:text-white placeholder:text-slate-600 focus:ring-0 leading-relaxed custom-scrollbar text-sm font-mono"
-                    placeholder="Escribe aquí tus habilidades, talentos, hechizos o notas..."
+                    placeholder={"Escribe aqui tus notas.\n\n## Custom\n### Furia Sombria\nTipo: Bonus\nGanas un ataque extra cuando entras en trance."}
                 />
                 <div className="absolute bottom-2 right-2 text-[10px] text-slate-700 pointer-events-none group-focus-within:text-slate-500 transition-colors">
                     Sincronizado con el DM

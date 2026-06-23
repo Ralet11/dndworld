@@ -3,55 +3,119 @@
 @tailwind utilities;
 
 :root {
-  --glass-bg: rgba(15, 23, 42, 0.65);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --bg: #0F1518;
+  --surface: #16211F;
+  --surface-hi: #1E2A28;
+  --surface-raised: #243330;
+  --border: #2A332F;
+  --bronze: #8A6A3B;
+  --bronze-light: #C8A36A;
+  --bronze-dark: #5A4424;
+  --ember: #FF7A1A;
+  --amber: #F59E0B;
+  --text-primary: #EDE6D8;
+  --text-secondary: #A89F8E;
+  --text-muted: #6B6557;
 }
 
 body {
-  @apply bg-background text-slate-100 min-h-screen overflow-x-hidden;
-  background-image: 
-    radial-gradient(circle at 50% 0%, rgba(30, 41, 59, 0.5) 0%, transparent 50%),
-    radial-gradient(circle at 100% 100%, rgba(15, 23, 42, 0.8) 0%, transparent 50%);
+  background-color: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
-.glass-panel {
-  @apply backdrop-blur-md border border-[var(--glass-border)] rounded-2xl;
-  background: var(--glass-bg);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+/* Panel base — glassmorphism oscuro */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
-.text-gold {
-  @apply text-accent-gold drop-shadow-[0_0_8px_rgba(250,204,21,0.4)];
+.panel-raised {
+  background: var(--surface-raised);
+  border: 1px solid var(--bronze-dark);
+  border-radius: 12px;
 }
 
-.btn-primary {
-  @apply px-6 py-2 rounded-lg bg-accent-gold/10 border border-accent-gold/30 text-accent-gold 
-  hover:bg-accent-gold/20 transition-all duration-300 active:scale-95 font-medium;
+/* Glow ember */
+.glow-ember {
+  box-shadow: 0 0 16px rgba(255, 122, 26, 0.35);
 }
 
-.stat-bar-container {
-  @apply w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-white/5;
+.glow-amber {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
 }
 
-.stat-bar-fill {
-  @apply h-full transition-all duration-500 ease-out;
+/* Tab bar */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: rgba(15, 21, 24, 0.96);
+  border-top: 1px solid var(--bronze-dark);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 8px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 50;
+  backdrop-filter: blur(12px);
 }
 
-/* Custom Scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
+/* Scrollbar minimalista */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bronze-dark); }
+
+/* Label uppercase tracking */
+.label-caps {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
+/* No scrollbar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Input base */
+.input-base {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+.input-base:focus {
+  border-color: var(--bronze-light);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(250, 204, 21, 0.3);
+.input-base::placeholder {
+  color: var(--text-muted);
+}
+
+/* HP bar */
+.hp-bar {
+  height: 6px;
+  background: var(--surface-hi);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hp-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
 }

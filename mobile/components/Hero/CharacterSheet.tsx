@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { View, ScrollView, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Shield, Zap, Eye, Target, Footprints, Heart, Scroll, Sparkles, Backpack, User, Wind } from 'lucide-react-native';
+import { Shield, Zap, Eye, Target, Footprints, Heart, Scroll, Sparkles, Backpack, User, Wind, ChevronDown, ChevronRight } from 'lucide-react-native';
 
 import HeroStatsHeader from './HeroStatsHeader';
 import AttributeHex from './AttributeHex';
 import SkillsSection from './SkillsSection';
+import ActionCheatSheet from './ActionCheatSheet';
 import InventorySection from './Inventory/InventorySection';
 import FeaturesList from './FeaturesList';
 import SpellsManager from './Spells/SpellsManager';
@@ -12,6 +13,7 @@ import RollModal, { RollTarget } from './RollModal';
 import Panel from '../UI/Panel';
 import SectionHeader from '../UI/SectionHeader';
 import { STANDARD_SKILLS, getModifier } from '../../utils/DndUtils';
+import { getCharacterCustomFeatures, getCharacterNotesText } from '../../utils/customFeatures';
 import socket from '../../services/socket';
 import { COLORS, SPACING, TYPO, RADIUS } from '../../constants/Theme';
 
@@ -65,27 +67,26 @@ const xpProgress = (level: number, xp: number) => {
 export default function CharacterSheet({ character }: CharacterSheetProps) {
     const [activeTab, setActiveTab] = useState<TabId>('stats');
     const [rollTarget, setRollTarget] = useState<RollTarget | null>(null);
+    const [skillsCollapsed, setSkillsCollapsed] = useState(true);
 
-    if (!character) return <View />;
+    const proficiency = character?.proficiencyBonus || 2;
+    const initiative = character?.initiative ?? getModifier(character?.stats?.dex || 10);
+    const passivePerception = character?.passivePerception ?? 10 + getModifier(character?.stats?.wis || 10);
 
-    const proficiency = character.proficiencyBonus || 2;
-    const initiative = character.initiative ?? getModifier(character.stats?.dex || 10);
-    const passivePerception = character.passivePerception ?? 10 + getModifier(character.stats?.wis || 10);
-
-    const abilityMod = (key: string) => getModifier(character.stats?.[key] || 10);
+    const abilityMod = (key: string) => getModifier(character?.stats?.[key] || 10);
 
     // Salvaciones: usa lo calculado por el motor, con fallback al modificador.
     const saveFor = (key: string) => {
-        const st = character.savingThrows?.[key];
+        const st = character?.savingThrows?.[key];
         return { mod: st?.mod ?? abilityMod(key), proficient: !!st?.proficient };
     };
 
     const fullSkills = useMemo(() => {
-        const charSkills = character.skills || [];
+        const charSkills = character?.skills || [];
         return STANDARD_SKILLS.map((stdSkill: any) => {
             const charSkill = charSkills.find((s: any) => s.name === stdSkill.name);
             const isProficient = (charSkill?.proficiency_level || 0) > 0;
-            const mod = getModifier(character.stats?.[stdSkill.attr] || 10);
+            const mod = getModifier(character?.stats?.[stdSkill.attr] || 10);
             return {
                 name: stdSkill.name,
                 attr: stdSkill.attr,
@@ -93,7 +94,12 @@ export default function CharacterSheet({ character }: CharacterSheetProps) {
                 proficient: isProficient,
             };
         });
-    }, [character.skills, character.stats, proficiency]);
+    }, [character?.skills, character?.stats, proficiency]);
+
+    const customFeatures = useMemo(() => getCharacterCustomFeatures(character), [character]);
+    const notesText = useMemo(() => getCharacterNotesText(character?.abilities_text), [character?.abilities_text]);
+
+    if (!character) return <View />;
 
     const renderStatsTab = () => (
         <View style={styles.tabContent}>
@@ -194,11 +200,52 @@ export default function CharacterSheet({ character }: CharacterSheetProps) {
 
             {/* HABILIDADES */}
             <View style={styles.sectionGap}>
-                <SectionHeader title="Habilidades" icon={<Target size={14} color={COLORS.bronzeLight} />} />
-                <SkillsSection
-                    skills={fullSkills}
-                    onRoll={(skill) => setRollTarget({ title: skill.name, modifier: skill.bonus })}
-                />
+                <Panel padded={false} style={styles.skillsAccordion}>
+                    <TouchableOpacity
+                        style={styles.skillsAccordionHeader}
+                        activeOpacity={0.8}
+                        onPress={() => setSkillsCollapsed((current) => !current)}
+                    >
+                        <View style={styles.skillsAccordionTitleWrap}>
+                            <View style={styles.skillsAccordionIcon}>
+                                <Target size={14} color={COLORS.bronzeLight} />
+                            </View>
+                            <View style={styles.skillsAccordionCopy}>
+                                <Text style={styles.skillsAccordionEyebrow}>exploracion</Text>
+                                <Text style={styles.skillsAccordionTitle}>Habilidades</Text>
+                                <Text style={styles.skillsAccordionHint}>
+                                    {skillsCollapsed
+                                        ? 'Abre este bloque para ver todas tus tiradas.'
+                                        : 'Toca una habilidad para tirar una prueba.'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.skillsAccordionRight}>
+                            <View style={styles.skillsAccordionCount}>
+                                <Text style={styles.skillsAccordionCountText}>{fullSkills.length}</Text>
+                            </View>
+                            {skillsCollapsed
+                                ? <ChevronRight size={18} color={COLORS.textSecondary} />
+                                : <ChevronDown size={18} color={COLORS.bronzeLight} />}
+                        </View>
+                    </TouchableOpacity>
+
+                    {!skillsCollapsed ? (
+                        <View style={styles.skillsAccordionBody}>
+                            <SkillsSection
+                                skills={fullSkills}
+                                embedded
+                                onRoll={(skill) => setRollTarget({ title: skill.name, modifier: skill.bonus })}
+                            />
+                        </View>
+                    ) : null}
+                </Panel>
+            </View>
+
+            {/* MACHETE TACTICO */}
+            <View style={styles.sectionGap}>
+                <ActionCheatSheet character={character} />
             </View>
         </View>
     );
@@ -228,11 +275,12 @@ export default function CharacterSheet({ character }: CharacterSheetProps) {
                 {activeTab === 'stats' && renderStatsTab()}
                 {activeTab === 'inventory' && <InventorySection inventory={character.inventory || []} equipment={character.equipment || {}} characterId={character.id} character={character} figureUrl={character.rendered_url || character.base_body_url || character.image_url} hasBaseBody={!!character.base_body_url} renderPrompt={character.render_prompt} talents={character.talents} talentChoices={character.talent_choices} />}
                 {activeTab === 'social' && <FeaturesList
-                    abilitiesText={character.abilities_text}
+                    abilitiesText={notesText}
                     raceData={character.raceData}
                     classData={character.classData}
                     classes={character.classes}
                     level={character.level}
+                    customFeatures={customFeatures}
                     archetype={character.archetype_slug}
                     characterId={character.id}
                     featureChoices={character.feature_choices}
@@ -359,4 +407,77 @@ const styles = StyleSheet.create({
     saveItemProf: { borderColor: COLORS.bronze, backgroundColor: COLORS.surfaceHighlight },
     saveLabel: { ...TYPO.label, color: COLORS.textSecondary },
     saveMod: { ...TYPO.subtitle, color: COLORS.textPrimary, fontWeight: '800' },
+
+    skillsAccordion: {
+        overflow: 'hidden',
+    },
+    skillsAccordionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: SPACING.md,
+        paddingHorizontal: SPACING.lg,
+        paddingVertical: SPACING.md,
+        backgroundColor: COLORS.surface,
+    },
+    skillsAccordionTitleWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.md,
+        flex: 1,
+    },
+    skillsAccordionIcon: {
+        width: 30,
+        height: 30,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: COLORS.surfaceHighlight,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    skillsAccordionCopy: {
+        flex: 1,
+        gap: 2,
+    },
+    skillsAccordionEyebrow: {
+        ...TYPO.label,
+        fontSize: 9,
+        color: COLORS.bronzeLight,
+    },
+    skillsAccordionTitle: {
+        ...TYPO.subtitle,
+        color: COLORS.textPrimary,
+        fontWeight: '800',
+    },
+    skillsAccordionHint: {
+        ...TYPO.caption,
+        color: COLORS.textMuted,
+    },
+    skillsAccordionRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+    },
+    skillsAccordionCount: {
+        minWidth: 30,
+        height: 24,
+        borderRadius: RADIUS.pill,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: SPACING.sm,
+        backgroundColor: COLORS.surfaceHighlight,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    skillsAccordionCountText: {
+        ...TYPO.label,
+        fontSize: 9,
+        color: COLORS.bronzeLight,
+    },
+    skillsAccordionBody: {
+        paddingHorizontal: SPACING.md,
+        paddingBottom: SPACING.md,
+        backgroundColor: COLORS.surface,
+    },
 });

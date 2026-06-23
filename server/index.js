@@ -287,6 +287,7 @@ const getCalculatedPartyStats = async () => {
             quests: char.quests,
             equipment: char.equipment,
             abilities_text: char.abilities_text,
+            custom_features: char.custom_features,
             image_url: char.image_url,
             base_body_url: char.base_body_url,
             rendered_url: char.rendered_url,
@@ -921,6 +922,18 @@ io.on('connection', async (socket) => {
             io.emit('stats-updated', updatedStats);
         } catch (err) {
             console.error('Update abilities text error:', err);
+        }
+    });
+
+    socket.on('update-custom-features', async ({ characterId, customFeatures }) => {
+        try {
+            const value = Array.isArray(customFeatures) ? customFeatures : [];
+            await Character.update({ custom_features: value }, { where: { id: characterId } });
+
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+        } catch (err) {
+            console.error('Update custom features error:', err);
         }
     });
 

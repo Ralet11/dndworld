@@ -350,8 +350,12 @@ export default function FeaturesList({ abilitiesText, raceData, classData, class
                         <View>
                             {customFeatures.map((feat: any, idx: number) => (
                                 <View key={idx} style={styles.featureRow}>
-                                    <Text style={styles.featureName}>{feat.name}</Text>
-                                    {feat.description ? <Text style={styles.featureSource}>{feat.description}</Text> : null}
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.featureName}>{feat.name}</Text>
+                                        {feat.kind ? <Text style={styles.choiceHint}>{feat.kind}</Text> : null}
+                                        {(feat.description || feat.desc) ? <Text style={styles.featureSource}>{feat.description || feat.desc}</Text> : null}
+                                        {feat.resource ? <Text style={styles.choiceHint}>{feat.resource}</Text> : null}
+                                    </View>
                                 </View>
                             ))}
                         </View>

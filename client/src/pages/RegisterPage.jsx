@@ -1,25 +1,25 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function LoginPage() {
+export default function RegisterPage() {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { register } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) { setError('Completá todos los campos'); return; }
+    if (!username || !email || !password) { setError('Completá todos los campos'); return; }
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      // App.jsx redirige según rol automáticamente
+      await register(username, email, password);
     } catch (err) {
-      setError(err.message || 'No se pudo entrar');
+      setError(err.message || 'No se pudo registrar');
     } finally {
       setLoading(false);
     }
@@ -29,22 +29,32 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center p-6"
       style={{ background: 'linear-gradient(180deg, #0F1518 0%, #11191A 100%)' }}>
 
-      {/* Ember glow decoration */}
       <div className="pointer-events-none fixed bottom-0 left-0 right-0 h-64"
         style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,122,26,0.08) 0%, transparent 70%)' }} />
 
       <div className="w-full max-w-sm relative z-10">
-        {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="font-serif text-5xl font-bold mb-2"
+          <h1 className="font-serif text-4xl font-bold mb-2"
             style={{ color: '#F59E0B', textShadow: '0 2px 14px rgba(245,158,11,0.45)' }}>
             DnD World
           </h1>
-          <p className="italic text-sm" style={{ color: '#A89F8E' }}>Entra al reino</p>
+          <p className="italic text-sm" style={{ color: '#A89F8E' }}>Únete a la aventura</p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
+              style={{ color: '#C8A36A' }} />
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Nombre de aventurero"
+              className="input-base pl-11"
+              autoComplete="username"
+            />
+          </div>
+
           <div className="relative">
             <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
               style={{ color: '#C8A36A' }} />
@@ -67,7 +77,7 @@ export default function LoginPage() {
               onChange={e => setPassword(e.target.value)}
               placeholder="Contraseña"
               className="input-base pl-11"
-              autoComplete="current-password"
+              autoComplete="new-password"
             />
           </div>
 
@@ -84,16 +94,16 @@ export default function LoginPage() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                Entrando...
+                Creando cuenta...
               </span>
-            ) : 'Entrar'}
+            ) : 'Crear cuenta'}
           </button>
         </form>
 
         <p className="text-center mt-6 text-sm" style={{ color: '#A89F8E' }}>
-          ¿No tenés cuenta?{' '}
-          <Link to="/register" className="font-bold" style={{ color: '#F59E0B' }}>
-            Crear una
+          ¿Ya tenés cuenta?{' '}
+          <Link to="/login" className="font-bold" style={{ color: '#F59E0B' }}>
+            Entrar
           </Link>
         </p>
       </div>

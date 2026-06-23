@@ -103,6 +103,10 @@ const Character = sequelize.define('Character', {
         type: DataTypes.TEXT,
         defaultValue: ''
     },
+    custom_features: {
+        type: DataTypes.JSON,
+        defaultValue: []
+    },
     owner_id: {
         type: DataTypes.INTEGER,
         allowNull: true

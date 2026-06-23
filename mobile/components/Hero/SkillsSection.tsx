@@ -13,11 +13,12 @@ interface Skill {
 interface SkillsSectionProps {
     skills: Skill[];
     onRoll?: (skill: Skill) => void;
+    embedded?: boolean;
 }
 
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
-export default function SkillsSection({ skills, onRoll }: SkillsSectionProps) {
+export default function SkillsSection({ skills, onRoll, embedded = false }: SkillsSectionProps) {
     if (!skills || skills.length === 0) return null;
 
     // Una sola lista con TODAS las habilidades, en orden alfabético para
@@ -25,11 +26,11 @@ export default function SkillsSection({ skills, onRoll }: SkillsSectionProps) {
     const ordered = [...skills].sort((a, b) => a.name.localeCompare(b.name));
 
     return (
-        <View style={styles.group}>
+        <View style={[styles.group, embedded && styles.groupEmbedded]}>
             {ordered.map((skill, i) => (
                 <TouchableOpacity
                     key={`${skill.name}-${i}`}
-                    style={[styles.row, i === ordered.length - 1 && styles.lastRow]}
+                    style={[styles.row, embedded && styles.rowEmbedded, i === ordered.length - 1 && styles.lastRow]}
                     activeOpacity={0.7}
                     onPress={() => onRoll?.(skill)}
                 >
@@ -60,6 +61,11 @@ const styles = StyleSheet.create({
         borderColor: COLORS.border,
         overflow: 'hidden',
     },
+    groupEmbedded: {
+        backgroundColor: COLORS.transparent,
+        borderWidth: 0,
+        borderRadius: 0,
+    },
     row: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -68,6 +74,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.md,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: COLORS.border,
+    },
+    rowEmbedded: {
+        paddingHorizontal: SPACING.sm,
     },
     lastRow: { borderBottomWidth: 0 },
     left: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flex: 1 },

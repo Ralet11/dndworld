@@ -1,5 +1,6 @@
 const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, User, Class, Race } = require('../models');
 const bcrypt = require('bcryptjs');
+const seedFromSnapshot = require('./seed_from_snapshot');
 
 const seedDatabase = async () => {
     try {
@@ -684,6 +685,9 @@ const seedDatabase = async () => {
                 }
             });
         }
+
+        // 19. Snapshot: si existe seed_snapshot.json, importa todo su contenido
+        await seedFromSnapshot();
 
         console.log('Database verification/seeding complete.');
     } catch (error) {
