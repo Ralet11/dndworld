@@ -2,6 +2,108 @@ const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, U
 const bcrypt = require('bcryptjs');
 const seedFromSnapshot = require('./seed_from_snapshot');
 
+const makeFallbackClass = ({
+    slug,
+    name,
+    hit_dice,
+    spellcasting_ability = null,
+    subtypes_name = 'Subclase',
+}) => ({
+    slug,
+    name,
+    hit_dice,
+    prof_armor: 'Pendiente de completar',
+    prof_weapons: 'Pendiente de completar',
+    prof_tools: 'Pendiente de completar',
+    prof_saving_throws: 'Pendiente de completar',
+    prof_skills: 'Pendiente de completar',
+    table: '',
+    spellcasting_ability,
+    subtypes_name,
+    archetypes: JSON.stringify([]),
+    desc: 'Registro base creado por el seed para mantener integridad referencial. Completar manualmente con el compendio final.',
+});
+
+const makeFallbackRace = ({
+    slug,
+    name,
+    speed = 30,
+    vision = 'Normal',
+    size = 'Mediano',
+}) => ({
+    slug,
+    name,
+    desc: 'Registro base creado por el seed para mantener integridad referencial. Completar manualmente con el compendio final.',
+    speed,
+    size,
+    languages: 'Pendiente de completar',
+    vision,
+    traits: '',
+    subraces: JSON.stringify([]),
+});
+
+const FALLBACK_CLASSES = [
+    makeFallbackClass({ slug: 'artificer', name: 'Artificiero', hit_dice: '1d8', spellcasting_ability: 'Inteligencia', subtypes_name: 'Especialización de Artificiero' }),
+    makeFallbackClass({ slug: 'barbarian', name: 'Bárbaro', hit_dice: '1d12' }),
+    makeFallbackClass({ slug: 'cleric', name: 'Clérigo', hit_dice: '1d8', spellcasting_ability: 'Sabiduría', subtypes_name: 'Dominio Divino' }),
+    makeFallbackClass({ slug: 'druid', name: 'Druida', hit_dice: '1d8', spellcasting_ability: 'Sabiduría', subtypes_name: 'Círculo Druídico' }),
+    makeFallbackClass({ slug: 'fighter', name: 'Guerrero', hit_dice: '1d10' }),
+    makeFallbackClass({ slug: 'monk', name: 'Monje', hit_dice: '1d8' }),
+    makeFallbackClass({ slug: 'paladin', name: 'Paladín', hit_dice: '1d10', spellcasting_ability: 'Carisma', subtypes_name: 'Juramento Sagrado' }),
+    makeFallbackClass({ slug: 'warlock', name: 'Brujo', hit_dice: '1d8', spellcasting_ability: 'Carisma', subtypes_name: 'Patrón Sobrenatural' }),
+    makeFallbackClass({ slug: 'wizard', name: 'Mago', hit_dice: '1d6', spellcasting_ability: 'Inteligencia', subtypes_name: 'Escuela Arcana' }),
+];
+
+const FALLBACK_RACES = [
+    makeFallbackRace({ slug: 'dragonborn', name: 'Dracónido' }),
+    makeFallbackRace({ slug: 'dwarf', name: 'Enano' }),
+    makeFallbackRace({ slug: 'elf', name: 'Elfo', vision: 'Visión en la Oscuridad 18m' }),
+    makeFallbackRace({ slug: 'gnome', name: 'Gnomo', vision: 'Visión en la Oscuridad 18m', size: 'Pequeño' }),
+    makeFallbackRace({ slug: 'goblin', name: 'Goblin', vision: 'Visión en la Oscuridad 18m', size: 'Pequeño' }),
+    makeFallbackRace({ slug: 'half-elf', name: 'Semielfo', vision: 'Visión en la Oscuridad 18m' }),
+    makeFallbackRace({ slug: 'half-orc', name: 'Semiorco', vision: 'Visión en la Oscuridad 18m' }),
+];
+
+const CLASS_SLUG = {
+    'Artificer': 'artificer',
+    'Artificiero': 'artificer',
+    'Bardo': 'bard',
+    'Bárbaro': 'barbarian',
+    'Brujo': 'warlock',
+    'Clérigo': 'cleric',
+    'Druida': 'druid',
+    'Explorador': 'ranger',
+    'Guerrero': 'fighter',
+    'Hechicero': 'sorcerer',
+    'Ladrón': 'rogue',
+    'Mago': 'wizard',
+    'Monje': 'monk',
+    'Paladín': 'paladin',
+    'Pícaro': 'rogue',
+    'Ranger': 'ranger',
+    'Rogue': 'rogue',
+    'Sorcerer': 'sorcerer',
+    'Warlock': 'warlock',
+    'Wizard': 'wizard',
+};
+
+const RACE_SLUG = {
+    'Aasimar': 'aasimar',
+    'Dracónido': 'dragonborn',
+    'Elfa': 'elf',
+    'Elfo': 'elf',
+    'Enano': 'dwarf',
+    'Gnomo': 'gnome',
+    'Goblin': 'goblin',
+    'Humana': 'human',
+    'Humano': 'human',
+    'Mediano': 'halfling',
+    'Semielfo': 'half-elf',
+    'Semiorco': 'half-orc',
+    'Tiefling': 'tiefling',
+    'Tiefling Oscuro': 'tiefling',
+};
+
 const seedDatabase = async () => {
     try {
         console.log('Checking database seed data...');
@@ -18,9 +120,15 @@ const seedDatabase = async () => {
         for (const r of compendium2024.races) {
             await Race.upsert(r);
         }
-        if (compendium2024.classes.length || compendium2024.races.length) {
-            console.log(`Compendio 2024: ${compendium2024.classes.length} clases, ${compendium2024.races.length} razas (upsert).`);
+        for (const c of FALLBACK_CLASSES) {
+            await Class.findOrCreate({ where: { slug: c.slug }, defaults: c });
         }
+        for (const r of FALLBACK_RACES) {
+            await Race.findOrCreate({ where: { slug: r.slug }, defaults: r });
+        }
+        const availableClassSlugs = new Set((await Class.findAll({ attributes: ['slug'] })).map((c) => c.slug));
+        const availableRaceSlugs = new Set((await Race.findAll({ attributes: ['slug'] })).map((r) => r.slug));
+        console.log(`Compendio base listo: ${availableClassSlugs.size} clases, ${availableRaceSlugs.size} razas.`);
 
         // 0.1 Create Users (DM and seeded players)
         const seedPassword = '123456';
@@ -448,12 +556,19 @@ const seedDatabase = async () => {
         // 15. Backfill de class_slug / race_slug → para que Rasgos cargue las
         // features por nivel de la clase y los rasgos raciales. Idempotente.
         const CLASS_SLUG = {
+            'Artificer': 'artificer',
+            'Artificiero': 'artificer',
+            'Ladr\u00f3n': 'rogue',
             'Guerrero': 'fighter', 'Mago': 'wizard', 'Clérigo': 'cleric', 'Pícaro': 'rogue',
             'Bardo': 'bard', 'Paladín': 'paladin', 'Explorador': 'ranger', 'Hechicero': 'sorcerer',
             'Druida': 'druid', 'Bárbaro': 'barbarian', 'Monje': 'monk', 'Brujo': 'warlock',
             'Ranger': 'ranger', 'Rogue': 'rogue', 'Bard': 'bard',
         };
         const RACE_SLUG = {
+            'Humana': 'human',
+            'Elfa': 'elf',
+            'Goblin': 'goblin',
+            'Tiefling Oscuro': 'tiefling',
             'Humano': 'human', 'Elfo': 'elf', 'Enano': 'dwarf', 'Mediano': 'halfling', 'Gnomo': 'gnome',
             'Dracónido': 'dragonborn', 'Tiefling': 'tiefling', 'Semiorco': 'half-orc', 'Semielfo': 'half-elf',
             'Aasimar': 'aasimar',
@@ -461,6 +576,7 @@ const seedDatabase = async () => {
         // Fallback: toma el primer token reconocible (ej. "Ranger 3 / Sorcerer 1" → ranger).
         const CLASS_VALUES = new Set(Object.values(CLASS_SLUG));
         const RACE_VALUES = new Set(Object.values(RACE_SLUG));
+        const skippedBackfills = new Set();
         const tokenSlug = (str, valueSet) => {
             for (const tok of String(str || '').toLowerCase().split(/[^a-z]+/)) {
                 if (tok && valueSet.has(tok)) return tok;
@@ -472,13 +588,26 @@ const seedDatabase = async () => {
             let changed = false;
             if (!char.class_slug && char.class) {
                 const s = CLASS_SLUG[char.class] || tokenSlug(char.class, CLASS_VALUES);
-                if (s) { char.class_slug = s; changed = true; }
+                if (s && availableClassSlugs.has(s)) {
+                    char.class_slug = s;
+                    changed = true;
+                } else if (s) {
+                    skippedBackfills.add(`class:${char.name}:${char.class}->${s}`);
+                }
             }
             if (!char.race_slug && char.race) {
                 const s = RACE_SLUG[char.race] || tokenSlug(char.race, RACE_VALUES);
-                if (s) { char.race_slug = s; changed = true; }
+                if (s && availableRaceSlugs.has(s)) {
+                    char.race_slug = s;
+                    changed = true;
+                } else if (s) {
+                    skippedBackfills.add(`race:${char.name}:${char.race}->${s}`);
+                }
             }
             if (changed) await char.save();
+        }
+        if (skippedBackfills.size) {
+            console.warn('Backfill de slugs omitido para referencias sin compendio:', [...skippedBackfills].join(', '));
         }
 
         // 15.5 POIs del mapa (idempotente, upsert por título).
