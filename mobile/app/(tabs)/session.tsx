@@ -1,15 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import DmAssistantPanel from '../../components/Assistant/DmAssistantPanel';
 
 export default function SessionScreen() {
-    return (
-        <View style={styles.container}>
-            <Text style={styles.text}>Session Control (DM)</Text>
-        </View>
-    );
+    return <DmAssistantPanel />;
 }
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-    text: { color: '#fff' }
-});

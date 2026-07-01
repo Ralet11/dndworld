@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Scroll, Package, BookMarked, Skull, Image as ImageIcon, Map as MapIcon, Crown, LogOut, Menu, X } from 'lucide-react';
+import { Users, Scroll, Package, BookMarked, Skull, Image as ImageIcon, Crown, LogOut, Menu, X, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import PartyPanel from '../dm/PartyPanel';
 import ScenesPanel from '../dm/ScenesPanel';
@@ -7,8 +7,10 @@ import ItemsPanel from '../dm/ItemsPanel';
 import QuestsPanel from '../dm/QuestsPanel';
 import NpcsPanel from '../dm/NpcsPanel';
 import MediaPanel from '../dm/MediaPanel';
+import AssistantPanel from '../dm/AssistantPanel';
 
 const TOOLS = [
+  { id: 'assistant', label: 'Assistant', Icon: Sparkles, desc: 'Comandos y chat DM' },
   { id: 'party',   label: 'Party',    Icon: Users,     desc: 'Estado del grupo' },
   { id: 'scenes',  label: 'Escenas',  Icon: Scroll,    desc: 'Crónicas y viñetas' },
   { id: 'items',   label: 'Items',    Icon: Package,   desc: 'Tesoros y equipo' },
@@ -18,6 +20,7 @@ const TOOLS = [
 ];
 
 const PANELS = {
+  assistant: AssistantPanel,
   party:   PartyPanel,
   scenes:  ScenesPanel,
   items:   ItemsPanel,
@@ -28,7 +31,7 @@ const PANELS = {
 
 export default function DmLayout() {
   const { user, logout } = useAuth();
-  const [active, setActive] = useState('party');
+  const [active, setActive] = useState('assistant');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const ActivePanel = PANELS[active];

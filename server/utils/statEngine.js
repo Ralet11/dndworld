@@ -15,7 +15,8 @@ class StatEngine {
      * Re-calculates full character stats based on equipment and status effects.
      */
     static calculate(character) {
-        const { abilityScores = [], equipment = {}, activeEffects = [], skills = [] } = character;
+        const { abilityScores = [], activeEffects = [], skills = [] } = character;
+        const equipment = character.equipment || {};
 
         // 1. Calculate Core Attribute Modifiers
         const mods = {};

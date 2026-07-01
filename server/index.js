@@ -11,6 +11,7 @@ const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
 const { renderHero, buildSignature } = require('./utils/heroRenderer');
+const { getAssistantContext, executeAssistantCommand } = require('./utils/dmAssistant');
 
 const app = express();
 const server = http.createServer(app);
@@ -38,7 +39,7 @@ const { storage } = require('./utils/cloudinary'); // Import Cloudinary storage
 
 const upload = multer({ storage: storage });
 const authController = require('./controllers/authController');
-const { verifyToken } = require('./middleware/auth');
+const { verifyToken, isDm } = require('./middleware/auth');
 
 // Auth Routes
 app.post('/api/auth/register', authController.register);
@@ -131,6 +132,41 @@ app.post('/api/ai/narrate', verifyToken, async (req, res) => {
     } catch (err) {
         console.error('AI Error:', err);
         res.status(500).json({ message: "Failed to consult the Oracle." });
+    }
+});
+
+app.get('/api/dm-assistant/context', verifyToken, isDm, async (req, res) => {
+    try {
+        const sceneId = req.query.sceneId ? parseInt(req.query.sceneId, 10) : null;
+        const context = await getAssistantContext({ sceneId, getCalculatedPartyStats });
+        res.json(context);
+    } catch (err) {
+        console.error('DM Assistant context error:', err);
+        res.status(500).json({ message: 'No se pudo cargar el contexto del asistente.' });
+    }
+});
+
+app.post('/api/dm-assistant/command', verifyToken, isDm, async (req, res) => {
+    try {
+        const { message, history, sceneId } = req.body || {};
+        const result = await executeAssistantCommand({
+            message,
+            history,
+            sceneId: sceneId ? parseInt(sceneId, 10) : null,
+            user: req.user,
+            io,
+            getCalculatedPartyStats,
+        });
+        res.status(result.ok ? 200 : 400).json(result);
+    } catch (err) {
+        console.error('DM Assistant command error:', err);
+        res.status(500).json({
+            ok: false,
+            reply: {
+                kind: 'error',
+                text: 'Fallo la ejecucion del asistente del DM.',
+            },
+        });
     }
 });
 

@@ -618,7 +618,15 @@ const seedDatabase = async () => {
             console.error('Error sembrando POIs:', e.message);
         }
 
-        // 15.51 Sub-POIs de ciudades (zonas dentro del mapa de cada ciudad).
+        // 15.51 Mapas de ciudad (idempotente, soporta aliases de títulos).
+        try {
+            const { seedCityMaps } = require('./seed_city_maps');
+            await seedCityMaps();
+        } catch (e) {
+            console.error('Error sembrando mapas de ciudad:', e.message);
+        }
+
+        // 15.52 Sub-POIs de ciudades (zonas dentro del mapa de cada ciudad).
         try {
             const { seedCitySubPois } = require('./seed_city_subpois');
             await seedCitySubPois();

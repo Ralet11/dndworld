@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Dimensions, Text, TouchableOpacity, Image, Modal, ScrollView, TextInput, ActivityIndicator, Animated, Keyboard } from 'react-native';
+import { View, StyleSheet, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Dimensions, Text, TouchableOpacity, Image, Modal, ScrollView, TextInput, Animated, Keyboard } from 'react-native';
 import { Crown, ArrowLeft, Users, Check, X, Search, UserPlus, UserMinus, Trash2, Sparkles, Volume2, VolumeX, Sun, Moon } from 'lucide-react-native';
 
 import { BlurView } from 'expo-blur';
@@ -12,6 +12,7 @@ import SceneCard from '../SceneCard';
 import MasterDeck, { MasterMode, MasterDeckRef } from './MasterDeck';
 import RollSelector, { RollType, RollMode } from './DM/RollSelector';
 import DiceRoller from './Player/DiceRoller';
+import DmAssistantPanel from '../Assistant/DmAssistantPanel';
 
 import { useGame } from '../../context/GameContext';
 import { useAuth } from '../../context/AuthContext';
@@ -80,10 +81,8 @@ export default function SceneChat({ scene, onBack }: SceneChatProps) {
     // Image Viewer State
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-    // AI Oracle State
-    const [oracleModalVisible, setOracleModalVisible] = useState(false);
-    const [oraclePrompt, setOraclePrompt] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
+    // DM Assistant State
+    const [assistantVisible, setAssistantVisible] = useState(false);
 
     // SOCKET LISTENERS
     useEffect(() => {
@@ -386,9 +385,10 @@ export default function SceneChat({ scene, onBack }: SceneChatProps) {
         setActiveRollRequest(null);
     };
 
+    /*
     const handleOracleGenerate = async () => {
-        if (!oraclePrompt.trim()) return;
-        setIsGenerating(true);
+        setAssistantVisible(true);
+        return;
 
         try {
             const token = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('token'));
@@ -416,6 +416,7 @@ export default function SceneChat({ scene, onBack }: SceneChatProps) {
             setIsGenerating(false);
         }
     };
+    */
 
     const handleSend = (text: string, mode: MessageMode) => {
         if (!myPlayerId) return;
@@ -648,7 +649,7 @@ export default function SceneChat({ scene, onBack }: SceneChatProps) {
                             onSend={handleDmSend}
                             replyingTo={replyingTo}
                             onCancelReply={() => setReplyingTo(null)}
-                            onAiGenerate={() => setOracleModalVisible(true)}
+                            onAiGenerate={() => setAssistantVisible(true)}
                         />
                     ) : (
                         (() => {
@@ -797,7 +798,12 @@ export default function SceneChat({ scene, onBack }: SceneChatProps) {
                     onClose={() => setSelectedImage(null)}
                 />
 
-                <Modal visible={oracleModalVisible} transparent animationType="fade">
+                <Modal visible={assistantVisible} animationType="slide">
+                    <DmAssistantPanel sceneId={scene.id} onClose={() => setAssistantVisible(false)} />
+                </Modal>
+
+                {/*
+                <Modal visible={false && oracleModalVisible} transparent animationType="fade">
                     <View style={styles.modalOverlay}>
                         <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
                         <View style={styles.oracleContent}>
@@ -842,6 +848,7 @@ export default function SceneChat({ scene, onBack }: SceneChatProps) {
                         </View>
                     </View>
                 </Modal>
+                */}
 
             </ImageBackground>
         </View>

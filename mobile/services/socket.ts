@@ -9,7 +9,8 @@ class SocketService {
 
     constructor() {
         this.socket = io(SOCKET_URL, {
-            transports: ['websocket'], // Force websocket
+            // Start with polling and upgrade when the proxy supports WebSocket.
+            transports: ['polling', 'websocket'],
             autoConnect: true,
         });
 

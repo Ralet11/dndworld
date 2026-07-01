@@ -1,32 +1,48 @@
+const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const PointOfInterest = require('../models/PointOfInterest');
 
 /**
- * Mapa de imágenes de las ciudades: { "Título exacto del POI": "URL del mapa" }.
- * Poné acá la URL de la imagen del mapa de cada ciudad (Cloudinary o cualquier
- * URL pública). Idempotente: actualiza map_image por título.
- *
- * Ejemplo:
- *   'Prontera': 'https://res.cloudinary.com/doqyrz0sg/image/upload/v.../prontera.png',
+ * URLs públicas de mapas de ciudad.
+ * Cada entrada admite aliases para tolerar cambios de naming entre seeds,
+ * snapshots y lore manual.
  */
-const CITY_MAPS = {
-    'Prontera': 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781330863/ChatGPT_Image_13_jun_2026_03_07_32_a.m._angdrx.png',
-    'Pantano Hachoverde': 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781332217/ChatGPT_Image_13_jun_2026_03_29_51_a.m._vtw5w6.png',
-    'Costa sombría': 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781329427/ChatGPT_Image_13_jun_2026_02_37_07_a.m._glhakw.png',
-};
+const CITY_MAPS = [
+    {
+        titles: ['Prontera'],
+        url: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781330863/ChatGPT_Image_13_jun_2026_03_07_32_a.m._angdrx.png',
+    },
+    {
+        titles: ['Pantano Hachoverde'],
+        url: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781332217/ChatGPT_Image_13_jun_2026_03_29_51_a.m._vtw5w6.png',
+    },
+    {
+        titles: ['Costa sombría', 'Costa Sombria', 'Costa Oscura'],
+        url: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781329427/ChatGPT_Image_13_jun_2026_02_37_07_a.m._glhakw.png',
+    },
+];
 
 async function seedCityMaps() {
-    const titles = Object.keys(CITY_MAPS).filter((t) => CITY_MAPS[t]);
     let updated = 0;
-    for (const title of titles) {
+
+    for (const city of CITY_MAPS) {
+        const titles = city.titles.filter(Boolean);
+        if (!titles.length || !city.url) continue;
+
         const [n] = await PointOfInterest.update(
-            { map_image: CITY_MAPS[title] },
-            { where: { title } }
+            { map_image: city.url },
+            {
+                where: {
+                    title: { [Op.in]: titles },
+                },
+            }
         );
-        if (n > 0) updated++;
-        else console.warn(`  No se encontró la ciudad "${title}".`);
+
+        if (n > 0) updated += n;
+        else console.warn(`  No se encontró ninguna ciudad para: ${titles.join(', ')}.`);
     }
-    console.log(`Mapas de ciudad actualizados: ${updated}/${titles.length}.`);
+
+    console.log(`Mapas de ciudad actualizados en ${updated} registro(s).`);
     return updated;
 }
 

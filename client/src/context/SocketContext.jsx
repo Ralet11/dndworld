@@ -8,7 +8,7 @@ let _socket = null;
 
 function getSocket() {
   if (!_socket) {
-    _socket = io(API_URL, { transports: ['websocket', 'polling'] });
+    _socket = io(API_URL, { transports: ['polling', 'websocket'] });
   }
   return _socket;
 }
