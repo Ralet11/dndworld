@@ -1,6 +1,32 @@
 const OpenAI = require('openai');
+const fs = require('fs');
+const path = require('path');
 
 const MODEL = process.env.DM_ASSISTANT_MODEL || 'gpt-4o-mini';
+
+const CAMPAIGN_LORE_PATH = path.join(__dirname, '..', 'data', 'lore', 'campaign-context.md');
+let _campaignLoreCache = null;
+
+function loadCampaignLore() {
+    if (_campaignLoreCache !== null) return _campaignLoreCache;
+    try {
+        _campaignLoreCache = fs.readFileSync(CAMPAIGN_LORE_PATH, 'utf8').trim();
+    } catch (_err) {
+        _campaignLoreCache = '';
+    }
+    return _campaignLoreCache;
+}
+
+function buildCampaignLoreMessage() {
+    const lore = loadCampaignLore();
+    if (!lore) return null;
+    return [
+        'LORE DE CAMPANA (contexto narrativo fijo, actualizado manualmente; NO es estado en vivo).',
+        'Usalo para nombres, relaciones, trasfondo y motivaciones. Para HP/XP/oro/escena actual siempre confia en session.get_context, no en este texto.',
+        '---',
+        lore,
+    ].join('\n');
+}
 
 let _client = null;
 
@@ -386,8 +412,10 @@ async function runAssistantConversation({
     defaultSuggestions,
 }) {
     const client = getClient();
+    const campaignLoreMessage = buildCampaignLoreMessage();
     const messages = [
         { role: 'system', content: buildSystemPrompt() },
+        ...(campaignLoreMessage ? [{ role: 'system', content: campaignLoreMessage }] : []),
         ...historyToMessages(history),
         { role: 'user', content: String(message || '').trim() },
     ];
