@@ -6,7 +6,7 @@
  * Uso: node scripts/unify_npcs_ecos.js
  */
 
-const { Character } = require('../models');
+const { Character, Quest } = require('../models');
 
 const SIMPLE_RENAMES = [
     { from: ['Tiefling Oscuro', 'Tiefling negro'], to: 'Tiste Andi (sin identificar)' },
@@ -14,6 +14,11 @@ const SIMPLE_RENAMES = [
     { from: ['Primo'], to: 'Primo Bonasera' },
     { from: ['Sony'], to: 'Sony Bonasera' },
 ];
+
+// NPCs que no pertenecen al canon de ecos (datos de demo/scaffolding inicial
+// de la app, sin relacion con la campana real). Se eliminan si no tienen
+// referencias (quests, otros NPCs con owner_id apuntandoles).
+const ORPHAN_NPCS_TO_DELETE = ['Goblin Saboteador'];
 
 const RELATION_FIXES = [
     { name: 'Leandro Bonasera', fields: { npc_type: 'amigo', is_active: false } },
@@ -118,6 +123,25 @@ async function run() {
         Object.assign(record, fields);
         await record.save();
         console.log(`  ${name}: ${JSON.stringify(before)} -> ${JSON.stringify(fields)}`);
+    }
+
+    console.log('--- 5) Borrar NPCs huerfanos (fuera del canon de ecos) ---');
+    for (const name of ORPHAN_NPCS_TO_DELETE) {
+        const record = await Character.findOne({ where: { name } });
+        if (!record) {
+            console.log(`  "${name}" no existe, nada que borrar.`);
+            continue;
+        }
+        const [quests, owned] = await Promise.all([
+            Quest.findAll({ where: { character_id: record.id } }),
+            Character.findAll({ where: { owner_id: record.id } }),
+        ]);
+        if (quests.length || owned.length) {
+            console.log(`  SALTEADO "${name}" (id=${record.id}): tiene referencias (quests=${quests.length}, npcs=${owned.length}). Revisar a mano.`);
+            continue;
+        }
+        await record.destroy();
+        console.log(`  Borrado: "${name}" (id=${record.id}).`);
     }
 
     console.log('--- Listo ---');
