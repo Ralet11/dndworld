@@ -1,0 +1,92 @@
+[
+  {
+    "characterId": 6,
+    "name": "Albert Obrien",
+    "file": "albert-obrien.png"
+  },
+  {
+    "characterId": 7,
+    "name": "Lady Valet Fortimer",
+    "file": "lady-valet-fortimer.png"
+  },
+  {
+    "characterId": 8,
+    "name": "Algius Fortimer",
+    "file": "algius-fortimer.png"
+  },
+  {
+    "characterId": 9,
+    "name": "Geren Fortimer",
+    "file": "geren-fortimer.png"
+  },
+  {
+    "characterId": 10,
+    "name": "Shila",
+    "file": "shila.png"
+  },
+  {
+    "characterId": 11,
+    "name": "Guizhio",
+    "file": "guizhio.png"
+  },
+  {
+    "characterId": 12,
+    "name": "Ébano",
+    "file": "ebano.png"
+  },
+  {
+    "characterId": 13,
+    "name": "Pelligrim",
+    "file": "pelligrim.png"
+  },
+  {
+    "characterId": 14,
+    "name": "Leandro Bonasera",
+    "file": "leandro-bonasera.png"
+  },
+  {
+    "characterId": 15,
+    "name": "Marco Bellucci",
+    "file": "marco-bellucci.png"
+  },
+  {
+    "characterId": 16,
+    "name": "Don Nito Peltre",
+    "file": "don-nito-peltre.png"
+  },
+  {
+    "characterId": 17,
+    "name": "Leon Darsen",
+    "file": "leon-darsen.png"
+  },
+  {
+    "characterId": 18,
+    "name": "Lady Darsen",
+    "file": "lady-darsen.png"
+  },
+  {
+    "characterId": 19,
+    "name": "Salitre",
+    "file": "salitre.png"
+  },
+  {
+    "characterId": 20,
+    "name": "Pereza",
+    "file": "pereza.png"
+  },
+  {
+    "characterId": 21,
+    "name": "Tiefling Oscuro",
+    "file": "tiefling-oscuro.png"
+  },
+  {
+    "characterId": 22,
+    "name": "Brujo Andi",
+    "file": "brujo-andi.png"
+  },
+  {
+    "characterId": 23,
+    "name": "Osken Davra",
+    "file": "comandante-de-prontera.png"
+  }
+]

@@ -142,7 +142,6 @@ const seedDatabase = async () => {
                 role: 'DM'
             }
         });
-
         const seededPlayers = [
             { email: 'santi@player.com', username: 'santi', role: 'PLAYER' },
             { email: 'emi@player.com', username: 'emi', role: 'PLAYER' },
@@ -267,23 +266,8 @@ const seedDatabase = async () => {
         // 7. Ensure Quests Exist (SKIPPED - User wants no default quests)
         // Quests will be created manually by DM via the app.
 
-        // 8. Ensure NPC Exists
-        await Character.findOrCreate({
-            where: { name: 'Goblin Saboteador' },
-            defaults: {
-                race: 'Goblin',
-                class: 'Ladrón',
-                level: 2,
-                hp_current: 7,
-                hp_max: 7,
-                ac_base: 12,
-                speed: 30,
-                is_npc: true,
-                notes: 'Un goblin escurridizo que roba suministros.'
-            }
-        });
 
-        // 9. Remove Aragorn if exists (Cleanup)
+        // 8. Remove Aragorn if exists (Cleanup)
         await Character.destroy({ where: { name: 'Aragorn' } });
 
         // 10. Create New Characters (Zik, Lucario, Rakion)
@@ -673,10 +657,6 @@ const seedDatabase = async () => {
             { npc_type: 'compañero', origin: 'Hachoverde' },
             { where: { name: 'Albert Obrien' } }
         );
-        await Character.update(
-            { npc_type: 'enemigo' },
-            { where: { name: 'Goblin Saboteador' } }
-        );
 
         // 18. NPCs del Glosario de la Campaña
         const campaignNpcs = [
@@ -783,7 +763,7 @@ const seedDatabase = async () => {
                 notes: 'Ayudante de Salitre en las minas. Participó de la emboscada en túneles y formó parte del acceso traicionero a la Torre del Don. Muerto junto con la resolución de la traición de minas.',
             },
             {
-                name: 'Tiefling Oscuro',
+                name: 'Tiste Andi (sin identificar)',
                 origin: 'Costa Oscura',
                 race: 'Tiefling',
                 npc_type: 'enemigo',
@@ -800,12 +780,49 @@ const seedDatabase = async () => {
                 notes: 'Hechicero Andi asociado al ritual y al despliegue militar del puerto. Durmió a los hijos de los nobles para el sacrificio, reapareció en el puerto y superó al celestial invocado por Zik. Sigue suelto; es una de las amenazas abiertas más fuertes del frente Andi.',
             },
             {
-                name: 'Comandante de Prontera',
+                name: 'Osken Davra',
                 origin: 'Prontera',
                 race: 'Humano',
                 class: 'Guerrero',
                 npc_type: 'neutral',
                 notes: 'Líder militar que comandó el asalto de Prontera desde el zepelín. Llegó gracias al aviso enviado por Albert y cambió por completo el equilibrio de poder en Costa Oscura. Controla la nueva fase política y militar de Costa Oscura; puede transformarse en aliado, reclutador o problema.',
+            },
+            {
+                name: 'Varek',
+                origin: 'Costa Oscura',
+                race: 'Tiefling Andii',
+                class: 'Agente',
+                npc_type: 'neutral',
+                notes: 'Tiefling Andii negro que aparece del lado de Prontera tras la toma de Costa Oscura. Se instaló dentro de la Torre del Don cerca de Osken Davra y Albert O\'Brien, y se presenta como una línea disidente dentro de su propio pueblo. Dice querer impedir que los Andii completen sus planes y necesita la ayuda de Lucario para abrir una senda e infiltrarse del otro lado.',
+            },
+            {
+                name: 'Teo Malvern',
+                origin: 'Prontera',
+                race: 'Humano',
+                class: 'Puño de Prontera',
+                npc_type: 'enemigo',
+                notes: 'Joven promesa de una casa importante de Prontera y uno de los Puños. Durante la sesión de adivinación en la Torre del Don quedó marcado junto a Paleas y Zik, entró en trance y se convirtió en canal de una fuerza mucho más oscura. Zik comprendió que era el objetivo mostrado por el Dios Encadenado y lo mató en el acto.',
+            },
+            {
+                name: 'Dedos Bonasera',
+                origin: 'Costa Oscura',
+                race: 'Humano',
+                npc_type: 'amigo',
+                notes: 'Miembro de la red Bonasera en la Taberna del Tuerto. Forma parte del núcleo de apoyo que rodea a la party en Costa Oscura y, tras el rescate de Primo, pasa de contacto local cauteloso a aliado real dentro de la red de favores y movimientos del puerto.',
+            },
+            {
+                name: 'Sony Bonasera',
+                origin: 'Costa Oscura',
+                race: 'Humano',
+                npc_type: 'amigo',
+                notes: 'Integrante de la familia Bonasera ligada a la Taberna del Tuerto. Su peso está en sostener el refugio, los vínculos y la logística del grupo en Costa Oscura. Tras el rescate de Primo, queda alineado con la party como parte del entramado Bonasera.',
+            },
+            {
+                name: 'Primo Bonasera',
+                origin: 'Costa Oscura',
+                race: 'Humano',
+                npc_type: 'amigo',
+                notes: 'Miembro de los Bonasera y pieza emocional central del arco del puerto. Su desaparición durante la semana posterior a la toma de Costa Oscura terminó revelando que estaba cautivo de los Dientes Rotos. La party lo rescató y, desde entonces, los Bonasera quedaron completamente alineados con el grupo.',
             },
         ];
 
