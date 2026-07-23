@@ -170,6 +170,13 @@ const Character = sequelize.define('Character', {
         type: DataTypes.JSON, // ['mage-armor'] - List of slugs (Subset of known or from class list)
         defaultValue: []
     },
+    // Planos conocidos (homebrew, ej. Rakion): lista de slugs de Blueprint.
+    // Analogo a spells_known pero para magia canalizada via gadgets/crafteo
+    // en vez de lanzamiento de conjuros.
+    blueprints_known: {
+        type: DataTypes.JSON,
+        defaultValue: []
+    },
     // Talentos elegidos en los árboles de dote. Estructura:
     // { espiritu: { '5': 'a', '10': 'b' }, agilidad: {...}, aguante: {...} }
     talent_choices: {

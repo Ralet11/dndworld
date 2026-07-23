@@ -16,6 +16,7 @@ const UserPoiData = require('./UserPoiData');
 
 const Scene = require('./Scene');
 const Spell = require('./Spell');
+const Blueprint = require('./Blueprint');
 const Class = require('./Class');
 const Race = require('./Race');
 
@@ -96,6 +97,7 @@ module.exports = {
     User,
     Scene,
     Spell,
+    Blueprint,
     Class,
     Race,
     PointOfInterest,
