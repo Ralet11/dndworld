@@ -7,6 +7,7 @@
     "seed": "node scripts/seed.js",
     "seed:reset": "node scripts/reset-and-seed.js --force",
     "seed:export": "node export_seed.js",
+    "npc-images:import": "node scripts/import_npc_images.js",
     "export": "node export_seed.js",
     "start": "nodemon index.js",
     "dev": "nodemon index.js"

@@ -38,7 +38,10 @@ const MAP_HEIGHT = 1600;
 const MAP_IMAGE = require('../../assets/westamar.jpg.png');
 
 // Permitimos alejar la cámara bastante (0.3x) y acercarla mucho (3x)
-const MIN_SCALE = Math.max(SCREEN_WIDTH / MAP_WIDTH, SCREEN_HEIGHT / MAP_HEIGHT); // Aprox 0.17 en móviles
+// Math.min (contain) en vez de Math.max (cover): así el zoom mínimo muestra
+// el mapa/ciudad ENTERO, con margen vacío en el eje más corto, en vez de
+// forzar que un eje siempre se salga de la pantalla.
+const MIN_SCALE = Math.min(SCREEN_WIDTH / MAP_WIDTH, SCREEN_HEIGHT / MAP_HEIGHT);
 const MAX_SCALE = 3;
 
 // Interface for dynamic markers
@@ -341,6 +344,16 @@ export default function InteractiveMap() {
         return { maxTx, maxTy };
     };
 
+    // Resistencia elástica: si el valor se pasa de [min, max], lo deja acercarse
+    // pero atenuado (factor 0.55), en vez de moverse 1:1 libre y pegar un salto
+    // grande recién al soltar el dedo. Mismo criterio que el rubber-band de iOS.
+    const rubberBand = (value: number, min: number, max: number, factor: number = 0.55) => {
+        'worklet';
+        if (value < min) return min - (min - value) * factor;
+        if (value > max) return max + (value - max) * factor;
+        return value;
+    };
+
     // 1. PINCH TO ZOOM
     const pinch = Gesture.Pinch()
         .onStart((e) => {
@@ -364,15 +377,22 @@ export default function InteractiveMap() {
             const xOffset = (e.focalX - SCREEN_WIDTH / 2) * (1 - newScale / savedScale.value);
             const yOffset = (e.focalY - SCREEN_HEIGHT / 2) * (1 - newScale / savedScale.value);
 
-            translateX.value = savedTranslateX.value + focalXDiff + xOffset;
-            translateY.value = savedTranslateY.value + focalYDiff + yOffset;
+            const rawX = savedTranslateX.value + focalXDiff + xOffset;
+            const rawY = savedTranslateY.value + focalYDiff + yOffset;
+
+            // Aplicamos resistencia elástica en vivo (no solo al soltar), para
+            // que no "vuele" lejos de los márgenes y después pegue un salto.
+            const { maxTx, maxTy } = getBoundaries(newScale);
+            translateX.value = rubberBand(rawX, -maxTx, maxTx);
+            translateY.value = rubberBand(rawY, -maxTy, maxTy);
         })
         .onEnd(() => {
             savedScale.value = scale.value;
-            // Snapping boundaries after pinch
+            // Snapping boundaries after pinch. Amortiguación crítica (damping alto
+            // relativo al stiffness) para que asiente sin pasarse ni oscilar.
             const { maxTx, maxTy } = getBoundaries(scale.value);
-            translateX.value = withSpring(clamp(translateX.value, -maxTx, maxTx), { damping: 15 });
-            translateY.value = withSpring(clamp(translateY.value, -maxTy, maxTy), { damping: 15 });
+            translateX.value = withSpring(clamp(translateX.value, -maxTx, maxTx), { damping: 30, stiffness: 200, overshootClamping: true });
+            translateY.value = withSpring(clamp(translateY.value, -maxTy, maxTy), { damping: 30, stiffness: 200, overshootClamping: true });
 
             savedTranslateX.value = translateX.value;
             savedTranslateY.value = translateY.value;
@@ -387,26 +407,30 @@ export default function InteractiveMap() {
             savedTranslateY.value = translateY.value;
         })
         .onUpdate((e) => {
-            translateX.value = savedTranslateX.value + e.translationX;
-            translateY.value = savedTranslateY.value + e.translationY;
+            const rawX = savedTranslateX.value + e.translationX;
+            const rawY = savedTranslateY.value + e.translationY;
+
+            const { maxTx, maxTy } = getBoundaries(scale.value);
+            translateX.value = rubberBand(rawX, -maxTx, maxTx);
+            translateY.value = rubberBand(rawY, -maxTy, maxTy);
         })
         .onEnd((e) => {
             // Friction and clamping
             const { maxTx, maxTy } = getBoundaries(scale.value);
 
             // Kinetic scroll using withDecay (adding +0.01 to avoid crash if min===max)
+            // rubberBandEffect: false -> frena duro en el borde, sin el rebote
+            // elástico estilo iOS que no queríamos.
             translateX.value = withDecay({
                 velocity: e.velocityX,
                 clamp: [-maxTx, maxTx + 0.01],
-                rubberBandEffect: true,
-                rubberBandFactor: 0.6,
+                rubberBandEffect: false,
             });
 
             translateY.value = withDecay({
                 velocity: e.velocityY,
                 clamp: [-maxTy, maxTy + 0.01],
-                rubberBandEffect: true,
-                rubberBandFactor: 0.6,
+                rubberBandEffect: false,
             });
         });
 
@@ -452,13 +476,19 @@ export default function InteractiveMap() {
     const cardHeight = useSharedValue(220);
 
     useEffect(() => {
-        cardHeight.value = withSpring(isCardExpanded ? 580 : 220, { damping: 20, stiffness: 150 });
+        // overshootClamping: true = nunca se pasa del valor destino, sin importar
+        // la velocidad que traiga (p.ej. si tocás otro POI a mitad de animación).
+        cardHeight.value = withSpring(isCardExpanded ? 580 : 220, { damping: 30, stiffness: 220, overshootClamping: true });
     }, [isCardExpanded]);
 
     const cardAnimatedStyle = useAnimatedStyle(() => ({
         height: cardHeight.value,
         opacity: selectedPOI ? withTiming(1, { duration: 300 }) : withTiming(0, { duration: 200 }),
-        transform: [{ translateY: selectedPOI ? withSpring(0) : withTiming(100) }]
+        transform: [{
+            translateY: selectedPOI
+                ? withSpring(0, { damping: 30, stiffness: 220, overshootClamping: true })
+                : withTiming(100, { duration: 220 })
+        }]
     }));
 
     const handleSelectPOI = async (poi: POI) => {

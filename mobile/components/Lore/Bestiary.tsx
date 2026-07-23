@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, SectionList, TextInput, TouchableOpacity,
-    Image, Modal, ScrollView,
+    Image, Modal, ScrollView, Alert,
 } from 'react-native';
 import {
     ArrowLeft, Search, BookMarked, Skull, X, Shield, Heart, Star,
@@ -10,9 +10,11 @@ import {
 import Screen from '../UI/Screen';
 import Panel from '../UI/Panel';
 import PressableScale from '../UI/PressableScale';
+import Button from '../UI/Button';
 import { COLORS, SPACING, TYPO, RADIUS } from '../../constants/Theme';
 import { getModifier } from '../../utils/DndUtils';
 import socket from '../../services/socket';
+import { useAuth } from '../../context/AuthContext';
 
 type NpcType = 'neutral' | 'amigo' | 'compañero' | 'enemigo';
 
@@ -41,9 +43,13 @@ const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function Bestiary({ onBack }: BestiaryProps) {
+    const { user } = useAuth();
     const [creatures, setCreatures] = useState<any[]>([]);
     const [query, setQuery]         = useState('');
     const [selected, setSelected]   = useState<any | null>(null);
+    const [selectedType, setSelectedType] = useState<'all' | NpcType>('all');
+    const [myCharacterId, setMyCharacterId] = useState<number | null>(null);
+    const [togglingNpcId, setTogglingNpcId] = useState<number | null>(null);
 
     useEffect(() => {
         socket.emit('get-all-npcs');
@@ -52,9 +58,64 @@ export default function Bestiary({ onBack }: BestiaryProps) {
         return () => { socket.off('all-npcs', handle); };
     }, []);
 
-    const sections = useMemo(() => {
+    useEffect(() => {
+        if (!user) return;
+
+        const handleParty = (players: any[]) => {
+            const myCharacter = (players || []).find((p: any) => p.UserId === user.id && !p.is_npc);
+            setMyCharacterId(myCharacter?.id ?? null);
+        };
+
+        socket.emit('get-players');
+        socket.on('players-data', handleParty);
+        socket.on('stats-updated', handleParty);
+
+        return () => {
+            socket.off('players-data', handleParty);
+            socket.off('stats-updated', handleParty);
+        };
+    }, [user]);
+
+    useEffect(() => {
+        if (!myCharacterId) return;
+
+        const mergeOwnedNpcs = (ownedNpcs: any[]) => {
+            setCreatures(current => current.map(creature => {
+                const updated = (ownedNpcs || []).find((npc: any) => npc.id === creature.id);
+                return updated ? { ...creature, ...updated } : creature;
+            }));
+            setSelected((current: any | null) => {
+                if (!current) return current;
+                const updated = (ownedNpcs || []).find((npc: any) => npc.id === current.id);
+                return updated ? { ...current, ...updated } : current;
+            });
+            setTogglingNpcId(null);
+        };
+
+        socket.emit('get-my-npcs', myCharacterId);
+        socket.on('my-npcs', mergeOwnedNpcs);
+
+        return () => {
+            socket.off('my-npcs', mergeOwnedNpcs);
+        };
+    }, [myCharacterId]);
+
+    const handleToggleCompanion = (npc: any) => {
+        if (!myCharacterId) {
+            Alert.alert('Sin heroe activo', 'Primero debes tener un personaje seleccionado para activar un companero.');
+            return;
+        }
+
+        setTogglingNpcId(npc.id);
+        socket.emit('toggle-npc-active', {
+            characterId: myCharacterId,
+            npcId: npc.is_active ? null : npc.id,
+        });
+    };
+
+    const filteredCreatures = useMemo(() => {
         const q = query.trim().toLowerCase();
-        const filtered = creatures.filter(c => {
+        return creatures.filter(c => {
             if (c.is_known === false) return false;
             if (!q) return true;
             return (
@@ -63,15 +124,21 @@ export default function Bestiary({ onBack }: BestiaryProps) {
                 c.class?.toLowerCase().includes(q)
             );
         });
+    }, [creatures, query]);
 
+    const sections = useMemo(() => {
         const groups: Record<string, any[]> = {};
-        filtered.forEach(c => {
+        filteredCreatures.forEach(c => {
             const type: NpcType = c.npc_type ?? 'neutral';
             if (!groups[type]) groups[type] = [];
             groups[type].push(c);
         });
 
-        return (Object.keys(TYPE_CONFIG) as NpcType[])
+        const visibleTypes = selectedType === 'all'
+            ? (Object.keys(TYPE_CONFIG) as NpcType[])
+            : [selectedType];
+
+        return visibleTypes
             .sort((a, b) => TYPE_CONFIG[a].order - TYPE_CONFIG[b].order)
             .filter(type => groups[type]?.length > 0)
             .map(type => ({
@@ -80,9 +147,18 @@ export default function Bestiary({ onBack }: BestiaryProps) {
                 color: TYPE_CONFIG[type].color,
                 data: groups[type],
             }));
-    }, [creatures, query]);
+    }, [filteredCreatures, selectedType]);
 
     const totalVisible = sections.reduce((acc, s) => acc + s.data.length, 0);
+    const filterOptions = [
+        { key: 'all' as const, label: 'Todos', count: filteredCreatures.length, color: COLORS.bronzeLight },
+        ...(Object.keys(TYPE_CONFIG) as NpcType[]).map(type => ({
+            key: type,
+            label: TYPE_CONFIG[type].label,
+            count: filteredCreatures.filter(c => (c.npc_type ?? 'neutral') === type).length,
+            color: TYPE_CONFIG[type].color,
+        })),
+    ];
 
     return (
         <Screen edges={['top']}>
@@ -117,6 +193,56 @@ export default function Bestiary({ onBack }: BestiaryProps) {
                 )}
             </View>
 
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterBar}
+            >
+                {filterOptions.map(option => {
+                    const active = selectedType === option.key;
+                    return (
+                        <TouchableOpacity
+                            key={option.key}
+                            style={[
+                                styles.filterChip,
+                                active && {
+                                    borderColor: option.color,
+                                    backgroundColor: `${option.color}22`,
+                                },
+                            ]}
+                            onPress={() => setSelectedType(option.key)}
+                        >
+                            <Text
+                                style={[
+                                    styles.filterChipText,
+                                    active && { color: option.color },
+                                ]}
+                            >
+                                {option.label}
+                            </Text>
+                            <View
+                                style={[
+                                    styles.filterChipCount,
+                                    active && {
+                                        borderColor: `${option.color}66`,
+                                        backgroundColor: `${option.color}22`,
+                                    },
+                                ]}
+                            >
+                                <Text
+                                    style={[
+                                        styles.filterChipCountText,
+                                        active && { color: option.color },
+                                    ]}
+                                >
+                                    {option.count}
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
+
             {/* Lista con secciones */}
             <SectionList
                 sections={sections}
@@ -149,7 +275,13 @@ export default function Bestiary({ onBack }: BestiaryProps) {
                 }
             />
 
-            <NpcDetail npc={selected} onClose={() => setSelected(null)} />
+            <NpcDetail
+                npc={selected}
+                myCharacterId={myCharacterId}
+                isToggling={togglingNpcId === selected?.id}
+                onToggleCompanion={handleToggleCompanion}
+                onClose={() => setSelected(null)}
+            />
         </Screen>
     );
 }
@@ -177,6 +309,9 @@ function SectionHeader({ label, color, count, type }: {
 // ── Fila de NPC ────────────────────────────────────────────────────────────────
 
 function NpcRow({ npc, color, onPress }: { npc: any; color: string; onPress: () => void }) {
+    const type: NpcType = npc.npc_type ?? 'neutral';
+    const showCompanionStats = type === 'compañero';
+
     return (
         <PressableScale onPress={onPress}>
             <View style={[styles.npcRow, { borderLeftColor: color, borderLeftWidth: 3 }]}>
@@ -200,7 +335,7 @@ function NpcRow({ npc, color, onPress }: { npc: any; color: string; onPress: () 
                 </View>
 
                 {/* Stats rápidos */}
-                <View style={styles.npcQuickStats}>
+                {showCompanionStats ? <View style={styles.npcQuickStats}>
                     {npc.hp_max ? (
                         <View style={styles.quickStat}>
                             <Heart size={10} color={COLORS.danger} />
@@ -213,7 +348,7 @@ function NpcRow({ npc, color, onPress }: { npc: any; color: string; onPress: () 
                             <Text style={styles.quickStatText}>{npc.ac_base}</Text>
                         </View>
                     ) : null}
-                </View>
+                </View> : null}
 
                 <ChevronRight size={16} color={COLORS.textMuted} />
             </View>
@@ -223,10 +358,39 @@ function NpcRow({ npc, color, onPress }: { npc: any; color: string; onPress: () 
 
 // ── Modal de detalle ───────────────────────────────────────────────────────────
 
-function NpcDetail({ npc, onClose }: { npc: any | null; onClose: () => void }) {
+function NpcDetail({
+    npc,
+    myCharacterId,
+    isToggling,
+    onToggleCompanion,
+    onClose,
+}: {
+    npc: any | null;
+    myCharacterId: number | null;
+    isToggling: boolean;
+    onToggleCompanion: (npc: any) => void;
+    onClose: () => void;
+}) {
+    // Se ajusta la altura del banner a la proporción real de la imagen (en vez
+    // de forzar una caja fija) para que se vea completa, sin recortes ni
+    // franjas vacías a los costados. maxHeight evita que un retrato muy
+    // vertical ocupe toda la pantalla.
+    const [bannerRatio, setBannerRatio] = useState(3 / 4);
+
+    useEffect(() => {
+        if (!npc?.image_url) return;
+        Image.getSize(
+            npc.image_url,
+            (w, h) => setBannerRatio(w / h),
+            () => setBannerRatio(3 / 4)
+        );
+    }, [npc?.image_url]);
+
     if (!npc) return null;
     const type: NpcType = npc.npc_type ?? 'neutral';
     const { color, label } = TYPE_CONFIG[type];
+    const showCompanionStats = type === 'compañero';
+    const canToggleCompanion = showCompanionStats && myCharacterId != null && npc.owner_id === myCharacterId;
 
     return (
         <Modal visible={!!npc} transparent animationType="slide" onRequestClose={onClose}>
@@ -235,9 +399,9 @@ function NpcDetail({ npc, onClose }: { npc: any | null; onClose: () => void }) {
                     <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
 
                         {/* Banner */}
-                        <View style={[styles.banner, { borderBottomColor: color + '44' }]}>
+                        <View style={[styles.banner, { aspectRatio: bannerRatio, borderBottomColor: color + '44' }]}>
                             {npc.image_url
-                                ? <Image source={{ uri: npc.image_url }} style={styles.bannerImg} />
+                                ? <Image source={{ uri: npc.image_url }} style={styles.bannerImg} resizeMode="contain" />
                                 : (
                                     <View style={[styles.bannerPlaceholder, { backgroundColor: color + '15' }]}>
                                         <Skull size={60} color={color + '66'} />
@@ -264,15 +428,15 @@ function NpcDetail({ npc, onClose }: { npc: any | null; onClose: () => void }) {
                             </Text>
 
                             {/* Métricas */}
-                            <View style={styles.metricsRow}>
+                            {showCompanionStats ? <View style={styles.metricsRow}>
                                 <Metric icon={<Star size={13} color={COLORS.amber} />}       label="Nivel" value={npc.level ?? '—'} />
                                 <Metric icon={<Heart size={13} color={COLORS.danger} />}      label="PV"    value={npc.hp_max ?? '—'} />
                                 <Metric icon={<Shield size={13} color={COLORS.blue} />}      label="CA"    value={npc.ac_base ?? '—'} />
                                 <Metric icon={<Wind size={13} color={COLORS.textSecondary} />} label="Mov."  value={npc.speed ? `${npc.speed}ft` : '—'} />
-                            </View>
+                            </View> : null}
 
                             {/* Atributos — solo compañero y enemigo */}
-                            {(type === 'compañero' || type === 'enemigo') && (
+                            {showCompanionStats && (
                                 <AbilityBlock scores={npc.abilityScores} color={color} />
                             )}
 
@@ -289,6 +453,15 @@ function NpcDetail({ npc, onClose }: { npc: any | null; onClose: () => void }) {
                                       </>
                                     : <Text style={styles.bodyMuted}>Sin información registrada todavía.</Text>
                             )}
+                            {canToggleCompanion ? (
+                                <Button
+                                    title={npc.is_active ? 'Desactivar companero' : 'Activar companero'}
+                                    onPress={() => onToggleCompanion(npc)}
+                                    loading={isToggling}
+                                    variant={npc.is_active ? 'secondary' : 'primary'}
+                                    full
+                                />
+                            ) : null}
                         </View>
                     </ScrollView>
                 </Panel>
@@ -448,6 +621,43 @@ const styles = StyleSheet.create({
         borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border,
     },
     searchInput: { flex: 1, color: COLORS.textPrimary, ...TYPO.body },
+    filterBar: {
+        paddingHorizontal: SPACING.lg,
+        paddingBottom: SPACING.sm,
+        gap: SPACING.sm,
+    },
+    filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.xs,
+        paddingLeft: SPACING.md,
+        paddingRight: SPACING.sm,
+        height: 38,
+        borderRadius: RADIUS.pill,
+        backgroundColor: COLORS.surface,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    filterChipText: {
+        ...TYPO.label,
+        color: COLORS.textSecondary,
+    },
+    filterChipCount: {
+        minWidth: 24,
+        height: 24,
+        borderRadius: RADIUS.pill,
+        backgroundColor: COLORS.surfaceHighlight,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+    },
+    filterChipCountText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: COLORS.textMuted,
+    },
 
     listContent: { paddingHorizontal: SPACING.lg, paddingBottom: 120 },
 
@@ -495,7 +705,10 @@ const styles = StyleSheet.create({
     overlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'flex-end' },
     sheet: { maxHeight: '90%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, overflow: 'hidden' },
 
-    banner: { height: 200, borderBottomWidth: 1 },
+    // Sin maxHeight: si lo hubiera, compite con aspectRatio y deja franjas
+    // vacías a los costados en retratos verticales (contain no puede llenar
+    // el ancho si el alto quedó recortado por el tope).
+    banner: { minHeight: 160, borderBottomWidth: 1, backgroundColor: COLORS.surfaceHighlight },
     bannerImg: { width: '100%', height: '100%' },
     bannerPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     closeBtn: {
