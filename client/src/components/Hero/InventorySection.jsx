@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Backpack,
+  Dices,
   Footprints,
   Hand,
   Layers,
+  Package,
   RefreshCw,
+  Scale,
   Shield,
   Shirt,
   Sparkles,
@@ -106,8 +109,8 @@ function SlotBox({ slot, item, onPress }) {
   const { Icon } = slot;
   const color = item ? rc(item.rarity) : '#2A332F';
   return (
-    <button onClick={onPress} style={styles.slotWrap}>
-      <div style={{ ...styles.slotIconBox, background: item ? `${color}22` : '#16211F', borderColor: item ? color : '#2A332F' }}>
+    <button className={`equipment-slot${item ? ' is-equipped' : ''}`} onClick={onPress} style={styles.slotWrap}>
+      <div className="equipment-slot-icon" style={{ ...styles.slotIconBox, background: item ? `${color}22` : '#16211F', borderColor: item ? color : '#2A332F' }}>
         {item?.image_url
           ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
           : <Icon size={22} style={{ color: item ? color : '#3A4440' }} />}
@@ -119,7 +122,7 @@ function SlotBox({ slot, item, onPress }) {
 
 function EquipmentDoll({ equipment, inventory, figureUrl, characterName, onSlotPress }) {
   return (
-    <div style={styles.dollShell}>
+    <div className="equipment-doll" style={styles.dollShell}>
       <div style={styles.slotColumn}>
         {LEFT_SLOTS.map((slot) => (
           <SlotBox
@@ -165,7 +168,7 @@ function ItemCard({ item, equipped, onEquip, onUse }) {
   const TypeIcon = item.type === 'Arma' ? Sword : item.type === 'Armadura' ? Shield : Zap;
 
   return (
-    <div style={{ ...styles.itemCard, borderColor: open ? color : '#2A332F' }}>
+    <div className={`equipment-item-card${open ? ' is-open' : ''}${equipped ? ' is-equipped' : ''}`} style={{ ...styles.itemCard, borderColor: open ? color : '#2A332F' }}>
       <button style={styles.itemRow} onClick={() => setOpen((previous) => !previous)}>
         <div style={{ ...styles.itemIcon, background: `${color}22`, borderColor: `${color}44` }}>
           {item.image_url
@@ -219,6 +222,105 @@ function ItemCard({ item, equipped, onEquip, onUse }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function propertyLabel(property) {
+  if (typeof property === 'string') return property;
+  return property?.name || property?.nombre || property?.label || null;
+}
+
+function ItemDetailModal({ slot, onClose, onUnequip }) {
+  const item = slot.item;
+  const color = item ? rc(item.rarity) : '#8A6A3B';
+  const TypeIcon = item?.type === 'Arma' ? Sword : item?.type === 'Armadura' ? Shield : Package;
+  const properties = Array.isArray(item?.properties) ? item.properties.map(propertyLabel).filter(Boolean) : [];
+  const talentStats = Object.entries(item?.talent_stats || {}).filter(([, value]) => Number(value) !== 0);
+  const statBonuses = Object.entries(item?.stat_bonuses || {}).filter(([, value]) => Number(value) !== 0);
+  const metrics = [
+    item?.damage && { label: 'Daño', value: `${item.damage}${item.damage_type ? ` ${item.damage_type}` : ''}`, Icon: Dices },
+    item?.ca_value != null && { label: 'Armadura', value: `+${item.ca_value}`, Icon: Shield },
+    item?.weight != null && { label: 'Peso', value: item.weight, Icon: Scale },
+  ].filter(Boolean);
+
+  useEffect(() => {
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="item-detail-backdrop" onClick={onClose} role="presentation">
+      <article
+        className="item-detail-modal"
+        style={{ '--item-color': color }}
+        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="item-detail-title"
+      >
+        <header className="item-detail-header">
+          <div className="item-detail-slot"><span>Espacio equipado</span><strong>{slot.label}</strong></div>
+          <button className="item-detail-close" onClick={onClose} aria-label="Cerrar detalle"><X size={18} /></button>
+        </header>
+
+        {item ? (
+          <>
+            <div className="item-detail-identity">
+              <div className="item-detail-art">
+                {item.image_url ? <img src={item.image_url} alt={item.name} /> : <TypeIcon size={38} strokeWidth={1.35} />}
+              </div>
+              <div className="item-detail-title-block">
+                <div className="item-detail-tags">
+                  <span>{item.rarity || 'Común'}</span><span>{item.type || 'Objeto'}</span><span className="is-equipped">Equipado</span>
+                </div>
+                <h2 id="item-detail-title">{item.name}</h2>
+                <p>{item.weapon_category || item.armor_type || item.slot || 'Equipo de aventurero'}</p>
+              </div>
+            </div>
+
+            {metrics.length > 0 && (
+              <div className="item-detail-metrics">
+                {metrics.map(({ label, value, Icon }) => (
+                  <div key={label}><Icon size={15} /><span><small>{label}</small><strong>{value}</strong></span></div>
+                ))}
+              </div>
+            )}
+
+            <div className="item-detail-content">
+              <section className="item-detail-description">
+                <span className="item-detail-eyebrow">Descripción</span>
+                <p>{item.description || 'No hay una descripción registrada para este objeto.'}</p>
+              </section>
+              {(properties.length > 0 || statBonuses.length > 0 || talentStats.length > 0) && (
+                <section className="item-detail-properties">
+                  <span className="item-detail-eyebrow">Propiedades y bonificaciones</span>
+                  <div className="item-detail-property-list">
+                    {properties.map(property => <span key={property}>{property}</span>)}
+                    {statBonuses.map(([key, value]) => <span key={key}>{key.toUpperCase()} {Number(value) > 0 ? '+' : ''}{value}</span>)}
+                    {talentStats.map(([key, value]) => <span key={key}>{key} {Number(value) > 0 ? '+' : ''}{value}</span>)}
+                  </div>
+                </section>
+              )}
+            </div>
+
+            <footer className="item-detail-footer">
+              <p>Al desequiparlo, sus bonificaciones dejarán de aplicarse inmediatamente.</p>
+              <div><button className="item-detail-secondary" onClick={onClose}>Volver</button><button className="item-detail-danger" onClick={onUnequip}>Desequipar</button></div>
+            </footer>
+          </>
+        ) : (
+          <div className="item-detail-empty">
+            <Package size={34} strokeWidth={1.2} />
+            <h2 id="item-detail-title">Espacio vacío</h2>
+            <p>Equipa un objeto compatible desde el inventario para ocupar este espacio.</p>
+            <button className="item-detail-secondary" onClick={onClose}>Cerrar</button>
+          </div>
+        )}
+      </article>
     </div>
   );
 }
@@ -435,8 +537,15 @@ export default function InventorySection({ character }) {
   ];
 
   return (
-    <div style={styles.container}>
-      <div style={styles.panel}>
+    <div className="equipment-workspace" style={styles.container}>
+      <div className="equipment-loadout" style={styles.panel}>
+        <div className="equipment-panel-heading">
+          <div>
+            <span>Configuracion activa</span>
+            <h3>Tu equipamiento</h3>
+          </div>
+          <small>{SLOT_KEYS.filter(slot => getItemInSlot(equipment, inventory, slot)).length}/{SLOT_KEYS.length} espacios</small>
+        </div>
         <EquipmentDoll
           equipment={equipment}
           inventory={inventory}
@@ -447,12 +556,12 @@ export default function InventorySection({ character }) {
 
         {syncing && <RenderProgress stage={stage} progress={progress} />}
 
-        <button onClick={() => setAiModalOpen(true)} style={styles.aiButton}>
+        <button className="equipment-ai-button" onClick={() => setAiModalOpen(true)} style={styles.aiButton}>
           <Sparkles size={15} />
           {syncing ? 'Generando retrato...' : 'Retrato IA'}
         </button>
 
-        <div style={styles.defenseRow}>
+        <div className="equipment-defense-row" style={styles.defenseRow}>
           <div style={{ ...styles.defenseBox, borderColor: '#8A6A3B' }}>
             <span style={styles.defenseAcVal}>{character.ac ?? '—'}</span>
             <span style={styles.defenseLabel}>Clase de Armadura</span>
@@ -469,7 +578,7 @@ export default function InventorySection({ character }) {
           ) : null}
         </div>
 
-        <div style={styles.talentSummary}>
+        <div className="equipment-talent-summary" style={styles.talentSummary}>
           {[
             { key: 'espiritu', label: 'Espíritu', color: '#3E84D6' },
             { key: 'agilidad', label: 'Agilidad', color: '#5BA86B' },
@@ -487,13 +596,16 @@ export default function InventorySection({ character }) {
         </button>
       </div>
 
-      <div style={styles.inventoryBlock}>
-        <div style={styles.sectionHeader}>
-          <Backpack size={14} style={{ color: '#C8A36A' }} />
-          <span style={styles.sectionTitle}>Objetos</span>
+      <div className="equipment-inventory" style={styles.inventoryBlock}>
+        <div className="equipment-inventory-heading" style={styles.sectionHeader}>
+          <div>
+            <Backpack size={16} style={{ color: '#C8A36A' }} />
+            <span style={styles.sectionTitle}>Inventario</span>
+          </div>
+          <strong>{filteredItems.length}<small> visibles</small></strong>
         </div>
 
-        <div style={styles.tabs}>
+        <div className="equipment-filter-tabs" style={styles.tabs}>
           {TABS.map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={activeTab === tab.id ? styles.activeTab : styles.tab}>
               {tab.label}
@@ -506,7 +618,7 @@ export default function InventorySection({ character }) {
         ) : filteredItems.length === 0 ? (
           <p style={styles.emptyText}>Sin items en esta categoría</p>
         ) : (
-          <div style={styles.itemGrid}>
+          <div className="equipment-item-grid" style={styles.itemGrid}>
             {filteredItems.map((item, index) => (
               <ItemCard
                 key={item.id ?? index}
@@ -521,29 +633,13 @@ export default function InventorySection({ character }) {
       </div>
 
       {slotModal && (
-        <div style={styles.modalOverlay} onClick={() => setSlotModal(null)}>
-          <div style={styles.slotModalCard} onClick={(event) => event.stopPropagation()}>
-            <p className="label-caps" style={{ color: '#C8A36A', marginBottom: 12 }}>Slot: {slotModal.label}</p>
-            {slotModal.item ? (
-              <>
-                <p style={styles.slotItemTitle}>{slotModal.item.name}</p>
-                <p style={{ color: rc(slotModal.item.rarity), fontSize: 12, marginTop: 4 }}>{slotModal.item.rarity}</p>
-                {slotModal.item.description && <p style={styles.slotItemDescription}>{slotModal.item.description}</p>}
-                <button
-                  onClick={() => {
-                    if (handleEquip(slotModal.item)) setSlotModal(null);
-                  }}
-                  style={styles.slotActionButton}
-                >
-                  Desequipar
-                </button>
-              </>
-            ) : (
-              <p style={styles.slotEmptyText}>Slot vacío</p>
-            )}
-            <button onClick={() => setSlotModal(null)} style={styles.slotCloseButton}>Cerrar</button>
-          </div>
-        </div>
+        <ItemDetailModal
+          slot={slotModal}
+          onClose={() => setSlotModal(null)}
+          onUnequip={() => {
+            if (handleEquip(slotModal.item)) setSlotModal(null);
+          }}
+        />
       )}
 
       {aiModalOpen && (

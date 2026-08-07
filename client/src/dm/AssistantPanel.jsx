@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Sparkles, Send, RotateCcw, Clock3, MapPin, HeartPulse, Users, Mic, MicOff } from 'lucide-react';
 import API_URL from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -25,11 +25,12 @@ const THINKING_STEPS = [
   'Preparando la respuesta final...',
 ];
 
-function ContextCard({ title, value, Icon, tone = '#38bdf8' }) {
+function ContextCard({ title, value, icon, tone = '#38bdf8' }) {
+  const ContextIcon = icon;
   return (
     <div className="panel p-4">
       <div className="flex items-center gap-2 mb-2">
-        <Icon size={16} style={{ color: tone }} />
+        <ContextIcon size={16} style={{ color: tone }} />
         <span className="label-caps" style={{ color: tone }}>{title}</span>
       </div>
       <p className="font-black text-sm" style={{ color: '#EDE6D8' }}>{value}</p>
@@ -94,10 +95,10 @@ function MessageBubble({ msg, onUndo }) {
       : { background: 'rgba(56,189,248,0.10)', border: '1px solid rgba(56,189,248,0.25)', color: '#EDE6D8' };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className="max-w-[85%] space-y-2">
+    <div className={`oracle-message-row ${isUser ? 'is-user' : 'is-assistant'}`}>
+      <div className="oracle-message-content">
         <div
-          className="rounded-2xl px-4 py-3 text-sm leading-6"
+          className="oracle-message-bubble"
           style={bubbleStyle}
         >
           {showToolLabel && (
@@ -108,7 +109,7 @@ function MessageBubble({ msg, onUndo }) {
         {!isUser && msg.undoAvailable && (
           <button
             onClick={onUndo}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold"
+            className="oracle-undo-button"
             style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#F59E0B' }}
           >
             <RotateCcw size={14} /> Deshacer
@@ -131,7 +132,7 @@ function serializeHistory(messages) {
     }));
 }
 
-export default function AssistantPanel() {
+export default function AssistantPanel({ embedded = false }) {
   const { token, user } = useAuth();
   const { connected } = useSocket();
   const [context, setContext] = useState(null);
@@ -179,7 +180,7 @@ export default function AssistantPanel() {
     rec.onend = () => {
       setInterimText('');
       if (keepListeningRef.current) {
-        try { rec.start(); } catch (_) { setListening(false); keepListeningRef.current = false; }
+        try { rec.start(); } catch { setListening(false); keepListeningRef.current = false; }
       } else {
         setListening(false);
         if (sendOnEndRef.current) {
@@ -255,12 +256,7 @@ export default function AssistantPanel() {
     };
   }, [startRecognition, stopRecognition]);
 
-  const latestSuggestions = useMemo(() => {
-    const latestAssistant = [...messages].reverse().find((msg) => msg.role === 'assistant' && Array.isArray(msg.suggestions) && msg.suggestions.length);
-    return latestAssistant?.suggestions || DEFAULT_SUGGESTIONS;
-  }, [messages]);
-
-  const fetchContext = async () => {
+  const fetchContext = useCallback(async () => {
     if (!token) return;
     setContextLoading(true);
     try {
@@ -275,11 +271,11 @@ export default function AssistantPanel() {
     } finally {
       setContextLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchContext();
-  }, [token]);
+  }, [fetchContext]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -359,8 +355,8 @@ export default function AssistantPanel() {
   sendFnRef.current = sendCommand;
 
   return (
-    <div className="p-4 max-w-6xl mx-auto h-full flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
+    <div className={`oracle-workspace${embedded ? ' is-game-embedded' : ''}`}>
+      <div className="oracle-header">
         <div>
           <p className="label-caps">Herramienta DM</p>
           <h1 className="text-3xl font-black mt-1 flex items-center gap-3" style={{ color: '#EDE6D8' }}>
@@ -379,8 +375,8 @@ export default function AssistantPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 min-h-0 flex-1">
-        <div className="xl:col-span-1 space-y-4">
+      <div className="oracle-grid">
+        <div className="oracle-context-rail">
           <div className="panel p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Sparkles size={16} style={{ color: '#38bdf8' }} />
@@ -398,69 +394,56 @@ export default function AssistantPanel() {
             </div>
           ) : context && (
             <>
-              <ContextCard title="Hora" value={context.world?.time || '...'} Icon={Clock3} tone="#F59E0B" />
-              <ContextCard title="Ubicacion" value={context.world?.location || '...'} Icon={MapPin} tone="#5BA86B" />
+              <ContextCard title="Hora" value={context.world?.time || '...'} icon={Clock3} tone="#F59E0B" />
+              <ContextCard title="Ubicacion" value={context.world?.location || '...'} icon={MapPin} tone="#5BA86B" />
               <ContextCard
                 title="Heridos"
                 value={context.injured?.length ? context.injured.map((char) => `${char.name} ${char.hp}/${char.maxHp}`).join(' | ') : 'Nadie herido'}
-                Icon={HeartPulse}
+                icon={HeartPulse}
                 tone="#C2452F"
               />
-              <ContextCard title="Party" value={`${context.party?.length || 0} personajes cargados`} Icon={Users} tone="#9B5DE5" />
+              <ContextCard title="Party" value={`${context.party?.length || 0} personajes cargados`} icon={Users} tone="#9B5DE5" />
             </>
           )}
         </div>
 
-        <div className="xl:col-span-3 min-h-0 flex flex-col">
-          <div className="panel-raised flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b" style={{ borderColor: '#2A332F' }}>
-              <p className="font-black text-sm" style={{ color: '#EDE6D8' }}>Conversacion del Asistente</p>
-              <p className="text-xs mt-1" style={{ color: '#6B6557' }}>
-                Contexto, ejecucion y correcciones en un mismo hilo.
-              </p>
+        <div className="oracle-conversation">
+          <div className="panel-raised oracle-chat-panel">
+            <div className="oracle-thread-header">
+              <div className="oracle-thread-emblem"><Sparkles size={17} /></div>
+              <div>
+                <span>Oracle de campaña</span>
+                <h2>Asistente del Director</h2>
+                <p>Consulta contexto y ejecuta acciones en vivo.</p>
+              </div>
+              <div className={`oracle-thread-status${connected ? ' is-online' : ''}`}><i />{connected ? 'En línea' : 'Sin conexión'}</div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4" style={{ background: '#0F1518' }}>
+            <div className="oracle-messages">
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} msg={msg} onUndo={() => sendCommand('deshacer')} />
               ))}
               {loading && (
-                <div className="flex justify-start">
-                  <div
-                    className="rounded-2xl px-4 py-3 text-sm space-y-2"
-                    style={{ background: 'rgba(56,189,248,0.10)', border: '1px solid rgba(56,189,248,0.25)', color: '#9FD9E8' }}
-                  >
+                <div className="oracle-message-row is-assistant">
+                  <div className="oracle-message-bubble is-thinking">
                     <div className="label-caps" style={{ color: '#67e8f9' }}>Assistant</div>
-                    <div>{THINKING_STEPS[loadingStep]}</div>
+                    <div className="oracle-thinking-line"><i /><span>{THINKING_STEPS[loadingStep]}</span></div>
                   </div>
                 </div>
               )}
               <div ref={bottomRef} />
             </div>
 
-            <div className="px-5 pt-4 space-y-3 border-t" style={{ borderColor: '#2A332F', background: '#16211F' }}>
-              <div className="flex flex-wrap gap-2">
-                {latestSuggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => sendCommand(suggestion)}
-                    className="px-3 py-1.5 rounded-full text-xs font-bold transition-colors"
-                    style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.20)', color: '#8FDBF0' }}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-
+            <div className="oracle-composer-shell">
               {micError && (
-                <p className="text-xs px-1" style={{ color: '#F87171' }}>{micError}</p>
+                <p className="oracle-mic-error">{micError}</p>
               )}
-              <div className="flex items-end gap-3 pb-5">
-                <div className="flex-1 relative">
+              <div className="oracle-composer">
+                <div className="oracle-input-wrap">
                   <textarea
-                    className="input-base w-full resize-none"
+                    className="input-base"
                     rows={2}
-                    placeholder="Ej: Lucario le metio 5 al goblin, bajale eso y luego dame una frase para narrarlo"
+                    placeholder="Describe una situación o pide una acción sobre la partida..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -471,7 +454,7 @@ export default function AssistantPanel() {
                     }}
                   />
                   {interimText && (
-                    <p className="absolute bottom-2 left-3 right-3 text-xs truncate pointer-events-none" style={{ color: '#67e8f9', opacity: 0.7 }}>
+                    <p className="oracle-interim-text">
                       {interimText}
                     </p>
                   )}
@@ -479,7 +462,7 @@ export default function AssistantPanel() {
                 <button
                   onClick={toggleListening}
                   title={listening ? 'Detener grabacion' : 'Hablar'}
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center transition-colors"
+                  className={`oracle-voice-button${listening ? ' is-listening' : ''}`}
                   style={listening
                     ? { background: 'rgba(194,69,47,0.20)', border: '1px solid rgba(194,69,47,0.50)', color: '#F87171' }
                     : { background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.20)', color: '#8FDBF0' }
@@ -490,7 +473,7 @@ export default function AssistantPanel() {
                 <button
                   onClick={() => sendCommand(input)}
                   disabled={!input.trim() || loading}
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center disabled:opacity-40"
+                  className="oracle-send-button"
                   style={{ background: '#38bdf8', color: '#06131A' }}
                 >
                   <Send size={18} />

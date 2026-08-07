@@ -1,78 +1,73 @@
-import { useState } from 'react';
-import { Map as MapIcon, BookMarked, Scroll, ChevronRight } from 'lucide-react';
-import MapView from '../components/Lore/MapView';
+import { lazy, Suspense } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Map as MapIcon, BookMarked, Scroll } from 'lucide-react';
 import BestiaryView from '../components/Lore/BestiaryView';
 import QuestsView from '../components/Lore/QuestsView';
 
+const MapView = lazy(() => import('../components/Lore/MapView'));
+
+function AtlasLoading() {
+  return <div className="h-full grid place-items-center label-caps" style={{ color: '#C8A36A' }}>Cargando Atlas...</div>;
+}
+
 export default function LoreTab() {
-  const [view, setView] = useState('menu');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const view = location.pathname.split('/')[2] || 'menu';
+  const goToMenu = () => navigate('/lore');
 
   if (view === 'map') {
     return (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: '#0F1518' }}>
-        <MapView onBack={() => setView('menu')} />
+      <div className="h-[calc(100vh-113px)] min-h-[520px] md:h-full md:min-h-[640px]" style={{ background: '#0F1518' }}>
+        <Suspense fallback={<AtlasLoading />}><MapView onBack={goToMenu} /></Suspense>
       </div>
     );
   }
 
-  if (view === 'bestiary') return <BestiaryView onBack={() => setView('menu')} />;
-  if (view === 'quests')   return <QuestsView onBack={() => setView('menu')} />;
+  if (view === 'glossary' || view === 'bestiary') return <BestiaryView onBack={goToMenu} />;
+  if (view === 'quests') return <QuestsView onBack={goToMenu} />;
 
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto">
-      <p className="label-caps mt-2" style={{ color: '#C8A36A' }}>Conocimiento del mundo</p>
-      <h1 className="text-4xl md:text-5xl font-black mb-8 mt-1" style={{ color: '#EDE6D8' }}>Lore</h1>
+    <div className="section-page">
+      <p className="section-kicker">Conocimiento del mundo</p>
+      <h1 className="section-title">Lore</h1>
+      <p className="section-lead">Mapas, encuentros y asuntos pendientes recopilados durante el viaje.</p>
+      <div className="section-rule" />
 
-      {/* Desktop: 3-col grid / Mobile: single column */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="lore-hub-grid">
         <LoreCard
-          title="Mapa"
-          subtitle="El Atlas del mundo y sus lugares"
+          title="Atlas del mundo"
+          subtitle="Explora Westamar, sus regiones y los lugares descubiertos por el grupo."
           Icon={MapIcon}
-          iconColor="#F59E0B"
-          gradientFrom="#1A2A2E"
-          onPress={() => setView('map')}
+          art="linear-gradient(180deg, transparent, #080d0c), url('/sieteciudades.png')"
+          onPress={() => navigate('/lore/map')}
         />
         <LoreCard
           title="Glosario"
-          subtitle="NPCs y criaturas que conoces"
+          subtitle="Personas, aliados, adversarios y criaturas conocidas."
           Icon={BookMarked}
-          iconColor="#FF7A1A"
-          gradientFrom="#2A1E18"
-          onPress={() => setView('bestiary')}
+          art="radial-gradient(circle at 50% 25%, #26342e, #080d0c 68%)"
+          onPress={() => navigate('/lore/glossary')}
         />
         <LoreCard
           title="Misiones"
-          subtitle="Las misiones activas de la party"
+          subtitle="Objetivos activos y compromisos del grupo."
           Icon={Scroll}
-          iconColor="#F59E0B"
-          gradientFrom="#1E2410"
-          onPress={() => setView('quests')}
+          art="radial-gradient(circle at 50% 25%, #312a1c, #080d0c 68%)"
+          onPress={() => navigate('/lore/quests')}
         />
       </div>
     </div>
   );
 }
 
-function LoreCard({ title, subtitle, Icon, iconColor, gradientFrom, onPress }) {
+function LoreCard({ title, subtitle, Icon, art, onPress }) {
   return (
-    <button
-      onClick={onPress}
-      className="flex md:flex-col items-center md:items-start gap-4 p-5 rounded-2xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-      style={{
-        background: `linear-gradient(135deg, ${gradientFrom} 0%, #11191A 100%)`,
-        border: '1px solid #5A4424',
-      }}
-    >
-      <div className="rounded-xl flex items-center justify-center shrink-0"
-        style={{ width: 60, height: 60, background: 'rgba(0,0,0,0.3)', border: '1px solid #2A332F' }}>
-        <Icon size={30} style={{ color: iconColor }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-bold text-base md:text-lg mt-0 md:mt-3" style={{ color: '#EDE6D8' }}>{title}</p>
-        <p className="text-xs md:text-sm mt-1" style={{ color: '#A89F8E' }}>{subtitle}</p>
-      </div>
-      <ChevronRight size={20} className="md:hidden" style={{ color: '#6B6557', flexShrink: 0 }} />
+    <button onClick={onPress} className="lore-hub-card" style={{ '--card-art': art }}>
+      <div className="lore-hub-card-icon"><Icon size={21} strokeWidth={1.3} /></div>
+      <h2>{title}</h2>
+      <p>{subtitle}</p>
+      <small>Abrir registro</small>
     </button>
   );
 }

@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>html,body{margin:0;background:#20242c;height:100%;} canvas{display:block;}</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/examples/jsm/environments/RoomEnvironment.js": "https://unpkg.com/three@0.170.0/examples/jsm/environments/RoomEnvironment.js",
+    "three/examples/jsm/postprocessing/EffectComposer.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/EffectComposer.js",
+    "three/examples/jsm/postprocessing/RenderPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/RenderPass.js",
+    "three/examples/jsm/postprocessing/BokehPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/BokehPass.js",
+    "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/UnrealBloomPass.js",
+    "three/examples/jsm/postprocessing/Pass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/Pass.js",
+    "three/examples/jsm/postprocessing/ShaderPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/ShaderPass.js",
+    "three/examples/jsm/shaders/CopyShader.js": "https://unpkg.com/three@0.170.0/examples/jsm/shaders/CopyShader.js",
+    "three/examples/jsm/shaders/LuminosityHighPassShader.js": "https://unpkg.com/three@0.170.0/examples/jsm/shaders/LuminosityHighPassShader.js",
+    "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js"
+  }
+}
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { createEspadaCortaModel } from './src/createEspadaCortaModel.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(1024, 1024);
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+console.log('GL context ok?', !!renderer.getContext());
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x20242c);
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+
+const key = new THREE.DirectionalLight(0xfff2e0, 1.0);
+key.position.set(1.2, 1.8, 1.5);
+scene.add(key);
+const fill = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffb066, 0.4);
+rim.position.set(-1.5, 0.5, -1.2);
+scene.add(rim);
+
+let model;
+let bbox, center, radius;
+try {
+  model = createEspadaCortaModel({ qualityPriority: 'balanced', textureSize: 128 });
+  // Swap MeshPhysicalMaterial -> MeshStandardMaterial for the headless capture only:
+  // SwiftShader's WebGL2 context loses itself reproducibly when compiling the full
+  // physical-material shader graph (clearcoat/transmission/sheen/iridescence uniforms)
+  // in this environment. This is purely an evidence-capture workaround, not a spec/code
+  // change -- the on-device (real GPU) render already proved the actual material works.
+  model.traverse((obj) => {
+    if (obj.isMesh && obj.material) {
+      const src = obj.material;
+      obj.material = new THREE.MeshStandardMaterial({
+        color: src.color ? src.color.clone() : 0x888888,
+        roughness: typeof src.roughness === 'number' ? src.roughness : 0.6,
+        metalness: typeof src.metalness === 'number' ? src.metalness : 0.2,
+      });
+    }
+  });
+  scene.add(model);
+  bbox = new THREE.Box3().setFromObject(model);
+  center = bbox.getCenter(new THREE.Vector3());
+  radius = bbox.getSize(new THREE.Vector3()).length() * 0.5 || 1;
+  let meshCount = 0;
+  const meshInfo = [];
+  model.traverse((obj) => {
+    if (obj.isMesh) {
+      meshCount += 1;
+      meshInfo.push({
+        name: obj.name || obj.parent?.name || '(unnamed)',
+        visible: obj.visible,
+        vertexCount: obj.geometry?.attributes?.position?.count ?? 0,
+        materialType: obj.material?.type,
+        materialColor: obj.material?.color ? obj.material.color.getHexString() : null,
+      });
+    }
+  });
+  window.__modelInfo = {
+    ok: true,
+    bboxMin: bbox.min.toArray(),
+    bboxMax: bbox.max.toArray(),
+    sockets: Object.keys(model.userData.sculptRuntime?.sockets ?? {}),
+    nodeCount: Object.keys(model.userData.sculptRuntime?.nodes ?? {}).length,
+    meshCount,
+    meshInfo,
+  };
+} catch (err) {
+  window.__modelInfo = { ok: false, error: String(err && err.stack || err) };
+  center = new THREE.Vector3(0, 0, 0);
+  radius = 1;
+}
+
+const views = [
+  { name: 'front', theta: 0, phi: Math.PI / 2, fit: true },
+  { name: 'three-quarter', theta: Math.PI / 4, phi: Math.PI / 2.3, fit: false },
+  { name: 'side', theta: Math.PI / 2, phi: Math.PI / 2, fit: false },
+];
+
+// Reference-matched framing: fit the object's height to ~82% of the vertical frustum,
+// straight-on, matching how reference_padded.png frames the object (centered, filling
+// most of the frame). The earlier arbitrary orbit distance produced a silhouette-IoU
+// mismatch against the reference that was a camera-calibration artifact, not a real
+// shape defect -- this is the cheap fix; forge/stage1_intake/solve_camera_pose.py would
+// be the full production solve.
+function fitDistance(size, fovDeg, fill = 0.82) {
+  const vFov = (fovDeg * Math.PI) / 180;
+  return (size.y / 2 / Math.tan(vFov / 2)) / fill;
+}
+
+function setView(index) {
+  const v = views[index % views.length];
+  const size = bbox ? bbox.getSize(new THREE.Vector3()) : new THREE.Vector3(1, 1, 1);
+  if (v.fit) {
+    const dist = fitDistance(size, camera.fov);
+    camera.position.set(center.x, center.y, center.z + dist);
+  } else {
+    const dist = radius * 2.4;
+    const x = center.x + dist * Math.sin(v.phi) * Math.sin(v.theta);
+    const y = center.y + dist * Math.cos(v.phi) + radius * 0.15;
+    const z = center.z + dist * Math.sin(v.phi) * Math.cos(v.theta);
+    camera.position.set(x, y, z);
+  }
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+}
+window.__setView = setView;
+window.__views = views.map((v) => v.name);
+setView(0);
+window.__ready = true;
+</script>
+</body>
+</html>

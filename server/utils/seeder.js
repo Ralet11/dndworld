@@ -134,7 +134,7 @@ const seedDatabase = async () => {
         const seedPassword = '123456';
         const passwordHash = bcrypt.hashSync(seedPassword, 8);
 
-        await User.findOrCreate({
+        const [dmUser, dmCreated] = await User.findOrCreate({
             where: { email: 'dm@dndworld.com' },
             defaults: {
                 username: 'DungeonMaster',
@@ -142,6 +142,13 @@ const seedDatabase = async () => {
                 role: 'DM'
             }
         });
+        if (!dmCreated) {
+            const nextValues = {};
+            if (dmUser.username !== 'DungeonMaster') nextValues.username = 'DungeonMaster';
+            if (dmUser.role !== 'DM') nextValues.role = 'DM';
+            if (!bcrypt.compareSync(seedPassword, dmUser.password_hash || '')) nextValues.password_hash = passwordHash;
+            if (Object.keys(nextValues).length) await dmUser.update(nextValues);
+        }
         const seededPlayers = [
             { email: 'santi@player.com', username: 'santi', role: 'PLAYER' },
             { email: 'emi@player.com', username: 'emi', role: 'PLAYER' },

@@ -121,7 +121,7 @@ function SkillsSection({ skills, onRoll, grid = false }) {
 
   if (grid) {
     return (
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+      <div className="hero-skills-grid grid grid-cols-1 xl:grid-cols-2 gap-2">
         {ordered.map((skill) => (
           <button
             key={skill.name}
@@ -262,13 +262,13 @@ function buildSkillRows(character, proficiency) {
   });
 }
 
-function SkillsBlock({ character, onRoll, grid = false }) {
+function SkillsBlock({ character, onRoll, grid = false, showTitle = true }) {
   const proficiency = character.proficiencyBonus || 2;
   const skills = useMemo(() => buildSkillRows(character, proficiency), [character.skills, character.stats, proficiency]);
 
   return (
     <div>
-      <p className="label-caps flex items-center gap-1.5 mb-3"><Target size={11} style={{ color: '#C8A36A' }} /> Habilidades</p>
+      {showTitle && <p className="label-caps flex items-center gap-1.5 mb-3"><Target size={11} style={{ color: '#C8A36A' }} /> Habilidades</p>}
       <SkillsSection skills={skills} grid={grid} onRoll={skill => onRoll({ title: skill.name, modifier: skill.bonus })} />
     </div>
   );
@@ -294,13 +294,105 @@ function StatsOverviewTab({ character, onRoll, className = 'space-y-5', compactS
   );
 }
 
+function DesktopCapabilities({ character, onRoll }) {
+  const proficiency = character.proficiencyBonus || 2;
+  const initiative = character.initiative ?? getModifier(character.stats?.dex || 10);
+  const passivePerception = character.passivePerception ?? 10 + getModifier(character.stats?.wis || 10);
+  const abilityMod = (key) => getModifier(character.stats?.[key] || 10);
+  const saveFor = (key) => {
+    const savingThrow = character.savingThrows?.[key];
+    return { mod: savingThrow?.mod ?? abilityMod(key), proficient: !!savingThrow?.proficient };
+  };
+
+  const quickStats = [
+    { label: 'Velocidad', value: `${character.speed ?? 30}'`, Icon: Footprints, color: '#D8D5CC' },
+    { label: 'Percepcion', value: passivePerception, Icon: Eye, color: '#5BA86B' },
+    { label: 'Competencia', value: `+${proficiency}`, Icon: Target, color: '#C8A36A' },
+    { label: 'Iniciativa', value: sign(initiative), Icon: Zap, color: '#F59E0B' },
+  ];
+
+  return (
+    <>
+      <div className="hero-quick-stats">
+        {quickStats.map(({ label, value, Icon, color }) => (
+          <div className="hero-quick-stat" key={label}>
+            <Icon size={15} style={{ color }} />
+            <div><strong>{value}</strong><span>{label}</span></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hero-subsection-title">
+        <span>Atributos</span>
+        <small>Clic para tirar</small>
+      </div>
+      <div className="hero-ability-grid">
+        {ABILITIES.map((ability) => (
+          <AttributeHex
+            key={ability.key}
+            label={ability.label}
+            score={character.stats?.[ability.key] || 10}
+            modifier={abilityMod(ability.key)}
+            onPress={() => onRoll({ title: `Prueba de ${ability.label}`, modifier: abilityMod(ability.key) })}
+          />
+        ))}
+      </div>
+
+      <div className="hero-subsection-title hero-subsection-title--saves">
+        <span>Salvaciones</span>
+        <small>Bonos defensivos</small>
+      </div>
+      <div className="hero-save-grid">
+        {ABILITIES.map((ability) => {
+          const savingThrow = saveFor(ability.key);
+          return (
+            <button
+              key={ability.key}
+              className={`hero-save-button ${savingThrow.proficient ? 'is-proficient' : ''}`}
+              onClick={() => onRoll({ title: `Salvacion de ${ability.label}`, modifier: savingThrow.mod })}
+            >
+              <span>{ability.label}</span>
+              <strong>{sign(savingThrow.mod)}</strong>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 function DesktopStatsTab({ character, onRoll }) {
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
-      <div className="p-4 rounded-2xl" style={{ background: '#16211F', border: '1px solid #5A4424' }}>
-        <CharacterHeader character={character} />
-      </div>
-      <StatsOverviewTab character={character} onRoll={onRoll} className="space-y-4" compactStats />
+    <div className="hero-overview-grid">
+      <section className="hero-content-card hero-content-card--primary">
+        <div className="hero-section-heading">
+          <div>
+            <span className="hero-eyebrow">Capacidades</span>
+            <h2>Atributos y defensa</h2>
+          </div>
+          <span className="hero-section-hint">Selecciona un valor para tirar</span>
+        </div>
+        <DesktopCapabilities character={character} onRoll={onRoll} />
+      </section>
+      <section className="hero-content-card hero-content-card--secondary">
+        <div className="hero-section-heading">
+          <div>
+            <span className="hero-eyebrow">Resolucion</span>
+            <h2>Habilidades</h2>
+          </div>
+        </div>
+        <SkillsBlock character={character} onRoll={onRoll} grid showTitle={false} />
+      </section>
+      <section className="hero-combat-section">
+        <div className="hero-section-heading hero-section-heading--combat">
+          <div>
+            <span className="hero-eyebrow">En combate</span>
+            <h2>Opciones de turno</h2>
+          </div>
+          <span className="hero-section-hint">Ataques, acciones, bonus y reacciones disponibles</span>
+        </div>
+        <ActionCheatSheet character={character} compact showOverview={false} />
+      </section>
     </div>
   );
 }
@@ -627,8 +719,8 @@ function featuresForClass(cls) {
 function Accordion({ title, icon, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: '#16211F', border: '1px solid #2A332F' }}>
-      <button className="w-full flex items-center justify-between px-4 py-3 text-left"
+    <div className={`hero-trait-card rounded-xl overflow-hidden${open ? ' is-open' : ''}`} style={{ background: '#16211F', border: '1px solid #2A332F' }}>
+      <button className="hero-trait-card-toggle w-full flex items-center justify-between px-4 py-3 text-left"
         onClick={() => setOpen(o => !o)}>
         <div className="flex items-center gap-2">
           {icon}
@@ -636,7 +728,7 @@ function Accordion({ title, icon, children, defaultOpen = false }) {
         </div>
         {open ? <ChevronDown size={16} style={{ color: '#F59E0B' }} /> : <ChevronRight size={16} style={{ color: '#6B6557' }} />}
       </button>
-      {open && <div className="px-4 pb-4">{children}</div>}
+      {open && <div className="hero-trait-card-body px-4 pb-4">{children}</div>}
     </div>
   );
 }
@@ -661,8 +753,17 @@ function RasgosTab({ character }) {
     return <p className="text-center py-12 italic" style={{ color: '#6B6557' }}>Sin información disponible</p>;
   }
 
+  const featureCount = classList.reduce((total, cls) => total + featuresForClass(cls).length, 0);
+
   return (
-    <div className="space-y-3">
+    <div className="hero-traits-view">
+      <div className="hero-traits-summary">
+        <div><Dna size={18} /><span><strong>{raceData?.name || character.race || 'Origen'}</strong><small>Linaje</small></span></div>
+        <div><Shield size={18} /><span><strong>{classList.map(cls => cls.name).filter(Boolean).join(' / ') || character.class || 'Clase'}</strong><small>Formacion</small></span></div>
+        <div><Zap size={18} /><span><strong>{featureCount + customFeatures.length}</strong><small>Rasgos disponibles</small></span></div>
+      </div>
+
+      <div className="hero-traits-grid">
       {/* RASGOS RACIALES */}
       {raceData && (
         <Accordion title={`Rasgos Raciales · ${raceData.name}`} icon={<Dna size={15} style={{ color: '#F59E0B' }} />}>
@@ -758,6 +859,7 @@ function RasgosTab({ character }) {
           <p className="text-sm leading-relaxed" style={{ color: '#A89F8E', whiteSpace: 'pre-line' }}>{notesText}</p>
         </Accordion>
       )}
+      </div>
     </div>
   );
 }
@@ -916,30 +1018,108 @@ function CharacterHeader({ character }) {
   );
 }
 
+function DesktopHeroHeader({ character }) {
+  const hp = character.hp ?? 0;
+  const maxHp = character.maxHp ?? 1;
+  const hpPct = Math.min(100, Math.max(0, (hp / maxHp) * 100));
+  const hpCol = hpColor(hp, maxHp);
+  const initiative = character.initiative ?? getModifier(character.stats?.dex || 10);
+
+  return (
+    <header className="hero-command-header">
+      <div className="hero-command-identity">
+        <div className="hero-command-portrait">
+          {character.image_url
+            ? <img src={character.image_url} alt={character.name} />
+            : <User size={28} strokeWidth={1.4} />}
+        </div>
+        <div className="hero-command-copy">
+          <span className="hero-eyebrow">Personaje activo · Nivel {character.level || 1}</span>
+          <h1>{character.name}</h1>
+          <p>{[character.race, character.class].filter(Boolean).join(' · ') || 'Aventurero'}</p>
+        </div>
+      </div>
+
+      <div className="hero-command-vitals">
+        <div className="hero-command-hp">
+          <div className="hero-command-hp-label">
+            <span><Heart size={14} /> Vitalidad</span>
+            <strong style={{ color: hpCol }}>{hp}<small>/{maxHp}</small></strong>
+          </div>
+          <div className="hero-command-hp-track">
+            <span style={{ width: `${hpPct}%`, background: hpCol }} />
+          </div>
+        </div>
+        <div className="hero-command-stat"><Shield size={16} /><strong>{character.ac ?? 10}</strong><span>Defensa</span></div>
+        <div className="hero-command-stat"><Zap size={16} /><strong>{sign(initiative)}</strong><span>Iniciativa</span></div>
+        <div className="hero-command-stat"><Coins size={16} /><strong>{(character.gold ?? 0).toLocaleString('es')}</strong><span>Oro</span></div>
+      </div>
+    </header>
+  );
+}
+
 function TabBar({ active, setActive }) {
   return (
-    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+    <div className="hero-tab-list no-scrollbar">
       {TABS.map(({ id, label, Icon }) => (
         <button key={id} onClick={() => setActive(id)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider whitespace-nowrap"
-          style={active === id
-            ? { background: '#16211F', border: '1px solid #8A6A3B', color: '#C8A36A' }
-            : { background: '#1E2A28', border: '1px solid #2A332F', color: '#6B6557' }}>
-          <Icon size={13} />{label}
+          className={`hero-tab-button ${active === id ? 'is-active' : ''}`}>
+          <Icon size={16} /><span>{label}</span>
         </button>
       ))}
     </div>
   );
 }
 
+function DesktopSectionIntro({ tab, character }) {
+  const inventoryCount = character.inventory?.length || 0;
+  const preparedCount = character.spells_prepared?.length || 0;
+  const section = {
+    inventory: {
+      eyebrow: 'Arsenal personal',
+      title: 'Equipo e inventario',
+      description: 'Gestiona tu carga, defensa, armas y apariencia desde una sola mesa de trabajo.',
+      metric: `${inventoryCount} objetos`,
+      Icon: Backpack,
+    },
+    social: {
+      eyebrow: 'Identidad del aventurero',
+      title: 'Rasgos y competencias',
+      description: 'Consulta capacidades de raza, clase y talentos sin perder el contexto de tu personaje.',
+      metric: `Nivel ${character.level || 1}`,
+      Icon: Scroll,
+    },
+    magic: {
+      eyebrow: 'Recursos arcanos',
+      title: 'Grimorio y preparación',
+      description: 'Controla espacios, hechizos conocidos y preparación para la siguiente escena.',
+      metric: `${preparedCount} preparados`,
+      Icon: Sparkles,
+    },
+  }[tab];
+
+  if (!section) return null;
+  const { Icon } = section;
+  return (
+    <header className="hero-view-intro">
+      <div className="hero-view-intro-icon"><Icon size={20} /></div>
+      <div className="hero-view-intro-copy">
+        <span className="hero-eyebrow">{section.eyebrow}</span>
+        <h2>{section.title}</h2>
+        <p>{section.description}</p>
+      </div>
+      <span className="hero-view-intro-metric">{section.metric}</span>
+    </header>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────
-export default function CharacterSheet({ character }) {
+export default function CharacterSheet({ character, embedded = false }) {
   const [activeTab, setActiveTab] = useState('stats');
   const [rollTarget, setRollTarget] = useState(null);
   if (!character) return null;
-  const isDesktopStats = activeTab === 'stats';
 
-  const TabContent = ({ tab }) => {
+  const renderTabContent = (tab) => {
     if (tab === 'stats')     return <StatsOverviewTab character={character} onRoll={setRollTarget} />;
     if (tab === 'inventory') return <InventorySection character={character} />;
     if (tab === 'social')    return <RasgosTab character={character} />;
@@ -950,29 +1130,23 @@ export default function CharacterSheet({ character }) {
   return (
     <>
       {/* ── DESKTOP ─────────────────────────────────────────────── */}
-      <div className="hidden md:block" style={{ minHeight: '100vh', background: '#0F1518' }}>
-        {isDesktopStats ? (
-          <div className="p-6">
-            <div className="max-w-6xl mx-auto">
-              <div className="mb-5"><TabBar active={activeTab} setActive={setActiveTab} /></div>
-              <DesktopStatsTab character={character} onRoll={setRollTarget} />
+      <div className={`hero-workspace hidden md:block${embedded ? ' is-embedded' : ''}`}>
+        <div className="hero-workspace-inner">
+          <DesktopHeroHeader character={character} />
+          <nav className="hero-workspace-nav" aria-label="Secciones del personaje">
+            <TabBar active={activeTab} setActive={setActiveTab} />
+            <div className="hero-workspace-context">
+              <span className="hero-context-dot" />
+              Sincronizado con la partida
             </div>
+          </nav>
+          <div className={`hero-workspace-content hero-workspace-content--${activeTab}`}>
+            <DesktopSectionIntro tab={activeTab} character={character} />
+            {activeTab === 'stats'
+              ? <DesktopStatsTab character={character} onRoll={setRollTarget} />
+              : renderTabContent(activeTab)}
           </div>
-        ) : (
-          <div className="flex gap-0" style={{ minHeight: '100vh', alignItems: 'flex-start' }}>
-            <div className="shrink-0 p-5 space-y-5" style={{
-              width: 320, position: 'sticky', top: 0, maxHeight: '100vh', overflowY: 'auto',
-              background: '#0D1A18', borderRight: '1px solid #2A332F',
-            }}>
-              <CharacterHeader character={character} />
-              <StatsSidebar character={character} onRoll={setRollTarget} />
-            </div>
-            <div className="flex-1 min-w-0 p-6">
-              <div className="mb-5"><TabBar active={activeTab} setActive={setActiveTab} /></div>
-              <TabContent tab={activeTab} />
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* ── MOBILE ──────────────────────────────────────────────── */}
@@ -986,7 +1160,7 @@ export default function CharacterSheet({ character }) {
         <div className="px-4 py-4 pb-8">
           {activeTab === 'stats'
             ? <MobileStatsTab character={character} onRoll={setRollTarget} />
-            : <TabContent tab={activeTab} />}
+            : renderTabContent(activeTab)}
         </div>
       </div>
 

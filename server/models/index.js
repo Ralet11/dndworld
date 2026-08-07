@@ -19,6 +19,11 @@ const Spell = require('./Spell');
 const Blueprint = require('./Blueprint');
 const Class = require('./Class');
 const Race = require('./Race');
+const GameSession = require('./GameSession');
+const GameParticipant = require('./GameParticipant');
+const GameToken = require('./GameToken');
+const GameAsset = require('./GameAsset');
+const NpcAction = require('./NpcAction');
 
 // Character Relationships
 Character.belongsTo(Class, { foreignKey: 'class_slug', targetKey: 'slug', as: 'classData' });
@@ -29,6 +34,9 @@ AbilityScore.belongsTo(Character, { foreignKey: 'character_id' });
 
 Character.hasMany(Skill, { foreignKey: 'character_id', as: 'skills' });
 Skill.belongsTo(Character, { foreignKey: 'character_id' });
+
+Character.hasMany(NpcAction, { foreignKey: 'character_id', as: 'npcActions', onDelete: 'CASCADE' });
+NpcAction.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
 
 Character.hasMany(Quest, { foreignKey: 'character_id', as: 'quests' });
 Quest.belongsTo(Character, { foreignKey: 'character_id' });
@@ -81,6 +89,20 @@ UserPoiData.belongsTo(User, { foreignKey: 'userId' });
 PointOfInterest.hasMany(UserPoiData, { foreignKey: 'poiId', as: 'userData' });
 UserPoiData.belongsTo(PointOfInterest, { foreignKey: 'poiId' });
 
+// Live game session relationships
+GameSession.belongsTo(User, { foreignKey: 'dm_user_id', as: 'dm' });
+User.hasMany(GameSession, { foreignKey: 'dm_user_id', as: 'hostedGameSessions' });
+GameSession.hasMany(GameParticipant, { foreignKey: 'session_id', as: 'participants', onDelete: 'CASCADE' });
+GameParticipant.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+GameParticipant.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+GameParticipant.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
+GameSession.hasMany(GameToken, { foreignKey: 'session_id', as: 'tokens', onDelete: 'CASCADE' });
+GameToken.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+GameToken.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
+GameToken.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
+GameSession.hasMany(GameAsset, { foreignKey: 'session_id', as: 'assets', onDelete: 'CASCADE' });
+GameAsset.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+
 module.exports = {
     Character,
     AbilityScore,
@@ -101,5 +123,10 @@ module.exports = {
     Class,
     Race,
     PointOfInterest,
-    UserPoiData
+    UserPoiData,
+    GameSession,
+    GameParticipant,
+    GameToken,
+    GameAsset,
+    NpcAction
 };

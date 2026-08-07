@@ -2,16 +2,19 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
-const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell } = require('./models');
+const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction } = require('./models');
 const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
 const { renderHero, buildSignature } = require('./utils/heroRenderer');
 const { getAssistantContext, executeAssistantCommand } = require('./utils/dmAssistant');
+const { registerGameSessionSocket } = require('./sockets/gameSessionSocket');
+const { resolveCharacterImage } = require('./utils/npcImages');
 
 const app = express();
 const server = http.createServer(app);
@@ -50,6 +53,7 @@ app.get('/api/auth/me', verifyToken, authController.getMe);
 app.use('/api/pois', require('./routes/poiRoutes'));
 
 // app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Not needed for Cloudinary
+app.use('/npc-images', express.static(path.join(__dirname, 'data', 'npc-images')));
 // Serve Static Frontend (Vite Build)
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
@@ -133,6 +137,16 @@ app.post('/api/ai/narrate', verifyToken, async (req, res) => {
         console.error('AI Error:', err);
         res.status(500).json({ message: "Failed to consult the Oracle." });
     }
+});
+
+io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error('AUTH_REQUIRED'));
+    jwt.verify(token, process.env.JWT_SECRET || 'dndworld_secret', (error, decoded) => {
+        if (error) return next(new Error('AUTH_INVALID'));
+        socket.user = decoded;
+        next();
+    });
 });
 
 app.get('/api/dm-assistant/context', verifyToken, isDm, async (req, res) => {
@@ -344,8 +358,38 @@ const getCalculatedPartyStats = async () => {
     });
 };
 
+const getNpcsForClient = async () => {
+    const npcs = await Character.findAll({
+        where: { is_npc: true },
+        include: [
+            { model: AbilityScore, as: 'abilityScores' },
+            { model: Skill, as: 'skills' },
+            { model: Item, as: 'items' },
+            { model: NpcAction, as: 'npcActions' },
+        ],
+    });
+
+    return npcs.map(npc => {
+        const payload = npc.toJSON();
+        return { ...payload, image_url: resolveCharacterImage(payload) };
+    });
+};
+
 io.on('connection', async (socket) => {
     console.log('User connected:', socket.id);
+    registerGameSessionSocket(io, socket);
+
+    // The live table needs this catalog during its initial socket handshake.
+    socket.on('get-all-npcs', async (ack) => {
+        try {
+            const npcs = await getNpcsForClient();
+            socket.emit('all-npcs', npcs);
+            if (typeof ack === 'function') ack({ ok: true, npcs });
+        } catch (error) {
+            console.error('Get NPCs error:', error);
+            if (typeof ack === 'function') ack({ ok: false, message: 'No se pudieron cargar los NPCs.' });
+        }
+    });
 
     // --- TIMELINE / CHAT ---
     socket.on('get-timeline', async (sceneId) => {
@@ -1053,17 +1097,6 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('get-all-npcs', async () => {
-        const npcs = await Character.findAll({
-            where: { is_npc: true },
-            include: [
-                { model: AbilityScore, as: 'abilityScores' },
-                { model: Item, as: 'items' },
-            ],
-        });
-        socket.emit('all-npcs', npcs);
-    });
-
     socket.on('create-npc', async (npcData) => {
         try {
             await Character.create({
@@ -1071,7 +1104,7 @@ io.on('connection', async (socket) => {
                 is_npc: true,
                 hp_current: npcData.hp_max, // Default full HP
             });
-            const npcs = await Character.findAll({ where: { is_npc: true } });
+            const npcs = await getNpcsForClient();
             io.emit('all-npcs', npcs); // Broadcast to DMs (or just emit back to socket?)
         } catch (e) {
             console.error('Create NPC error:', e);
@@ -1170,7 +1203,7 @@ io.on('connection', async (socket) => {
                 await char.save();
 
                 if (char.is_npc) {
-                    const npcs = await Character.findAll({ where: { is_npc: true } });
+                    const npcs = await getNpcsForClient();
                     io.emit('all-npcs', npcs);
                 } else {
                     const updatedStats = await getCalculatedPartyStats();
@@ -1251,7 +1284,7 @@ io.on('connection', async (socket) => {
 
             // Broadcast updates
             if (char.is_npc) {
-                const npcs = await Character.findAll({ where: { is_npc: true } });
+                const npcs = await getNpcsForClient();
                 io.emit('all-npcs', npcs);
             }
 

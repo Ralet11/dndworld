@@ -1,0 +1,110 @@
+{
+  "sourceImage": "C:\\Users\\ramir\\AppData\\Local\\Temp\\claude\\c--Users-ramir-OneDrive-Escritorio-Proyectos-dndworld\\1c7843ad-7d0c-4efe-9a8e-04d187c0b334\\scratchpad\\img2threejs-test\\espada-corta\\reference_padded.png",
+  "zonesDir": "C:\\Users\\ramir\\AppData\\Local\\Temp\\claude\\c--Users-ramir-OneDrive-Escritorio-Proyectos-dndworld\\1c7843ad-7d0c-4efe-9a8e-04d187c0b334\\scratchpad\\img2threejs-test\\espada-corta\\detail-inventory",
+  "detailInventory": {
+    "scanMethod": "grid-3x3",
+    "targetMinDetails": 6,
+    "details": [
+      {
+        "id": "zone-r0c0",
+        "kind": "background-padding",
+        "description": "Solid white padding margin added to pass the reference-admission gate; no object content. Not a real reference feature.",
+        "region": { "x": 0.0, "y": 0.0, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "n/a",
+        "affects": "none",
+        "mapsTo": { "type": "none", "ref": "" },
+        "evidenceRef": "detail-inventory/zone-r0c0.png",
+        "confidence": 1.0
+      },
+      {
+        "id": "zone-r0c1",
+        "kind": "silhouette-feature",
+        "description": "Blade tip: symmetric double-edged point converging to a single apex; visible centerline valley (fuller) splitting the two facets down to the tip.",
+        "region": { "x": 0.3333, "y": 0.0, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "macro",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "blade" },
+        "evidenceRef": "detail-inventory/zone-r0c1.png",
+        "confidence": 0.9
+      },
+      {
+        "id": "zone-r0c2",
+        "kind": "background-padding",
+        "description": "Padding margin + edge of the original warm vignette background. No object content.",
+        "region": { "x": 0.6667, "y": 0.0, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "n/a",
+        "affects": "none",
+        "mapsTo": { "type": "none", "ref": "" },
+        "evidenceRef": "detail-inventory/zone-r0c2.png",
+        "confidence": 1.0
+      },
+      {
+        "id": "zone-r1c0",
+        "kind": "background-padding",
+        "description": "Padding margin + original vignette background, no object content (guard tips do not extend this far laterally).",
+        "region": { "x": 0.0, "y": 0.3333, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "n/a",
+        "affects": "none",
+        "mapsTo": { "type": "none", "ref": "" },
+        "evidenceRef": "detail-inventory/zone-r1c0.png",
+        "confidence": 1.0
+      },
+      {
+        "id": "zone-r1c1",
+        "kind": "structural-feature",
+        "description": "Blade shoulder into crescent guard: guard has swept, downturned, tapered tips (not a straight crossbar); blade centerline groove continues down to the guard's shoulder. Guard sits flush across the grip, reads as a distinct part butted against the blade root.",
+        "region": { "x": 0.3333, "y": 0.3333, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "component.localFeatures", "ref": "guard" },
+        "evidenceRef": "detail-inventory/zone-r1c1.png",
+        "confidence": 0.85
+      },
+      {
+        "id": "zone-r1c2",
+        "kind": "background-padding",
+        "description": "Padding margin + original vignette background, no object content.",
+        "region": { "x": 0.6667, "y": 0.3333, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "n/a",
+        "affects": "none",
+        "mapsTo": { "type": "none", "ref": "" },
+        "evidenceRef": "detail-inventory/zone-r1c2.png",
+        "confidence": 1.0
+      },
+      {
+        "id": "zone-r2c0",
+        "kind": "background-padding",
+        "description": "Padding margin, no object content.",
+        "region": { "x": 0.0, "y": 0.6667, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "n/a",
+        "affects": "none",
+        "mapsTo": { "type": "none", "ref": "" },
+        "evidenceRef": "detail-inventory/zone-r2c0.png",
+        "confidence": 1.0
+      },
+      {
+        "id": "zone-r2c1",
+        "kind": "repetition-system",
+        "description": "Grip shows 2-3 evenly spaced wrap-cord ridges below the guard, transitioning into a bulbous acorn/teardrop pommel capped with a raised metal rim/band at its base (not a simple truncated cone).",
+        "region": { "x": 0.3333, "y": 0.6667, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "meso",
+        "affects": "geometry",
+        "mapsTo": { "type": "repetitionSystems", "ref": "grip-wrap" },
+        "evidenceRef": "detail-inventory/zone-r2c1.png",
+        "confidence": 0.75
+      },
+      {
+        "id": "zone-r2c2",
+        "kind": "background-padding",
+        "description": "Padding margin, no object content.",
+        "region": { "x": 0.6667, "y": 0.6667, "width": 0.3333, "height": 0.3333, "units": "normalized" },
+        "scale": "n/a",
+        "affects": "none",
+        "mapsTo": { "type": "none", "ref": "" },
+        "evidenceRef": "detail-inventory/zone-r2c2.png",
+        "confidence": 1.0
+      }
+    ]
+  },
+  "authoringInstruction": "Open each zone crop under zonesDir and replace every detail stub's kind, description, scale, affects, mapsTo, and confidence with what is actually observed. Add more detail entries per zone if a single zone contains multiple distinct marks; do not leave stubs unfilled or unlinked (mapsTo must reference a real component.localFeatures or material.localOverrides entry)."
+}

@@ -56,6 +56,7 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+.claude/settings.local.json
 *.swp
 
 # --- Backups locales de repos anidados ---

@@ -1,0 +1,135 @@
+{
+  "generatedAt": "2026-07-23T18:14:42.274Z",
+  "dryRun": true,
+  "overwrite": false,
+  "map": "C:\\Users\\ramir\\OneDrive\\Escritorio\\Proyectos\\dndworld\\server\\data\\npc-image-map.json",
+  "imagesDir": "C:\\Users\\ramir\\OneDrive\\Escritorio\\Proyectos\\dndworld\\server\\data\\npc-images",
+  "results": [
+    {
+      "status": "not-npc",
+      "characterId": 6,
+      "name": "Lucario",
+      "file": "albert-obrien.png",
+      "reason": "Character exists but is not marked as NPC."
+    },
+    {
+      "status": "not-npc",
+      "characterId": 7,
+      "name": "Rakion Altarion",
+      "file": "lady-vallet-fortimer.png",
+      "reason": "Character exists but is not marked as NPC."
+    },
+    {
+      "status": "missing-character",
+      "characterId": 8,
+      "name": "Algius Fortimer",
+      "file": "algius-fortimer.png",
+      "reason": "Character not found in database."
+    },
+    {
+      "status": "dry-run",
+      "characterId": 9,
+      "name": "Albert Obrien",
+      "file": "geren-fortimer.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "not-npc",
+      "characterId": 10,
+      "name": "Zik",
+      "file": "shila.png",
+      "reason": "Character exists but is not marked as NPC."
+    },
+    {
+      "status": "dry-run",
+      "characterId": 11,
+      "name": "Lady Valet Fortimer",
+      "file": "guizhio.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 12,
+      "name": "Algius Fortimer",
+      "file": "ebano.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 13,
+      "name": "Geren Fortimer",
+      "file": "pelligrim.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 14,
+      "name": "Shila",
+      "file": "leandro-bonasera.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 15,
+      "name": "Guizhio",
+      "file": "marco-bellucci.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 16,
+      "name": "Ébano",
+      "file": "don-nito-peltre.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 17,
+      "name": "Pelligrim",
+      "file": "leon-darsen.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 18,
+      "name": "Leandro Bonasera",
+      "file": "lady-darsen.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 19,
+      "name": "Marco Bellucci",
+      "file": "salitre.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 20,
+      "name": "Don Nito Peltre",
+      "file": "pereza.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 21,
+      "name": "Leon Darsen",
+      "file": "tiefling-oscuro.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 22,
+      "name": "Lady Darsen",
+      "file": "brujo-andi.png",
+      "action": "would-upload"
+    },
+    {
+      "status": "dry-run",
+      "characterId": 23,
+      "name": "Salitre",
+      "file": "comandante-de-prontera.png",
+      "action": "would-upload"
+    }
+  ]
+}

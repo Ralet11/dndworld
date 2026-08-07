@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>html,body{margin:0;background:#20242c;height:100%;} canvas{display:block;}</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/examples/jsm/environments/RoomEnvironment.js": "https://unpkg.com/three@0.170.0/examples/jsm/environments/RoomEnvironment.js",
+    "three/examples/jsm/postprocessing/EffectComposer.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/EffectComposer.js",
+    "three/examples/jsm/postprocessing/RenderPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/RenderPass.js",
+    "three/examples/jsm/postprocessing/BokehPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/BokehPass.js",
+    "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/UnrealBloomPass.js",
+    "three/examples/jsm/postprocessing/Pass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/Pass.js",
+    "three/examples/jsm/postprocessing/ShaderPass.js": "https://unpkg.com/three@0.170.0/examples/jsm/postprocessing/ShaderPass.js",
+    "three/examples/jsm/shaders/CopyShader.js": "https://unpkg.com/three@0.170.0/examples/jsm/shaders/CopyShader.js",
+    "three/examples/jsm/shaders/LuminosityHighPassShader.js": "https://unpkg.com/three@0.170.0/examples/jsm/shaders/LuminosityHighPassShader.js",
+    "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.170.0/examples/jsm/controls/OrbitControls.js"
+  }
+}
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { createBallestaModel } from './src/createBallestaModel.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(1024, 1024);
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x20242c);
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+
+const key = new THREE.DirectionalLight(0xfff2e0, 1.0);
+key.position.set(1.2, 1.8, 1.5);
+scene.add(key);
+const fill = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffb066, 0.4);
+rim.position.set(-1.5, 0.5, -1.2);
+scene.add(rim);
+
+let model;
+let bbox, center, radius;
+try {
+  model = createBallestaModel({ qualityPriority: 'balanced', textureSize: 128 });
+  // Evidence-capture workaround only (see espada-corta/render.html for why): SwiftShader
+  // loses its WebGL2 context compiling the full MeshPhysicalMaterial shader graph.
+  model.traverse((obj) => {
+    if (obj.isMesh && obj.material && obj.material.type !== 'MeshStandardMaterial') {
+      const src = obj.material;
+      obj.material = new THREE.MeshStandardMaterial({
+        color: src.color ? src.color.clone() : 0x888888,
+        roughness: typeof src.roughness === 'number' ? src.roughness : 0.6,
+        metalness: typeof src.metalness === 'number' ? src.metalness : 0.2,
+      });
+    }
+  });
+  scene.add(model);
+  bbox = new THREE.Box3().setFromObject(model);
+  center = bbox.getCenter(new THREE.Vector3());
+  radius = bbox.getSize(new THREE.Vector3()).length() * 0.5 || 1;
+  let meshCount = 0;
+  const meshInfo = [];
+  model.traverse((obj) => {
+    if (obj.isMesh) {
+      meshCount += 1;
+      meshInfo.push({ name: obj.name, vertexCount: obj.geometry?.attributes?.position?.count ?? 0 });
+    }
+  });
+  window.__modelInfo = {
+    ok: true,
+    bboxMin: bbox.min.toArray(),
+    bboxMax: bbox.max.toArray(),
+    sockets: Object.keys(model.userData.sculptRuntime?.sockets ?? {}),
+    nodeCount: Object.keys(model.userData.sculptRuntime?.nodes ?? {}).length,
+    meshCount,
+    meshInfo,
+  };
+} catch (err) {
+  window.__modelInfo = { ok: false, error: String(err && err.stack || err) };
+  center = new THREE.Vector3(0, 0, 0);
+  radius = 1;
+}
+
+function fitDistance(size, fovDeg, fill = 0.82) {
+  const vFov = (fovDeg * Math.PI) / 180;
+  return (Math.max(size.x, size.y) / 2 / Math.tan(vFov / 2)) / fill;
+}
+
+function setView(index) {
+  const size = bbox ? bbox.getSize(new THREE.Vector3()) : new THREE.Vector3(1, 1, 1);
+  const dist = fitDistance(size, camera.fov);
+  if (index === 1) {
+    // side view: look down the X axis instead of Z
+    camera.position.set(center.x + dist, center.y, center.z);
+  } else if (index === 2) {
+    // three-quarter
+    camera.position.set(center.x + dist * 0.7, center.y + dist * 0.2, center.z + dist * 0.7);
+  } else {
+    camera.position.set(center.x, center.y, center.z + dist);
+  }
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+}
+window.__setView = setView;
+window.__views = ['front', 'side', 'three-quarter'];
+setView(0);
+
+// Mouse-drag orbit so a real browser can freely inspect the model (headless-render
+// camera switches in this file have been unreliable all session -- a human with a
+// mouse is a more robust way to check other angles than more scripted view presets).
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(center);
+controls.enableDamping = true;
+// A close/steep angle with a 40deg perspective camera exaggerates foreshortening
+// enough to make a limb look like it shoots off wildly -- cap how close orbiting can
+// get so that doesn't happen.
+const startDist = camera.position.distanceTo(center);
+controls.minDistance = startDist * 0.6;
+controls.maxDistance = startDist * 2.5;
+function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  renderer.render(scene, camera);
+}
+loop();
+
+window.__ready = true;
+</script>
+</body>
+</html>

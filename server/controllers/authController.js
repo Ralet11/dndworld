@@ -58,7 +58,12 @@ exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const user = await User.findOne({ where: { email } });
+        if (!email || !password) {
+            return res.status(400).send({ message: "Email and password are required." });
+        }
+
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const user = await User.findOne({ where: { email: normalizedEmail } });
         if (!user) {
             return res.status(404).send({ message: "User not found." });
         }

@@ -688,7 +688,7 @@ function EntryBadge({ entry }) {
 
 function DynamicEntry({ entry }) {
   return (
-    <div style={styles.dynamicCard}>
+    <div className="combat-action-entry" style={styles.dynamicCard}>
       <div style={styles.dynamicHeader}>
         <p style={styles.dynamicTitle}>{entry.name}</p>
         {entry.resource ? <span style={styles.resourceBadge}>{entry.resource}</span> : null}
@@ -702,7 +702,7 @@ function DynamicEntry({ entry }) {
 function WeaponCard({ card }) {
   const featured = card.slot === 'primary_weapon' || card.slot === 'unarmed';
   return (
-    <div style={{
+    <div className={`combat-weapon-card${featured ? ' is-featured' : ''}`} style={{
       ...styles.weaponCard,
       ...(featured ? styles.weaponCardFeatured : null),
     }}>
@@ -753,7 +753,7 @@ function EconomySection({ icon, title, items, empty, tone = 'passive', featured 
   const palette = SECTION_TONES[tone] || SECTION_TONES.passive;
 
   return (
-    <div style={{
+    <div className={`combat-economy-card combat-economy-card--${tone}${featured ? ' is-featured' : ''}`} style={{
       ...styles.sectionCard,
       borderColor: palette.edge,
       background: `linear-gradient(180deg, ${palette.glow} 0%, rgba(22,33,31,0.96) 42%, #16211F 100%)`,
@@ -783,7 +783,7 @@ function EconomySection({ icon, title, items, empty, tone = 'passive', featured 
   );
 }
 
-export default function ActionCheatSheet({ character, compact = false }) {
+export default function ActionCheatSheet({ character, compact = false, showOverview = true }) {
   const attackCards = useMemo(() => buildAttackCards(character), [character]);
   const attacksPerAction = useMemo(() => 1 + countExtraAttacks(character), [character]);
   const dynamicSections = useMemo(() => buildDynamicSections(character), [character]);
@@ -808,9 +808,9 @@ export default function ActionCheatSheet({ character, compact = false }) {
   const supportGridStyle = compact ? { ...styles.supportGrid, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 } : styles.supportGrid;
 
   return (
-    <div style={containerStyle}>
-      <div style={styles.shell}>
-        <div style={heroPanelStyle}>
+    <div className={`combat-cheatsheet${compact ? ' is-compact' : ''}`} style={containerStyle}>
+      <div className="combat-cheatsheet-shell" style={styles.shell}>
+        {showOverview ? <div style={heroPanelStyle}>
           <div style={styles.titleRow}>
             <p className="label-caps flex items-center gap-1.5" style={{ color: '#C8A36A' }}>
               <Sword size={11} style={{ color: '#C8A36A' }} />
@@ -871,9 +871,9 @@ export default function ActionCheatSheet({ character, compact = false }) {
               {reactions.length ? `${reactions.length} reacciones` : 'reaccion base'}
             </span>
           </div>
-        </div>
+        </div> : null}
 
-        <div style={attackSectionStyle}>
+        <div className="combat-attacks" style={attackSectionStyle}>
           <div style={styles.sectionHeader}>
             <div style={styles.sectionTitleWrap}>
               <span style={{ ...styles.sectionIconTile, color: '#F59E0B', background: 'rgba(245,158,11,0.12)' }}>
@@ -886,12 +886,12 @@ export default function ActionCheatSheet({ character, compact = false }) {
             </div>
             <span style={{ ...styles.sectionCount, color: '#F59E0B', borderColor: 'rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.12)' }}>{attackCards.length}</span>
           </div>
-          <div style={weaponGridStyle}>
+          <div className="combat-weapon-grid" style={weaponGridStyle}>
             {attackCards.map((card) => <WeaponCard key={card.id} card={card} />)}
           </div>
         </div>
 
-        <div style={economyGridStyle}>
+        <div className="combat-economy-grid" style={economyGridStyle}>
           <EconomySection
             icon={<Sword size={14} style={{ color: '#F59E0B' }} />}
             title="Acciones en tu turno"
@@ -919,7 +919,7 @@ export default function ActionCheatSheet({ character, compact = false }) {
         </div>
 
         {hasSupportSections ? (
-          <div style={supportGridStyle}>
+          <div className="combat-support-grid" style={supportGridStyle}>
             <EconomySection
               icon={<Zap size={14} style={{ color: '#8B5CF6' }} />}
               title="Disparadores"

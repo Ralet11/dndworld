@@ -1,113 +1,487 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Search, ChevronRight, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowLeft,
+  BookMarked,
+  ChevronRight,
+  Heart,
+  Package,
+  Search,
+  Shield,
+  Sparkles,
+  Swords,
+  UserCheck,
+  Users,
+  Wind,
+  X,
+} from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
+import API_URL from '../../config';
+
+const TYPES = {
+  enemigo: { label: 'Enemigos', singular: 'Enemigo', color: '#E05252', Icon: Swords, order: 0 },
+  neutral: { label: 'Neutrales', singular: 'Neutral', color: '#9CA69F', Icon: Users, order: 1 },
+  amigo: { label: 'Amigos', singular: 'Amigo', color: '#65B77B', Icon: Sparkles, order: 2 },
+  companero: { label: 'Compañeros', singular: 'Compañero', color: '#E5A948', Icon: UserCheck, order: 3 },
+};
+
+const ABILITIES = [
+  ['FUE', 'STR'], ['DES', 'DEX'], ['CON', 'CON'],
+  ['INT', 'INT'], ['SAB', 'WIS'], ['CAR', 'CHA'],
+];
+
+function normalizeType(value) {
+  const type = String(value || 'neutral').toLowerCase();
+  if (type.startsWith('compa')) return 'companero';
+  return TYPES[type] ? type : 'neutral';
+}
+
+function creatureSubtitle(creature) {
+  return [creature?.race, creature?.class].filter(Boolean).join(' · ') || 'Criatura desconocida';
+}
+
+function scoreValue(scores, ability) {
+  const score = (scores || []).find(item => item.ability === ability);
+  return (score?.base_value ?? 10) + (score?.bonus_value ?? 0);
+}
+
+function modifier(value) {
+  const result = Math.floor((value - 10) / 2);
+  return result >= 0 ? `+${result}` : String(result);
+}
+
+function resolveImageUrl(value) {
+  if (!value || /^(?:https?:|data:|blob:)/i.test(value)) return value;
+  return `${API_URL}${value.startsWith('/') ? value : `/${value}`}`;
+}
 
 export default function BestiaryView({ onBack }) {
   const { socket } = useSocket();
+  const { user } = useAuth();
   const [creatures, setCreatures] = useState([]);
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(null);
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [selectedId, setSelectedId] = useState(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [myCharacterId, setMyCharacterId] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) return undefined;
+
+    const handleAllNpcs = data => {
+      setCreatures(Array.isArray(data) ? data : []);
+      setLoading(false);
+    };
+
+    socket.on('all-npcs', handleAllNpcs);
     socket.emit('get-all-npcs');
-    const handler = (data) => { setCreatures(data); setLoading(false); };
-    socket.on('all-npcs', handler);
-    return () => socket.off('all-npcs', handler);
+    return () => socket.off('all-npcs', handleAllNpcs);
   }, [socket]);
 
-  const filtered = creatures.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    if (!socket || !user) return undefined;
+
+    const handleParty = players => {
+      const character = (players || []).find(player => player.UserId === user.id && !player.is_npc);
+      setMyCharacterId(character?.id ?? null);
+    };
+
+    socket.on('players-data', handleParty);
+    socket.on('stats-updated', handleParty);
+    socket.emit('get-players');
+    return () => {
+      socket.off('players-data', handleParty);
+      socket.off('stats-updated', handleParty);
+    };
+  }, [socket, user]);
+
+  useEffect(() => {
+    if (!socket || !myCharacterId) return undefined;
+
+    const mergeOwnedNpcs = ownedNpcs => {
+      setCreatures(current => current.map(creature => {
+        const update = (ownedNpcs || []).find(npc => npc.id === creature.id);
+        return update ? { ...creature, ...update } : creature;
+      }));
+      setTogglingId(null);
+    };
+
+    socket.on('my-npcs', mergeOwnedNpcs);
+    socket.emit('get-my-npcs', myCharacterId);
+    return () => socket.off('my-npcs', mergeOwnedNpcs);
+  }, [socket, myCharacterId]);
+
+  const knownCreatures = useMemo(
+    () => creatures.filter(creature => creature.is_known !== false),
+    [creatures],
   );
 
+  const searchedCreatures = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('es');
+    if (!query) return knownCreatures;
+    return knownCreatures.filter(creature => (
+      [creature.name, creature.race, creature.class, creature.origin]
+        .filter(Boolean)
+        .some(value => String(value).toLocaleLowerCase('es').includes(query))
+    ));
+  }, [knownCreatures, search]);
+
+  const counts = useMemo(() => searchedCreatures.reduce((result, creature) => {
+    const type = normalizeType(creature.npc_type);
+    result[type] += 1;
+    return result;
+  }, { enemigo: 0, neutral: 0, amigo: 0, companero: 0 }), [searchedCreatures]);
+
+  const filteredCreatures = useMemo(() => (
+    typeFilter === 'all'
+      ? searchedCreatures
+      : searchedCreatures.filter(creature => normalizeType(creature.npc_type) === typeFilter)
+  ), [searchedCreatures, typeFilter]);
+
+  const sections = useMemo(() => Object.entries(TYPES)
+    .sort(([, a], [, b]) => a.order - b.order)
+    .map(([type, config]) => ({
+      type,
+      config,
+      creatures: filteredCreatures.filter(creature => normalizeType(creature.npc_type) === type),
+    }))
+    .filter(section => section.creatures.length > 0), [filteredCreatures]);
+
+  const selected = filteredCreatures.find(creature => creature.id === selectedId)
+    || filteredCreatures[0]
+    || null;
+
+  const selectCreature = creature => {
+    setSelectedId(creature.id);
+    setMobileDetailOpen(true);
+  };
+
+  const toggleCompanion = creature => {
+    if (!socket || !myCharacterId || creature.owner_id !== myCharacterId) return;
+    setTogglingId(creature.id);
+    socket.emit('toggle-npc-active', {
+      characterId: myCharacterId,
+      npcId: creature.is_active ? null : creature.id,
+    });
+  };
+
   return (
-    <div className="min-h-screen" style={{ background: '#0F1518' }}>
-      {/* Header */}
-      <div className="sticky top-0 z-10 p-4" style={{ background: 'rgba(15,21,24,0.96)', borderBottom: '1px solid #2A332F', backdropFilter: 'blur(12px)' }}>
-        <div className="flex items-center gap-3 mb-3">
-          <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: '#1E2A28', border: '1px solid #2A332F', color: '#EDE6D8' }}>
+    <div className="bestiary-shell">
+      <header className="bestiary-header">
+        <div className="bestiary-title-row">
+          <button className="bestiary-icon-button" onClick={onBack} aria-label="Volver a Lore">
             <ArrowLeft size={18} />
           </button>
-          <h1 className="text-xl font-black" style={{ color: '#EDE6D8' }}>Glosario</h1>
-        </div>
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#6B6557' }} />
-          <input
-            className="input-base pl-9"
-            placeholder="Buscar criatura o NPC..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="p-4">
-        {loading && (
-          <div className="flex justify-center py-10">
-            <div className="w-8 h-8 border-2 border-amber rounded-full animate-spin" style={{ borderTopColor: 'transparent' }} />
+          <div className="bestiary-mark"><BookMarked size={22} /></div>
+          <div>
+            <span className="bestiary-eyebrow">Archivo del aventurero</span>
+            <h1>Personas y criaturas</h1>
           </div>
-        )}
-
-        {!loading && filtered.length === 0 && (
-          <p className="text-center py-10" style={{ color: '#6B6557' }}>
-            {search ? 'No se encontraron resultados.' : 'El glosario está vacío.'}
-          </p>
-        )}
-
-        <div className="flex flex-col gap-2">
-          {filtered.map(creature => (
-            <button key={creature.id} onClick={() => setSelected(creature)}
-              className="panel p-3 flex items-center gap-3 w-full text-left hover:border-bronze-dark transition-colors">
-              <div className="w-10 h-10 rounded-full overflow-hidden shrink-0"
-                style={{ border: '1px solid #2A332F', background: '#1E2A28' }}>
-                <img
-                  src={creature.image_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${creature.name}`}
-                  alt={creature.name} className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold truncate" style={{ color: '#EDE6D8' }}>{creature.name}</p>
-                <p className="text-xs" style={{ color: '#6B6557' }}>
-                  {creature.race} — {creature.class} · PG {creature.hp_max}
-                </p>
-              </div>
-              <ChevronRight size={16} style={{ color: '#6B6557' }} />
-            </button>
-          ))}
         </div>
+        <div className="bestiary-discovery-count">
+          <strong>{knownCreatures.length}</strong>
+          <span>encuentros registrados</span>
+        </div>
+      </header>
+
+      <div className="bestiary-workspace">
+        <aside className="bestiary-filters" aria-label="Filtros del glosario">
+          <label className="bestiary-search">
+            <Search size={17} />
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Nombre, raza, clase o lugar..."
+            />
+            {search && (
+              <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda"><X size={14} /></button>
+            )}
+          </label>
+
+          <div className="bestiary-filter-heading">
+            <span>Relación conocida</span>
+            <span>{searchedCreatures.length}</span>
+          </div>
+
+          <nav className="bestiary-filter-list">
+            <FilterButton
+              active={typeFilter === 'all'}
+              label="Todos los registros"
+              count={searchedCreatures.length}
+              color="#C8A36A"
+              Icon={BookMarked}
+              onClick={() => setTypeFilter('all')}
+            />
+            {Object.entries(TYPES).sort(([, a], [, b]) => a.order - b.order).map(([type, config]) => (
+              <FilterButton
+                key={type}
+                active={typeFilter === type}
+                label={config.label}
+                count={counts[type]}
+                color={config.color}
+                Icon={config.Icon}
+                onClick={() => setTypeFilter(type)}
+              />
+            ))}
+          </nav>
+
+          <div className="bestiary-filter-note">
+            <Sparkles size={15} />
+            <p>El archivo crece a medida que exploras el mundo y conoces nuevos personajes.</p>
+          </div>
+        </aside>
+
+        <main className="bestiary-catalog">
+          <div className="bestiary-catalog-heading">
+            <div>
+              <span className="bestiary-eyebrow">Registros disponibles</span>
+              <h2>{typeFilter === 'all' ? 'Todos los encuentros' : TYPES[typeFilter].label}</h2>
+            </div>
+            <span>{filteredCreatures.length} {filteredCreatures.length === 1 ? 'entrada' : 'entradas'}</span>
+          </div>
+
+          {loading && <LoadingState />}
+          {!loading && filteredCreatures.length === 0 && <EmptyState hasSearch={Boolean(search)} />}
+
+          {!loading && sections.map(section => (
+            <section className="bestiary-section" key={section.type}>
+              <div className="bestiary-section-heading" style={{ '--type-color': section.config.color }}>
+                <section.config.Icon size={14} />
+                <h3>{section.config.label}</h3>
+                <span className="bestiary-section-line" />
+                <strong>{section.creatures.length}</strong>
+              </div>
+              <div className="bestiary-card-grid">
+                {section.creatures.map(creature => (
+                  <CreatureCard
+                    key={creature.id}
+                    creature={creature}
+                    selected={selected?.id === creature.id}
+                    onClick={() => selectCreature(creature)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </main>
+
+        <aside className="bestiary-inspector">
+          {selected ? (
+            <CreatureDetail
+              key={selected.id}
+              creature={selected}
+              myCharacterId={myCharacterId}
+              isToggling={togglingId === selected.id}
+              onToggle={() => toggleCompanion(selected)}
+            />
+          ) : <InspectorPlaceholder />}
+        </aside>
       </div>
 
-      {/* Detail Modal */}
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setSelected(null)}>
-          <div className="panel-raised w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-full overflow-hidden" style={{ border: '2px solid #8A6A3B' }}>
-                  <img src={selected.image_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${selected.name}`}
-                    alt={selected.name} className="w-full h-full object-cover" />
-                </div>
-                <div>
-                  <h2 className="font-black text-lg" style={{ color: '#EDE6D8' }}>{selected.name}</h2>
-                  <p className="text-xs" style={{ color: '#A89F8E' }}>{selected.race} — {selected.class}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelected(null)} style={{ color: '#6B6557' }}><X size={18} /></button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[['PG', selected.hp_max],['CA', selected.ac_base],['Nivel', selected.level]].map(([l, v]) => (
-                <div key={l} className="panel p-2 text-center">
-                  <p className="label-caps">{l}</p>
-                  <p className="text-xl font-black mt-0.5" style={{ color: '#EDE6D8' }}>{v || '—'}</p>
-                </div>
-              ))}
-            </div>
+      {mobileDetailOpen && selected && (
+        <div className="bestiary-mobile-overlay" onClick={() => setMobileDetailOpen(false)}>
+          <div className="bestiary-mobile-sheet" onClick={event => event.stopPropagation()}>
+            <button className="bestiary-sheet-close" onClick={() => setMobileDetailOpen(false)} aria-label="Cerrar detalle">
+              <X size={18} />
+            </button>
+            <CreatureDetail
+              key={`mobile-${selected.id}`}
+              creature={selected}
+              myCharacterId={myCharacterId}
+              isToggling={togglingId === selected.id}
+              onToggle={() => toggleCompanion(selected)}
+            />
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FilterButton({ active, label, count, color, Icon, onClick }) {
+  return (
+    <button
+      className={`bestiary-filter-button${active ? ' is-active' : ''}`}
+      style={{ '--type-color': color }}
+      onClick={onClick}
+    >
+      <span className="bestiary-filter-icon"><Icon size={16} /></span>
+      <span>{label}</span>
+      <strong>{count}</strong>
+    </button>
+  );
+}
+
+function CreaturePortrait({ creature, large = false }) {
+  const [failed, setFailed] = useState(false);
+  const type = TYPES[normalizeType(creature.npc_type)];
+  const Icon = type.Icon;
+  const imageUrl = resolveImageUrl(creature.image_url);
+
+  useEffect(() => setFailed(false), [imageUrl]);
+
+  return (
+    <div className={`bestiary-portrait${large ? ' is-large' : ''}`} style={{ '--type-color': type.color }}>
+      {imageUrl && !failed
+        ? <img src={imageUrl} alt={creature.name} onError={() => setFailed(true)} />
+        : <Icon size={large ? 38 : 24} />}
+    </div>
+  );
+}
+
+function CreatureCard({ creature, selected, onClick }) {
+  const type = TYPES[normalizeType(creature.npc_type)];
+  const TypeIcon = type.Icon;
+
+  return (
+    <button
+      className={`bestiary-card${selected ? ' is-selected' : ''}`}
+      style={{ '--type-color': type.color }}
+      onClick={onClick}
+    >
+      <CreaturePortrait creature={creature} />
+      <span className="bestiary-card-copy">
+        <strong>{creature.name}</strong>
+        {creature.origin && <small className="bestiary-origin">{creature.origin}</small>}
+        <small>{creatureSubtitle(creature)}</small>
+      </span>
+      <span className="bestiary-card-meta">
+        {normalizeType(creature.npc_type) === 'companero' && (
+          <span className={creature.is_active ? 'is-active' : ''}>
+            <Heart size={12} /> {creature.hp_current ?? creature.hp_max ?? '—'}
+          </span>
+        )}
+        <TypeIcon size={14} />
+        <ChevronRight size={15} />
+      </span>
+    </button>
+  );
+}
+
+function CreatureDetail({ creature, myCharacterId, isToggling, onToggle }) {
+  const typeKey = normalizeType(creature.npc_type);
+  const type = TYPES[typeKey];
+  const TypeIcon = type.Icon;
+  const isCompanion = typeKey === 'companero';
+  const canToggle = isCompanion && myCharacterId != null && creature.owner_id === myCharacterId;
+  const metrics = [
+    { label: 'Nivel', value: creature.level ?? '—', Icon: Sparkles },
+    { label: 'PG', value: creature.hp_max ?? '—', Icon: Heart },
+    { label: 'CA', value: creature.ac_base ?? '—', Icon: Shield },
+    { label: 'Movimiento', value: creature.speed ? `${creature.speed} ft` : '—', Icon: Wind },
+  ];
+
+  return (
+    <article className="bestiary-detail" style={{ '--type-color': type.color }}>
+      <div className="bestiary-detail-hero">
+        <CreaturePortrait creature={creature} large />
+        <div>
+          <span className="bestiary-type-tag"><TypeIcon size={12} /> {type.singular}</span>
+          <h2>{creature.name}</h2>
+          {creature.origin && <p className="bestiary-origin">{creature.origin}</p>}
+          <p>{creatureSubtitle(creature)}</p>
+        </div>
+      </div>
+
+      {(isCompanion || typeKey === 'enemigo') && (
+        <div className="bestiary-metrics">
+          {metrics.map(({ label, value, Icon }) => (
+            <div key={label}><Icon size={14} /><strong>{value}</strong><span>{label}</span></div>
+          ))}
+        </div>
+      )}
+
+      {isCompanion && <AbilityGrid scores={creature.abilityScores} />}
+
+      {creature.abilities_text && (
+        <DetailSection title={typeKey === 'enemigo' ? 'Acciones conocidas' : 'Habilidades'}>
+          <p className="bestiary-prose">{creature.abilities_text}</p>
+        </DetailSection>
+      )}
+
+      {isCompanion && creature.items?.length > 0 && (
+        <DetailSection title="Equipo">
+          <div className="bestiary-items">
+            {creature.items.map(item => (
+              <div key={item.id || item.name}>
+                <Package size={14} />
+                <span><strong>{item.name}</strong><small>{[item.damage, item.damage_type, item.type].filter(Boolean).join(' · ')}</small></span>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {!creature.abilities_text && (!isCompanion || !creature.items?.length) && (
+        <div className="bestiary-detail-empty">
+          <BookMarked size={18} />
+          <p>Aún no has registrado más información sobre este encuentro.</p>
+        </div>
+      )}
+
+      {canToggle && (
+        <button
+          className={`bestiary-companion-action${creature.is_active ? ' is-active' : ''}`}
+          onClick={onToggle}
+          disabled={isToggling}
+        >
+          <UserCheck size={16} />
+          {isToggling ? 'Actualizando...' : creature.is_active ? 'Enviar al campamento' : 'Unir al grupo'}
+        </button>
+      )}
+    </article>
+  );
+}
+
+function AbilityGrid({ scores }) {
+  return (
+    <DetailSection title="Atributos">
+      <div className="bestiary-abilities">
+        {ABILITIES.map(([label, key]) => {
+          const value = scoreValue(scores, key);
+          return <div key={key}><span>{label}</span><strong>{value}</strong><small>{modifier(value)}</small></div>;
+        })}
+      </div>
+    </DetailSection>
+  );
+}
+
+function DetailSection({ title, children }) {
+  return (
+    <section className="bestiary-detail-section">
+      <div><span>{title}</span><i /></div>
+      {children}
+    </section>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="bestiary-state">
+      <div className="bestiary-loader" />
+      <p>Consultando los archivos...</p>
+    </div>
+  );
+}
+
+function EmptyState({ hasSearch }) {
+  return (
+    <div className="bestiary-state">
+      <BookMarked size={28} />
+      <strong>{hasSearch ? 'Ningún registro coincide' : 'Todavía no hay encuentros'}</strong>
+      <p>{hasSearch ? 'Prueba con otro nombre, raza, clase o lugar.' : 'Explora el mundo para completar tu glosario.'}</p>
+    </div>
+  );
+}
+
+function InspectorPlaceholder() {
+  return (
+    <div className="bestiary-inspector-placeholder">
+      <BookMarked size={30} />
+      <strong>Selecciona un registro</strong>
+      <p>Su historia y sus datos conocidos aparecerán aquí.</p>
     </div>
   );
 }

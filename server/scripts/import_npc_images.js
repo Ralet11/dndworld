@@ -41,6 +41,15 @@ function slugify(value) {
         .replace(/-{2,}/g, '-');
 }
 
+function normalizeName(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
 function ensureFileExists(filePath, label) {
     if (!fs.existsSync(filePath)) {
         throw new Error(`${label} not found: ${filePath}`);
@@ -69,6 +78,11 @@ async function run() {
     await sequelize.authenticate();
     console.log(`Connected to database: ${sequelize.config.database}`);
 
+    const npcCharacters = await Character.findAll({ where: { is_npc: true } });
+    const charactersByName = new Map(
+        npcCharacters.map(character => [normalizeName(character.name), character]),
+    );
+
     const report = {
         generatedAt: new Date().toISOString(),
         dryRun: options.dryRun,
@@ -93,25 +107,14 @@ async function run() {
             continue;
         }
 
-        const character = await Character.findByPk(characterId);
+        const character = charactersByName.get(normalizeName(entry.name));
         if (!character) {
             report.results.push({
                 status: 'missing-character',
                 characterId,
                 name: entry.name ?? null,
                 file: fileName,
-                reason: 'Character not found in database.',
-            });
-            continue;
-        }
-
-        if (!character.is_npc) {
-            report.results.push({
-                status: 'not-npc',
-                characterId,
-                name: character.name,
-                file: fileName,
-                reason: 'Character exists but is not marked as NPC.',
+                reason: 'NPC name from mapping was not found in database.',
             });
             continue;
         }

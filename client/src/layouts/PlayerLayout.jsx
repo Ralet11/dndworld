@@ -1,32 +1,63 @@
-import { useState, useEffect } from 'react';
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { Scroll, Shield, Compass, Flame, Menu, X } from 'lucide-react';
+import { createElement, useEffect, useState } from 'react';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { BookMarked, Compass, Flame, Map, Menu, Scroll, Shield, Swords, X } from 'lucide-react';
 import Chronicles from '../tabs/Chronicles';
 import HeroTab from '../tabs/HeroTab';
 import LoreTab from '../tabs/LoreTab';
 import CampfireTab from '../tabs/CampfireTab';
 import NotificationBanner from '../components/UI/NotificationBanner';
+import GamePlayerPanel from '../components/Game/GamePlayerPanel';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 
-const TABS = [
-  { path: '/chronicles', label: 'Chronicles', Icon: Scroll },
-  { path: '/hero',       label: 'My Hero',    Icon: Shield },
-  { path: '/lore',       label: 'Lore',       Icon: Compass },
-  { path: '/campfire',   label: 'Campfire',   Icon: Flame },
+const MOBILE_TABS = [
+  { path: '/game', label: 'Mesa', Icon: Swords },
+  { path: '/chronicles', label: 'Crónicas', Icon: Scroll },
+  { path: '/hero', label: 'Mi héroe', Icon: Shield },
+  { path: '/lore', label: 'Lore', Icon: Compass },
+  { path: '/campfire', label: 'Fogata', Icon: Flame },
 ];
 
-const SIDEBAR_W = 220;
+const DESKTOP_TABS = [
+  { path: '/game', label: 'Mesa', Icon: Swords },
+  { path: '/chronicles', label: 'Crónicas', Icon: Scroll },
+  { path: '/hero', label: 'Mi héroe', Icon: Shield },
+  { path: '/lore/map', label: 'Atlas', Icon: Map },
+  { path: '/lore/glossary', label: 'Glosario', Icon: BookMarked },
+  { path: '/lore/quests', label: 'Misiones', Icon: Scroll },
+  { path: '/campfire', label: 'Fogata', Icon: Flame },
+];
+
+function RailLink({ path, label, Icon, onClick }) {
+  return (
+    <NavLink to={path} onClick={onClick} className={({ isActive }) => `app-nav-item${isActive ? ' is-active' : ''}`}>
+      {createElement(Icon, { size: 20, strokeWidth: 1.45 })}
+      <span>{label}</span>
+    </NavLink>
+  );
+}
+
+function currentSection(pathname) {
+  if (pathname.startsWith('/game')) return ['Mesa', 'Sesión en vivo'];
+  if (pathname.startsWith('/hero')) return ['Mi héroe', 'Ficha de personaje'];
+  if (pathname.startsWith('/lore/map')) return ['Atlas', 'Cartografía del mundo'];
+  if (pathname.startsWith('/lore/glossary')) return ['Glosario', 'Personas y criaturas'];
+  if (pathname.startsWith('/lore/quests')) return ['Misiones', 'Diario del aventurero'];
+  if (pathname.startsWith('/campfire')) return ['Fogata', 'Conversaciones del grupo'];
+  return ['Crónicas', 'Escenas de la campaña'];
+}
 
 export default function PlayerLayout() {
-  const { socket } = useSocket();
+  const { socket, connected } = useSocket();
   const { user } = useAuth();
+  const location = useLocation();
   const [notification, setNotification] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [section, subtitle] = currentSection(location.pathname);
 
   useEffect(() => {
-    if (!socket) return;
-    const handler = (data) => {
+    if (!socket) return undefined;
+    const handler = data => {
       setNotification(data);
       setTimeout(() => setNotification(null), 5000);
     };
@@ -34,157 +65,75 @@ export default function PlayerLayout() {
     return () => socket.off('notification', handler);
   }, [socket]);
 
-  const NavItem = ({ path, label, Icon }) => (
-    <NavLink
-      to={path}
-      onClick={() => setMobileMenuOpen(false)}
-      style={({ isActive }) => ({
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '10px 14px',
-        borderRadius: 10,
-        fontWeight: 700,
-        fontSize: 13,
-        textTransform: 'uppercase',
-        letterSpacing: '0.8px',
-        transition: 'all 0.15s',
-        textDecoration: 'none',
-        background: isActive ? 'rgba(245,158,11,0.12)' : 'transparent',
-        color: isActive ? '#F59E0B' : '#6B6557',
-        border: isActive ? '1px solid rgba(245,158,11,0.25)' : '1px solid transparent',
-      })}
-    >
-      <Icon size={18} />
-      {label}
-    </NavLink>
-  );
-
   return (
-    <div className="flex min-h-screen" style={{ background: '#0F1518' }}>
-      {notification && (
-        <NotificationBanner data={notification} onClose={() => setNotification(null)} />
-      )}
+    <div className="app-frame">
+      {notification && <NotificationBanner data={notification} onClose={() => setNotification(null)} />}
 
-      {/* ── DESKTOP SIDEBAR ────────────────────────────────────────── */}
-      <aside
-        className="hidden md:flex flex-col"
-        style={{
-          width: SIDEBAR_W,
-          minWidth: SIDEBAR_W,
-          background: '#0D1A18',
-          borderRight: '1px solid #2A332F',
-          position: 'sticky',
-          top: 0,
-          height: '100vh',
-          overflowY: 'auto',
-        }}
-      >
-        {/* Brand */}
-        <div className="px-4 py-5" style={{ borderBottom: '1px solid #2A332F' }}>
-          <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#C8A36A' }}>
-            DnD World
-          </p>
-          <p className="text-[11px] mt-0.5" style={{ color: '#6B6557' }}>
-            {user?.username || 'Aventurero'}
-          </p>
+      <aside className="app-rail hidden md:flex">
+        <div className="app-brand" title="DnD World">
+          <div className="app-brand-mark"><Compass size={28} strokeWidth={1.15} /></div>
         </div>
-
-        {/* Nav */}
-        <nav className="flex flex-col gap-1 p-3 flex-1">
-          {TABS.map(t => <NavItem key={t.path} {...t} />)}
+        <nav className="app-rail-nav">
+          {DESKTOP_TABS.map(tab => <RailLink key={tab.path} {...tab} />)}
         </nav>
+        <div className="app-rail-footer">
+          <div className="app-user-medallion" title={user?.username || 'Aventurero'}>
+            {(user?.username || 'A').slice(0, 1).toUpperCase()}
+          </div>
+        </div>
       </aside>
 
-      {/* ── MOBILE MENU OVERLAY ─────────────────────────────────────── */}
       {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-50 flex md:hidden"
-          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setMobileMenuOpen(false)}
-        >
-          <div
-            className="flex flex-col"
-            style={{ width: 240, background: '#0D1A18', borderRight: '1px solid #2A332F' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-4" style={{ borderBottom: '1px solid #2A332F' }}>
-              <p className="font-black text-sm uppercase tracking-widest" style={{ color: '#C8A36A' }}>DnD World</p>
-              <button onClick={() => setMobileMenuOpen(false)}>
-                <X size={20} style={{ color: '#6B6557' }} />
-              </button>
+        <div className="fixed inset-0 z-50 flex md:hidden bg-black/70 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}>
+          <div className="w-60 flex flex-col border-r border-[#493a22] bg-[#080e0d]" onClick={event => event.stopPropagation()}>
+            <div className="h-16 px-4 flex items-center justify-between border-b border-[#493a22]/60">
+              <span className="font-serif text-sm text-[#c7a35c]">DND WORLD</span>
+              <button onClick={() => setMobileMenuOpen(false)}><X size={18} /></button>
             </div>
-            <nav className="flex flex-col gap-1 p-3">
-              {TABS.map(t => <NavItem key={t.path} {...t} />)}
+            <nav className="p-3 grid gap-1">
+              {MOBILE_TABS.map(({ path, label, Icon }) => (
+                <NavLink key={path} to={path} onClick={() => setMobileMenuOpen(false)} className={({ isActive }) => `flex items-center gap-3 px-3 py-3 border ${isActive ? 'border-[#806636]/60 text-[#c7a35c] bg-[#c7a35c]/5' : 'border-transparent text-[#777b74]'}`}>
+                  {createElement(Icon, { size: 18 })}<span className="text-xs font-serif uppercase tracking-wider">{label}</span>
+                </NavLink>
+              ))}
             </nav>
           </div>
         </div>
       )}
 
-      {/* ── MAIN CONTENT ────────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Mobile header */}
-        <header
-          className="flex md:hidden items-center gap-3 px-4 py-3 sticky top-0 z-30"
-          style={{ background: 'rgba(13,26,24,0.95)', borderBottom: '1px solid #2A332F', backdropFilter: 'blur(12px)' }}
-        >
-          <button onClick={() => setMobileMenuOpen(true)}>
-            <Menu size={22} style={{ color: '#C8A36A' }} />
-          </button>
-          <p className="font-black text-sm uppercase tracking-widest" style={{ color: '#C8A36A' }}>DnD World</p>
+      <div className="app-column">
+        <header className="app-topbar">
+          <div className="app-topbar-block"><strong>DnD World</strong><span>Campaña actual</span></div>
+          <div className="app-topbar-block"><strong>{section}</strong><span>{subtitle}</span></div>
+          <div className="app-live-state"><i className={`app-live-dot${connected ? '' : ' is-offline'}`} />{connected ? 'Sincronizado' : 'Sin conexión'}</div>
+          <div className="app-topbar-user">
+            <div><strong>{user?.username || 'Aventurero'}</strong><span>Jugador</span></div>
+            <div className="app-user-medallion">{(user?.username || 'A').slice(0, 1).toUpperCase()}</div>
+          </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <header className="app-mobile-bar">
+          <button onClick={() => setMobileMenuOpen(true)}><Menu size={20} /></button>
+          <strong>{section}</strong>
+          <i className={`app-live-dot ml-auto${connected ? '' : ' is-offline'}`} />
+        </header>
+
+        <main className="app-page">
           <Routes>
             <Route index element={<Navigate to="/chronicles" replace />} />
+            <Route path="/game" element={<GamePlayerPanel />} />
             <Route path="/chronicles/*" element={<Chronicles />} />
-            <Route path="/hero"         element={<HeroTab />} />
-            <Route path="/lore"         element={<LoreTab />} />
-            <Route path="/campfire"     element={<CampfireTab />} />
-            <Route path="*"             element={<Navigate to="/chronicles" replace />} />
+            <Route path="/hero" element={<HeroTab />} />
+            <Route path="/lore/*" element={<LoreTab />} />
+            <Route path="/campfire" element={<CampfireTab />} />
+            <Route path="*" element={<Navigate to="/chronicles" replace />} />
           </Routes>
         </main>
 
-        {/* ── MOBILE BOTTOM TAB BAR ───────────────────────────────── */}
-        <nav
-          className="flex md:hidden justify-around items-center"
-          style={{
-            height: 64,
-            background: 'rgba(13,26,24,0.96)',
-            borderTop: '1px solid #5A4424',
-            backdropFilter: 'blur(12px)',
-          }}
-        >
-          {TABS.map(({ path, label, Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              style={({ isActive }) => ({
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 3,
-                padding: '6px 12px',
-                borderRadius: 10,
-                color: isActive ? '#F59E0B' : '#6B6557',
-                textDecoration: 'none',
-              })}
-            >
-              {({ isActive }) => (
-                <>
-                  <div style={{
-                    padding: 6,
-                    borderRadius: 10,
-                    background: isActive ? 'rgba(245,158,11,0.12)' : 'transparent',
-                  }}>
-                    <Icon size={22} />
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                    {label}
-                  </span>
-                </>
-              )}
+        <nav className="flex md:hidden justify-around items-center h-16 border-t border-[#493a22]/70 bg-[#080e0d]/95 backdrop-blur-xl">
+          {MOBILE_TABS.map(({ path, label, Icon }) => (
+            <NavLink key={path} to={path} className={({ isActive }) => `min-w-16 py-2 flex flex-col items-center gap-1 ${isActive ? 'text-[#c7a35c]' : 'text-[#656b65]'}`}>
+              {createElement(Icon, { size: 19, strokeWidth: 1.5 })}<span className="text-[8px] font-serif uppercase tracking-wider">{label}</span>
             </NavLink>
           ))}
         </nav>

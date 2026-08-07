@@ -1,0 +1,728 @@
+import { useEffect, useRef, useState } from 'react';
+import { Check, Copy, Equal, Heart, Image as ImageIcon, Map as MapIcon, Minus, Move, Palette, Plus, Settings2, Shield, Trash2, X } from 'lucide-react';
+import API_URL from '../../config';
+
+const CONDITIONS = ['Envenenado', 'Aturdido', 'Derribado', 'Invisible', 'Concentración'];
+const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+const EMPTY_SCENE_NPCS = [];
+
+function resolveUrl(value) {
+  if (!value || /^(?:https?:|data:|blob:)/i.test(value)) return value;
+  return `${API_URL}${value.startsWith('/') ? value : `/${value}`}`;
+}
+
+function clamp(value) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function signed(value) {
+  const number = Number(value) || 0;
+  return number >= 0 ? `+${number}` : String(number);
+}
+
+function abilityModifier(score) {
+  return Math.floor(((Number(score?.base_value) || 10) + (Number(score?.bonus_value) || 0) - 10) / 2);
+}
+
+function canMoveToken(token, isDm, session, userId) {
+  return isDm || (
+    session?.status === 'LIVE'
+    && token.owner_user_id === userId
+    && token.character_id === session?.active_character_id
+    && !token.locked
+  );
+}
+
+export default function GameStage({
+  session,
+  userId,
+  isDm = false,
+  onMoveToken,
+  onMoveTokens,
+  onAdjustHp,
+  onSetHp,
+  onToggleCondition,
+  onDeleteToken,
+  onDuplicateToken,
+  onGridStyleChange,
+  onNarrativeStyleChange,
+  onNarrativePanelDrop,
+}) {
+  const stageRef = useRef(null);
+  const interactionRef = useRef(null);
+  const runtimeRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const pendingPreviewRef = useRef(null);
+  const tokenElementsRef = useRef(new Map());
+  const contextCardRef = useRef(null);
+  const contextDragRef = useRef(null);
+  const [selectionBox, setSelectionBox] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [hpEditor, setHpEditor] = useState(null);
+  const [detailTab, setDetailTab] = useState('sheet');
+  const [showAllHealth, setShowAllHealth] = useState(false);
+  const [gridToolsOpen, setGridToolsOpen] = useState(false);
+  const [narrativeDropTarget, setNarrativeDropTarget] = useState(null);
+  const activeCharacterId = session?.active_character_id;
+  const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
+  const tokens = (session?.tokens || []).filter(token => token.visible);
+  const sceneNpcs = session?.scene_npcs || EMPTY_SCENE_NPCS;
+  const speakingNpcId = session?.speaking_npc_id;
+  const narrativeLayout = Math.max(1, Math.min(4, Number(session?.narrative_layout) || 1));
+  const storedNarrativePanels = Array.isArray(session?.narrative_panels) ? session.narrative_panels : [];
+  const narrativePanels = Array.from({ length: narrativeLayout }, (_, index) => (
+    storedNarrativePanels[index] || (index === 0 && session?.shared_url
+      ? { asset_id: null, url: session.shared_url, title: session.shared_title }
+      : null)
+  ));
+  const latestSceneNpcsRef = useRef(sceneNpcs);
+  const renderedSceneNpcsRef = useRef(sceneNpcs);
+  const sceneNpcExitTimersRef = useRef(new Map());
+  const [renderedSceneNpcs, setRenderedSceneNpcs] = useState(sceneNpcs);
+  const [leavingSceneNpcIds, setLeavingSceneNpcIds] = useState([]);
+
+  const canMove = token => canMoveToken(token, isDm, session, userId);
+
+  const positionFromEvent = event => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      x: clamp(((event.clientX - rect.left) / rect.width) * 100),
+      y: clamp(((event.clientY - rect.top) / rect.height) * 100),
+    };
+  };
+
+  useEffect(() => {
+    latestSceneNpcsRef.current = sceneNpcs;
+    const nextById = new Map(sceneNpcs.map(npc => [npc.id, npc]));
+    const previous = renderedSceneNpcsRef.current;
+    const previousIds = new Set(previous.map(npc => npc.id));
+    const leaving = previous.filter(npc => !nextById.has(npc.id));
+    const merged = [
+      ...previous.map(npc => nextById.get(npc.id) || npc),
+      ...sceneNpcs.filter(npc => !previousIds.has(npc.id)),
+    ];
+
+    renderedSceneNpcsRef.current = merged;
+    setRenderedSceneNpcs(merged);
+    setLeavingSceneNpcIds(current => current.filter(id => !nextById.has(id)));
+
+    sceneNpcs.forEach(npc => {
+      const timer = sceneNpcExitTimersRef.current.get(npc.id);
+      if (timer) {
+        window.clearTimeout(timer);
+        sceneNpcExitTimersRef.current.delete(npc.id);
+      }
+    });
+
+    leaving.forEach(npc => {
+      if (sceneNpcExitTimersRef.current.has(npc.id)) return;
+      setLeavingSceneNpcIds(current => current.includes(npc.id) ? current : [...current, npc.id]);
+      const timer = window.setTimeout(() => {
+        const isVisibleAgain = latestSceneNpcsRef.current.some(currentNpc => currentNpc.id === npc.id);
+        if (!isVisibleAgain) {
+          const updated = renderedSceneNpcsRef.current.filter(currentNpc => currentNpc.id !== npc.id);
+          renderedSceneNpcsRef.current = updated;
+          setRenderedSceneNpcs(updated);
+        }
+        setLeavingSceneNpcIds(current => current.filter(id => id !== npc.id));
+        sceneNpcExitTimersRef.current.delete(npc.id);
+      }, 230);
+      sceneNpcExitTimersRef.current.set(npc.id, timer);
+    });
+  }, [sceneNpcs]);
+
+  useEffect(() => () => {
+    sceneNpcExitTimersRef.current.forEach(timer => window.clearTimeout(timer));
+    sceneNpcExitTimersRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    runtimeRef.current = {
+      tokens: (session?.tokens || []).filter(token => token.visible),
+      isDm,
+      session,
+      userId,
+      onMoveToken,
+      onMoveTokens,
+    };
+  }, [session, userId, isDm, onMoveToken, onMoveTokens]);
+
+  useEffect(() => {
+    const applyTokenPositions = positions => {
+      positions.forEach(position => {
+        const element = tokenElementsRef.current.get(position.id);
+        if (!element) return;
+        element.style.left = `${position.x}%`;
+        element.style.top = `${position.y}%`;
+      });
+    };
+
+    const schedulePreview = (type, value) => {
+      pendingPreviewRef.current = { type, value };
+      if (animationFrameRef.current) return;
+      animationFrameRef.current = window.requestAnimationFrame(() => {
+        const pending = pendingPreviewRef.current;
+        animationFrameRef.current = null;
+        if (!pending) return;
+        if (pending.type === 'selection') setSelectionBox(pending.value);
+        else applyTokenPositions(pending.value);
+      });
+    };
+
+    const dragPositions = (interaction, event, rect) => {
+      const dx = ((event.clientX - interaction.startClientX) / rect.width) * 100;
+      const dy = ((event.clientY - interaction.startClientY) / rect.height) * 100;
+      return interaction.startPositions.map(token => ({
+        id: token.id,
+        x: clamp(token.x + dx),
+        y: clamp(token.y + dy),
+      }));
+    };
+
+    const move = event => {
+      const interaction = interactionRef.current;
+      const rect = stageRef.current?.getBoundingClientRect();
+      if (!interaction || !rect) return;
+
+      if (interaction.type === 'selection') {
+        const current = {
+          x: clamp(((event.clientX - rect.left) / rect.width) * 100),
+          y: clamp(((event.clientY - rect.top) / rect.height) * 100),
+        };
+        interaction.current = current;
+        schedulePreview('selection', { start: interaction.start, current });
+        return;
+      }
+
+      const positions = dragPositions(interaction, event, rect);
+      interaction.positions = positions;
+      schedulePreview('drag', positions);
+    };
+
+    const end = event => {
+      const interaction = interactionRef.current;
+      if (!interaction) return;
+      const runtime = runtimeRef.current;
+      const rect = stageRef.current?.getBoundingClientRect();
+
+      if (interaction.type === 'selection') {
+        const endPosition = rect ? {
+          x: clamp(((event.clientX - rect.left) / rect.width) * 100),
+          y: clamp(((event.clientY - rect.top) / rect.height) * 100),
+        } : interaction.current || interaction.start;
+        const left = Math.min(interaction.start.x, endPosition.x);
+        const right = Math.max(interaction.start.x, endPosition.x);
+        const top = Math.min(interaction.start.y, endPosition.y);
+        const bottom = Math.max(interaction.start.y, endPosition.y);
+        const tokenRadiusX = rect ? (24 / rect.width) * 100 : 0;
+        const tokenRadiusY = rect ? (30 / rect.height) * 100 : 0;
+        setSelectedIds(runtime.tokens.filter(token => (
+          canMoveToken(token, runtime.isDm, runtime.session, runtime.userId)
+          && token.x + tokenRadiusX >= left
+          && token.x - tokenRadiusX <= right
+          && token.y + tokenRadiusY >= top
+          && token.y - tokenRadiusY <= bottom
+        )).map(token => token.id));
+        setSelectionBox(null);
+      } else {
+        const positions = rect ? dragPositions(interaction, event, rect) : interaction.positions || interaction.startPositions;
+        applyTokenPositions(positions);
+        if (positions.length > 1 && runtime.onMoveTokens) {
+          runtime.onMoveTokens(positions.map(token => ({ tokenId: token.id, x: token.x, y: token.y })));
+        } else if (positions[0]) {
+          runtime.onMoveToken?.(positions[0].id, positions[0].x, positions[0].y);
+        }
+      }
+      pendingPreviewRef.current = null;
+      if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+      interactionRef.current = null;
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const moveCard = event => {
+      const drag = contextDragRef.current;
+      const stage = stageRef.current?.getBoundingClientRect();
+      const card = contextCardRef.current;
+      if (!drag || !stage || !card) return;
+      const left = Math.max(8, Math.min(stage.width - card.offsetWidth - 8, drag.left + event.clientX - drag.clientX));
+      const top = Math.max(8, Math.min(stage.height - 180, drag.top + event.clientY - drag.clientY));
+      drag.currentLeft = left;
+      drag.currentTop = top;
+      card.style.left = `${left}px`;
+      card.style.top = `${top}px`;
+      card.style.maxHeight = `${Math.max(172, stage.height - top - 8)}px`;
+    };
+    const endCardMove = () => {
+      const drag = contextDragRef.current;
+      if (!drag) return;
+      setContextMenu(current => current ? {
+        ...current,
+        left: drag.currentLeft ?? drag.left,
+        top: drag.currentTop ?? drag.top,
+      } : current);
+      contextDragRef.current = null;
+    };
+    window.addEventListener('pointermove', moveCard);
+    window.addEventListener('pointerup', endCardMove);
+    return () => {
+      window.removeEventListener('pointermove', moveCard);
+      window.removeEventListener('pointerup', endCardMove);
+    };
+  }, []);
+
+  useEffect(() => {
+    const keyDown = event => {
+      if (event.key === 'Escape') {
+        setContextMenu(null);
+        setSelectedIds([]);
+      }
+      const editable = event.target instanceof HTMLElement
+        && (event.target.matches('input, textarea, select') || event.target.isContentEditable);
+      if (!editable && event.ctrlKey && event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        setShowAllHealth(true);
+      }
+    };
+    const keyUp = event => {
+      if (event.key === 'Control' || event.key.toLowerCase() === 'v') setShowAllHealth(false);
+    };
+    const clearHealth = () => setShowAllHealth(false);
+    window.addEventListener('keydown', keyDown);
+    window.addEventListener('keyup', keyUp);
+    window.addEventListener('blur', clearHealth);
+    return () => {
+      window.removeEventListener('keydown', keyDown);
+      window.removeEventListener('keyup', keyUp);
+      window.removeEventListener('blur', clearHealth);
+    };
+  }, []);
+
+  const openTokenMenu = (event, token) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setContextMenu({
+      tokenId: token.id,
+      left: Math.max(8, Math.min(event.clientX - rect.left, rect.width - 354)),
+      top: Math.max(8, Math.min(event.clientY - rect.top, rect.height - 470)),
+    });
+    setHpEditor(null);
+    setDetailTab('sheet');
+  };
+
+  const menuToken = tokens.find(token => token.id === contextMenu?.tokenId);
+  const menuImage = menuToken && (menuToken.image_url || menuToken.character?.rendered_url || menuToken.character?.image_url);
+  const menuCharacter = menuToken?.character;
+  const canSeeFullSheet = Boolean(menuToken && (isDm || menuToken.owner_user_id === userId));
+  const menuActions = menuCharacter?.npcActions || [];
+  const boxStyle = selectionBox ? {
+    left: `${Math.min(selectionBox.start.x, selectionBox.current.x)}%`,
+    top: `${Math.min(selectionBox.start.y, selectionBox.current.y)}%`,
+    width: `${Math.abs(selectionBox.current.x - selectionBox.start.x)}%`,
+    height: `${Math.abs(selectionBox.current.y - selectionBox.start.y)}%`,
+  } : null;
+
+  return (
+    <div
+      ref={stageRef}
+      className={`game-stage${session?.shared_type === 'MAP' && session?.grid_enabled ? ' has-grid' : ''}${hasMedia ? ' has-media' : ''}${session?.shared_type === 'MAP' ? ` is-map map-fit-${String(session?.map_fit || 'COVER').toLowerCase()}` : ` is-narrative fit-${String(session?.narrative_fit || 'COVER').toLowerCase()}`}${showAllHealth ? ' is-showing-health' : ''}`}
+      style={{
+        '--game-grid-color': session?.grid_color || '#d8cdb1',
+        '--game-grid-line-width': `${session?.grid_line_width ?? 1}px`,
+      }}
+      onContextMenu={event => event.preventDefault()}
+      onPointerDown={event => {
+        if (event.button !== 0 || !isDm || session?.shared_type !== 'MAP') return;
+        event.preventDefault();
+        setContextMenu(null);
+        const start = positionFromEvent(event);
+        if (!start) return;
+        interactionRef.current = { type: 'selection', start, current: start };
+        setSelectionBox({ start, current: start });
+        setSelectedIds([]);
+      }}
+    >
+      {hasMedia ? (
+        session.shared_type === 'IMAGE' ? (
+          <div className={`game-narrative-grid layout-${narrativeLayout}${isDm ? ' is-editable' : ''}`}>
+            {narrativePanels.map((panel, index) => (
+              <div
+                key={`${index}-${panel?.asset_id || panel?.url || 'empty'}`}
+                className={`game-narrative-panel${narrativeDropTarget === index ? ' is-drop-target' : ''}`}
+                data-drop-label={`Soltar en área ${index + 1}`}
+                onDragEnter={isDm ? event => {
+                  if (!Array.from(event.dataTransfer.types).includes('application/x-game-asset')) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setNarrativeDropTarget(index);
+                } : undefined}
+                onDragOver={isDm ? event => {
+                  if (!Array.from(event.dataTransfer.types).includes('application/x-game-asset')) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  event.dataTransfer.dropEffect = 'copy';
+                  if (narrativeDropTarget !== index) setNarrativeDropTarget(index);
+                } : undefined}
+                onDragLeave={isDm ? event => {
+                  event.stopPropagation();
+                  if (!event.currentTarget.contains(event.relatedTarget)) setNarrativeDropTarget(null);
+                } : undefined}
+                onDrop={isDm ? event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const assetId = event.dataTransfer.getData('application/x-game-asset') || event.dataTransfer.getData('text/plain');
+                  setNarrativeDropTarget(null);
+                  if (assetId) onNarrativePanelDrop?.(index, assetId);
+                } : undefined}
+              >
+                {panel?.url ? <img src={resolveUrl(panel.url)} alt={panel.title || `Imagen narrativa ${index + 1}`} draggable={false} /> : <div><ImageIcon size={22} /><span>Área {index + 1}</span><small>Sin imagen asignada</small></div>}
+                {panel?.title && narrativeLayout > 1 && <span>{panel.title}</span>}
+              </div>
+            ))}
+          </div>
+        ) : <img className="game-stage-media" src={resolveUrl(session.shared_url)} alt={session.shared_title || 'Mapa compartido'} draggable={false} />
+      ) : (
+        <div className="game-stage-empty">
+          {session?.shared_type === 'MAP' ? <MapIcon size={38} /> : <ImageIcon size={38} />}
+          <strong>La mesa está preparada</strong>
+          <p>El DM todavía no compartió una imagen o mapa para esta escena.</p>
+        </div>
+      )}
+
+      {isDm && session?.shared_type !== 'NONE' && (
+        <div className={`game-grid-tools${gridToolsOpen ? ' is-open' : ''}`} onPointerDown={event => event.stopPropagation()}>
+          {gridToolsOpen && (
+            <div className="game-grid-tools-panel">
+              {session.shared_type === 'MAP' ? (
+                <>
+                  <header><div><span>Modo combate</span><strong>Cuadrícula del mapa</strong></div><Palette size={15} /></header>
+                  <button className={`game-grid-visibility${session.grid_enabled ? ' is-active' : ''}`} onClick={() => onGridStyleChange?.({ enabled: !session.grid_enabled })}>
+                    <span><i />Mostrar cuadrícula</span><small>{session.grid_enabled ? 'Visible' : 'Oculta'}</small>
+                  </button>
+                  <label className="game-grid-color-control">
+                    <span>Color de líneas</span>
+                    <div><input type="color" value={session.grid_color || '#d8cdb1'} onChange={event => onGridStyleChange?.({ color: event.target.value })} /><output>{session.grid_color || '#d8cdb1'}</output></div>
+                  </label>
+                  <label className="game-grid-width-control">
+                    <span>Grosor <output>{Number(session.grid_line_width || 1).toFixed(2)} px</output></span>
+                    <input type="range" min="0.25" max="4" step="0.25" value={session.grid_line_width || 1} onChange={event => onGridStyleChange?.({ lineWidth: Number(event.target.value) })} />
+                  </label>
+                  <div className="game-narrative-fit-control">
+                    <span>Encuadre del mapa</span>
+                    <div>
+                      <button className={session.map_fit !== 'CONTAIN' ? 'is-active' : ''} onClick={() => onGridStyleChange?.({ mapFit: 'COVER' })}>Llenar</button>
+                      <button className={session.map_fit === 'CONTAIN' ? 'is-active' : ''} onClick={() => onGridStyleChange?.({ mapFit: 'CONTAIN' })}>Completo</button>
+                    </div>
+                    <small>{session.map_fit === 'CONTAIN' ? 'Muestra el mapa completo con márgenes.' : 'Mantiene el mapa ocupando todo el visor.'}</small>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <header><div><span>Modo narrativa</span><strong>Encuadre de escena</strong></div><ImageIcon size={15} /></header>
+                  <div className="game-narrative-fit-control">
+                    <span>Presentación de imagen</span>
+                    <div>
+                      <button className={session.narrative_fit !== 'CONTAIN' ? 'is-active' : ''} onClick={() => onNarrativeStyleChange?.({ fit: 'COVER' })}>Llenar</button>
+                      <button className={session.narrative_fit === 'CONTAIN' ? 'is-active' : ''} onClick={() => onNarrativeStyleChange?.({ fit: 'CONTAIN' })}>Completa</button>
+                    </div>
+                    <small>{session.narrative_fit === 'CONTAIN' ? 'Muestra toda la imagen sin recortarla.' : 'Ocupa todo el visor y recorta los bordes.'}</small>
+                  </div>
+                  <div className="game-narrative-layout-control">
+                    <span>Áreas simultáneas</span>
+                    <div>{[1, 2, 3, 4].map(count => <button key={count} className={narrativeLayout === count ? 'is-active' : ''} onClick={() => onNarrativeStyleChange?.({ layout: count })}>{count}</button>)}</div>
+                  </div>
+                  <div className="game-narrative-slots">
+                    {narrativePanels.map((panel, index) => (
+                      <label key={index}>
+                        <span>Área {index + 1}</span>
+                        <select value={panel?.asset_id || ''} onChange={event => onNarrativeStyleChange?.({ slotIndex: index, assetId: event.target.value || null })}>
+                          <option value="">{index === 0 ? 'Escena principal' : 'Sin imagen'}</option>
+                          {(session.assets || []).map(asset => <option key={asset.id} value={asset.id}>{asset.title}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <button className="game-grid-tools-trigger" onClick={() => setGridToolsOpen(current => !current)} title="Herramientas visuales" aria-label="Abrir herramientas visuales" aria-expanded={gridToolsOpen}>
+            {gridToolsOpen ? <X size={15} /> : <Settings2 size={15} />}
+          </button>
+        </div>
+      )}
+
+      {!!renderedSceneNpcs.length && (
+        <div className="game-scene-cast" aria-live="polite" aria-label="Personajes presentes en la escena">
+          {renderedSceneNpcs.map(npc => {
+            const image = npc.rendered_url || npc.image_url;
+            const speaking = npc.id === speakingNpcId;
+            const leaving = leavingSceneNpcIds.includes(npc.id);
+            return (
+              <div key={npc.id} className={`game-scene-cast-entry${leaving ? ' is-leaving' : ''}`} onPointerDown={event => event.stopPropagation()}>
+                <article className={`${speaking ? 'is-speaking' : ''}${speakingNpcId && !speaking ? ' is-listening' : ''}`} tabIndex={0}>
+                  <div className="game-scene-cast-image">
+                    {image ? <img src={resolveUrl(image)} alt="" /> : <span>{npc.name?.slice(0, 1).toUpperCase()}</span>}
+                  </div>
+                  <div>
+                    {speaking && <small>Hablando</small>}
+                    <strong>{npc.name}</strong>
+                    <span>{npc.npc_type || npc.creature_type || 'NPC'}</span>
+                  </div>
+                </article>
+                <aside className="game-scene-cast-preview">
+                  <div className="game-scene-cast-preview-portrait">
+                    {image ? <img src={resolveUrl(image)} alt="" /> : <span>{npc.name?.slice(0, 1).toUpperCase()}</span>}
+                    <div><small>{npc.npc_type || npc.creature_type || 'NPC'}</small><strong>{npc.name}</strong><p>{[npc.race, npc.class, npc.level && `Nivel ${npc.level}`].filter(Boolean).join(' · ')}</p></div>
+                  </div>
+                  <div className="game-scene-cast-preview-stats">
+                    <div><Heart size={11} /><span>PG</span><strong>{npc.hp_current ?? '—'} / {npc.hp_max ?? '—'}</strong></div>
+                    <div><Shield size={11} /><span>CA</span><strong>{npc.ac_base ?? '—'}</strong></div>
+                    <div><Move size={11} /><span>Mov.</span><strong>{npc.speed ? `${npc.speed} ft` : '—'}</strong></div>
+                  </div>
+                  <p>{npc.origin || 'Información pública del personaje en escena.'}</p>
+                </aside>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {selectionBox && <div className="game-token-selection-box" style={boxStyle} />}
+
+      {session?.shared_type === 'MAP' && tokens.map(token => {
+        const movable = canMove(token);
+        const ownedByPlayer = !isDm && token.owner_user_id === userId;
+        const selected = selectedIds.includes(token.id);
+        const hpCurrent = Number(token.character?.hp_current);
+        const hpMax = Number(token.character?.hp_max);
+        const hasHp = Number.isFinite(hpCurrent) && Number.isFinite(hpMax) && hpMax > 0;
+        const hpPercent = hasHp ? Math.max(0, Math.min(100, (hpCurrent / hpMax) * 100)) : 0;
+        const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 25 ? '#d0a348' : '#c94f43';
+        return (
+          <button
+            key={token.id}
+            ref={element => {
+              if (element) tokenElementsRef.current.set(token.id, element);
+              else tokenElementsRef.current.delete(token.id);
+            }}
+            className={`game-token${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}`}
+            style={{ left: `${token.x}%`, top: `${token.y}%`, '--token-color': token.color }}
+            onContextMenu={event => {
+              event.preventDefault();
+              if (isDm || ownedByPlayer) openTokenMenu(event, token);
+            }}
+            onPointerDown={event => {
+              event.stopPropagation();
+              if (event.button === 2) {
+                event.preventDefault();
+                if (isDm || ownedByPlayer) openTokenMenu(event, token);
+                return;
+              }
+              if (event.button !== 0) return;
+              if (!isDm && !ownedByPlayer) {
+                openTokenMenu(event, token);
+                return;
+              }
+              if (!movable) return;
+              event.preventDefault();
+              setContextMenu(null);
+              const movingIds = selected && selectedIds.length > 1 ? selectedIds : [token.id];
+              if (!selected) setSelectedIds([token.id]);
+              const startPositions = tokens.filter(item => movingIds.includes(item.id) && canMove(item)).map(item => ({ id: item.id, x: item.x, y: item.y }));
+              interactionRef.current = { type: 'drag', startClientX: event.clientX, startClientY: event.clientY, startPositions, positions: startPositions };
+            }}
+            title={isDm || ownedByPlayer
+              ? `${token.label}: clic izquierdo para mover, clic derecho para ver ficha`
+              : `${token.label}: clic izquierdo para ver ficha pública`}
+          >
+            <span className="game-token-image">
+              {token.image_url || token.character?.rendered_url || token.character?.image_url
+                ? <img src={resolveUrl(token.image_url || token.character?.rendered_url || token.character?.image_url)} alt="" />
+                : token.label.slice(0, 1).toUpperCase()}
+            </span>
+            <small className="game-token-name">{token.label}</small>
+            {hasHp && (
+              <span className="game-token-health" style={{ '--token-hp-color': hpColor }}>
+                <i><b style={{ width: `${hpPercent}%` }} /></i>
+                <em>{hpCurrent} / {hpMax}</em>
+              </span>
+            )}
+            {!!token.conditions?.length && <b className="game-token-condition-count">{token.conditions.length}</b>}
+            {movable && <Move size={10} />}
+          </button>
+        );
+      })}
+
+      {contextMenu && menuToken && (
+        <article ref={contextCardRef} className={`game-token-context${isDm ? ' is-dm' : ' is-player'}`} style={{ left: contextMenu.left, top: contextMenu.top, maxHeight: `calc(100% - ${contextMenu.top + 8}px)` }} onPointerDown={event => event.stopPropagation()}>
+          <button className="game-token-context-close" onClick={() => setContextMenu(null)} aria-label="Cerrar"><X size={13} /></button>
+          <div className="game-token-context-scroll">
+          <div className="game-token-context-portrait" onPointerDown={event => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            contextDragRef.current = {
+              clientX: event.clientX,
+              clientY: event.clientY,
+              left: contextMenu.left,
+              top: contextMenu.top,
+              currentLeft: contextMenu.left,
+              currentTop: contextMenu.top,
+            };
+          }}>
+            {menuImage ? (
+              <>
+                <img className="game-token-context-backdrop" src={resolveUrl(menuImage)} alt="" aria-hidden="true" />
+                <img className="game-token-context-subject" src={resolveUrl(menuImage)} alt={menuToken.label} />
+              </>
+            ) : <span>{menuToken.label.slice(0, 1)}</span>}
+            <div><small>{menuCharacter?.npc_type || (menuToken.owner_user_id ? 'Aventurero' : 'Criatura')}</small><strong>{menuToken.label}</strong><p>{[menuCharacter?.race, menuCharacter?.class, menuCharacter?.level && `Nivel ${menuCharacter.level}`].filter(Boolean).join(' · ')}</p></div>
+          </div>
+          <div className="game-token-context-stats">
+            <div className="game-token-hp-stat">
+              <Heart size={12} /><span>PG</span><strong>{menuCharacter?.hp_current ?? '—'} / {menuCharacter?.hp_max ?? '—'}</strong>
+              {isDm && (
+                <div className="game-token-hp-stack">
+                  <button title="Sumar vida" onClick={() => setHpEditor({ operation: 'add', value: '' })}><Plus size={8} /></button>
+                  <button title="Fijar vida" onClick={() => setHpEditor({ operation: 'set', value: '' })}><Equal size={8} /></button>
+                  <button title="Restar vida" onClick={() => setHpEditor({ operation: 'subtract', value: '' })}><Minus size={8} /></button>
+                </div>
+              )}
+              {isDm && hpEditor && (
+                <form className="game-token-hp-popover" onSubmit={event => {
+                  event.preventDefault();
+                  const amount = Number.parseInt(hpEditor.value, 10);
+                  if (!Number.isFinite(amount) || amount < 0) return;
+                  if (hpEditor.operation === 'set') onSetHp?.(menuToken.id, amount);
+                  else onAdjustHp?.(menuToken.id, hpEditor.operation === 'subtract' ? -amount : amount);
+                  setHpEditor(null);
+                }}>
+                  <small>{hpEditor.operation === 'add' ? 'Sumar PG' : hpEditor.operation === 'subtract' ? 'Restar PG' : 'Fijar PG'}</small>
+                  <input autoFocus type="number" min="0" value={hpEditor.value} onChange={event => setHpEditor(current => ({ ...current, value: event.target.value }))} />
+                  <button type="submit" disabled={hpEditor.value === ''}><Check size={10} /></button>
+                  <button type="button" onClick={() => setHpEditor(null)}><X size={10} /></button>
+                </form>
+              )}
+            </div>
+            <div><Shield size={12} /><span>CA</span><strong>{menuCharacter?.ac_base ?? '—'}</strong></div>
+            <div><Move size={12} /><span>Mov.</span><strong>{menuCharacter?.speed ? `${menuCharacter.speed} ft` : '—'}</strong></div>
+          </div>
+          {(isDm || !!menuToken.conditions?.length) && (
+            <div className="game-token-condition-manager">
+              {!!menuToken.conditions?.length && (
+                <div className="game-token-active-conditions">
+                  {menuToken.conditions.map(condition => isDm ? (
+                    <button key={condition} onClick={() => onToggleCondition?.(menuToken.id, condition)} title={`Quitar ${condition}`}>{condition}<X size={8} /></button>
+                  ) : <span key={condition}>{condition}</span>)}
+                </div>
+              )}
+              {isDm && (
+                <label className="game-token-condition-select">
+                  <span>Estado</span>
+                  <select value="" onChange={event => {
+                    const condition = event.target.value;
+                    if (condition && !menuToken.conditions?.includes(condition)) onToggleCondition?.(menuToken.id, condition);
+                  }}>
+                    <option value="">Agregar estado...</option>
+                    {CONDITIONS.map(condition => <option key={condition} value={condition} disabled={menuToken.conditions?.includes(condition)}>{condition}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
+
+          {canSeeFullSheet && (
+            <>
+              <nav className="game-token-detail-tabs">
+                <button className={detailTab === 'sheet' ? 'is-active' : ''} onClick={() => setDetailTab('sheet')}>Ficha</button>
+                <button className={detailTab === 'actions' ? 'is-active' : ''} onClick={() => setDetailTab('actions')}>Acciones <span>{menuActions.length}</span></button>
+                {isDm && <button className={detailTab === 'notes' ? 'is-active' : ''} onClick={() => setDetailTab('notes')}>Notas</button>}
+              </nav>
+              <div className="game-token-full-sheet">
+                {detailTab === 'sheet' && (
+                  <>
+                    <section>
+                      <header><span>Atributos</span>{menuCharacter?.challenge_rating && <small>Desafío {menuCharacter.challenge_rating}</small>}</header>
+                      <div className="game-token-abilities">
+                        {ABILITIES.map(ability => {
+                          const score = menuCharacter?.abilityScores?.find(item => item.ability === ability);
+                          if (!score) return <div key={ability}><span>{ability}</span><strong>—</strong><small>Sin dato</small></div>;
+                          const total = (Number(score?.base_value) || 10) + (Number(score?.bonus_value) || 0);
+                          return <div key={ability}><span>{ability}</span><strong>{signed(abilityModifier(score))}</strong><small>{total}</small></div>;
+                        })}
+                      </div>
+                    </section>
+                    <section className="game-token-detail-lines">
+                      <header><span>Perfil de combate</span></header>
+                      {menuCharacter?.initiative_bonus != null && <p><strong>Iniciativa</strong><span>{signed(menuCharacter.initiative_bonus)}</span></p>}
+                      {menuCharacter?.passive_perception != null && <p><strong>Percepción pasiva</strong><span>{menuCharacter.passive_perception}</span></p>}
+                      {Object.keys(menuCharacter?.saving_throws || {}).length > 0 && <p><strong>Salvaciones</strong><span>{Object.entries(menuCharacter.saving_throws).map(([key, value]) => `${key} ${signed(value)}`).join(', ')}</span></p>}
+                      {!!menuCharacter?.skills?.length && <p><strong>Competencias</strong><span>{menuCharacter.skills.filter(skill => skill.proficiency_level > 0).map(skill => skill.name).join(', ') || 'Ninguna'}</span></p>}
+                      {!!menuCharacter?.damage_resistances?.length && <p><strong>Resistencias</strong><span>{menuCharacter.damage_resistances.join(', ')}</span></p>}
+                      {!!menuCharacter?.damage_vulnerabilities?.length && <p><strong>Vulnerabilidades</strong><span>{menuCharacter.damage_vulnerabilities.join(', ')}</span></p>}
+                      {!!menuCharacter?.damage_immunities?.length && <p><strong>Inmunidades</strong><span>{menuCharacter.damage_immunities.join(', ')}</span></p>}
+                      {!!menuCharacter?.condition_immunities?.length && <p><strong>Estados inmunes</strong><span>{menuCharacter.condition_immunities.join(', ')}</span></p>}
+                      {!!menuCharacter?.senses?.length && <p><strong>Sentidos</strong><span>{menuCharacter.senses.join(', ')}</span></p>}
+                      {!!menuCharacter?.languages?.length && <p><strong>Idiomas</strong><span>{menuCharacter.languages.join(', ')}</span></p>}
+                    </section>
+                  </>
+                )}
+
+                {detailTab === 'actions' && (
+                  <section className="game-token-actions-list">
+                    <header><span>Acciones y habilidades</span><small>{menuActions.length}</small></header>
+                    {menuActions.map(action => (
+                      <article key={action.id}>
+                        <div><strong>{action.name}</strong><small>{action.action_type}</small></div>
+                        <p>{[
+                          action.attack_bonus != null && `Ataque ${signed(action.attack_bonus)}`,
+                          action.damage_dice && `${action.damage_dice}${action.damage_bonus ? signed(action.damage_bonus) : ''} ${action.damage_type || ''}`,
+                          action.reach,
+                          action.save_dc && `CD ${action.save_dc} ${action.save_ability || ''}`,
+                        ].filter(Boolean).join(' · ')}</p>
+                        {action.description && <span>{action.description}</span>}
+                      </article>
+                    ))}
+                    {!menuActions.length && <p className="game-token-empty-detail">Sin acciones estructuradas todavía.</p>}
+                  </section>
+                )}
+
+                {isDm && detailTab === 'notes' && (
+                  <section className="game-token-private-notes">
+                    <header><span>Notas privadas del DM</span></header>
+                    <p>{menuCharacter?.notes || 'No hay notas privadas para esta criatura.'}</p>
+                  </section>
+                )}
+              </div>
+            </>
+          )}
+
+          {!isDm && <p className="game-token-player-note">Ficha visible para jugadores. Los estados y valores se actualizan en vivo.</p>}
+          </div>
+
+          {isDm && (
+            <>
+              <footer>
+                <button onClick={() => { onDuplicateToken?.(menuToken.id); setContextMenu(null); }}><Copy size={12} /> Duplicar</button>
+                <button className="is-danger" onClick={() => { onDeleteToken?.(menuToken.id); setContextMenu(null); }}><Trash2 size={12} /> Eliminar</button>
+              </footer>
+            </>
+          )}
+        </article>
+      )}
+    </div>
+  );
+}

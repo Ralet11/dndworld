@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { createElement, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Lock, User } from 'lucide-react';
+import { Compass, Lock, Mail, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function RegisterPage() {
@@ -11,9 +11,12 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!username || !email || !password) { setError('Completá todos los campos'); return; }
+  const handleSubmit = async event => {
+    event.preventDefault();
+    if (!username || !email || !password) {
+      setError('Completa todos los campos');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -25,88 +28,44 @@ export default function RegisterPage() {
     }
   };
 
+  const fields = [
+    { label: 'Nombre de aventurero', type: 'text', value: username, setter: setUsername, Icon: User, autoComplete: 'username' },
+    { label: 'Correo electrónico', type: 'email', value: email, setter: setEmail, Icon: Mail, autoComplete: 'email' },
+    { label: 'Contraseña', type: 'password', value: password, setter: setPassword, Icon: Lock, autoComplete: 'new-password' },
+  ];
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6"
-      style={{ background: 'linear-gradient(180deg, #0F1518 0%, #11191A 100%)' }}>
-
-      <div className="pointer-events-none fixed bottom-0 left-0 right-0 h-64"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,122,26,0.08) 0%, transparent 70%)' }} />
-
-      <div className="w-full max-w-sm relative z-10">
-        <div className="text-center mb-10">
-          <h1 className="font-serif text-4xl font-bold mb-2"
-            style={{ color: '#F59E0B', textShadow: '0 2px 14px rgba(245,158,11,0.45)' }}>
-            DnD World
-          </h1>
-          <p className="italic text-sm" style={{ color: '#A89F8E' }}>Únete a la aventura</p>
+    <div className="auth-shell">
+      <section className="auth-card">
+        <div className="text-center mb-8">
+          <div className="auth-emblem"><Compass size={31} strokeWidth={1.1} /></div>
+          <p className="label-caps mb-2 text-[#a9864c]">Nuevo aventurero</p>
+          <h1>DnD World</h1>
+          <p className="auth-subtitle">Comienza tu historia</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
-              style={{ color: '#C8A36A' }} />
-            <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="Nombre de aventurero"
-              className="input-base pl-11"
-              autoComplete="username"
-            />
-          </div>
-
-          <div className="relative">
-            <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
-              style={{ color: '#C8A36A' }} />
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Email"
-              className="input-base pl-11"
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="relative">
-            <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
-              style={{ color: '#C8A36A' }} />
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Contraseña"
-              className="input-base pl-11"
-              autoComplete="new-password"
-            />
-          </div>
-
-          {error && (
-            <p className="text-xs font-bold text-center" style={{ color: '#C2452F' }}>{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-12 rounded-lg font-black text-base tracking-wider glow-ember transition-opacity disabled:opacity-60"
-            style={{ background: '#FF7A1A', color: '#1A0E04' }}
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                Creando cuenta...
+        <form onSubmit={handleSubmit} className="space-y-3.5">
+          {fields.map(({ label, type, value, setter, Icon, autoComplete }) => (
+            <label className="block" key={label}>
+              <span className="label-caps block mb-2">{label}</span>
+              <span className="relative block">
+                {createElement(Icon, { size: 16, className: 'auth-field-icon', 'aria-hidden': true })}
+                <input type={type} value={value} onChange={event => setter(event.target.value)} placeholder={label} className="input-base auth-input-leading" autoComplete={autoComplete} />
               </span>
-            ) : 'Crear cuenta'}
+            </label>
+          ))}
+
+          {error && <p className="text-xs text-center text-[#b95246]">{error}</p>}
+
+          <button type="submit" disabled={loading} className="auth-submit disabled:opacity-50">
+            {loading ? <span className="flex items-center justify-center gap-2"><i className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />Creando registro...</span> : 'Crear aventurero'}
           </button>
         </form>
 
-        <p className="text-center mt-6 text-sm" style={{ color: '#A89F8E' }}>
-          ¿Ya tenés cuenta?{' '}
-          <Link to="/login" className="font-bold" style={{ color: '#F59E0B' }}>
-            Entrar
-          </Link>
+        <p className="mt-7 text-center text-xs text-[#777269]">
+          ¿Ya tienes una cuenta? <Link to="/login" className="ml-1 text-[#c2a269] hover:text-[#dfc58f]">Entrar</Link>
         </p>
-      </div>
+      </section>
     </div>
   );
 }

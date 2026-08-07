@@ -401,15 +401,21 @@ export default function SpellsManager({ character }) {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.topSection}>
-        <p style={styles.headerTitle}>Gestion de Magia ({casterType.toUpperCase()})</p>
+    <div className="spell-workspace" style={styles.container}>
+      <div className="spell-resource-panel" style={styles.topSection}>
+        <div className="spell-resource-heading">
+          <div>
+            <span>Reserva diaria</span>
+            <p style={styles.headerTitle}>Espacios de conjuro</p>
+          </div>
+          <small>{casterType === 'wizard' ? 'Tradicion arcana' : casterType === 'divine' ? 'Magia divina' : 'Magia conocida'}</small>
+        </div>
 
-        <div style={styles.slotScroller}>
+        <div className="spell-slot-grid" style={styles.slotScroller}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => {
             const slotData = slots?.[level] ?? slots?.[String(level)] ?? { used: 0 };
             return (
-              <div key={level} style={styles.slotBadge}>
+              <div className="spell-slot-card" key={level} style={styles.slotBadge}>
                 <span style={styles.slotLevel}>Lvl {level}</span>
                 <div style={styles.slotControls}>
                   <button onClick={() => updateSlots(level, -1)} style={styles.slotButton}>
@@ -433,7 +439,8 @@ export default function SpellsManager({ character }) {
         </div>
       </div>
 
-      <div style={styles.tabs}>
+      <div className="spell-controls">
+      <div className="spell-tabs" style={styles.tabs}>
         {casterType !== 'divine' && (
           <button
             onClick={() => handleTabChange('book')}
@@ -463,7 +470,7 @@ export default function SpellsManager({ character }) {
         </button>
       </div>
 
-      <div style={styles.searchBar}>
+      <div className="spell-search" style={styles.searchBar}>
         <Search size={16} style={{ color: '#6B6557' }} />
         <input
           value={searchQuery}
@@ -472,6 +479,7 @@ export default function SpellsManager({ character }) {
           className="input-base"
           style={styles.searchInput}
         />
+      </div>
       </div>
 
       {(isFetching || isSwitchingTab) ? (
@@ -482,7 +490,7 @@ export default function SpellsManager({ character }) {
           </p>
         </div>
       ) : (
-        <div style={styles.groupsWrap}>
+        <div className="spell-level-grid" style={styles.groupsWrap}>
           {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => {
             const spells = groupedSpells[level] || [];
             if (!spells.length) return null;
@@ -490,6 +498,7 @@ export default function SpellsManager({ character }) {
             const isCollapsed = !!collapsedGroups[level];
             return (
               <div
+                className={`spell-level-group${isCollapsed ? '' : ' is-open'}`}
                 key={level}
                 style={isCollapsed ? styles.levelGroup : styles.levelGroupOpen}
               >
@@ -506,11 +515,12 @@ export default function SpellsManager({ character }) {
                 </button>
 
                 {!isCollapsed && (
-                  <div style={styles.groupBody}>
+                  <div className="spell-group-body" style={styles.groupBody}>
                     {spells.map((spell) => {
                       const isActive = knownSlugs.includes(spell.slug) || preparedSlugs.includes(spell.slug);
                       return (
                         <button
+                          className="spell-entry"
                           key={spell.slug}
                           onClick={() => openSpellDetail(spell)}
                           style={isActive ? styles.spellRowActive : styles.spellRow}

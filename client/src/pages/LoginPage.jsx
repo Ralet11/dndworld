@@ -1,23 +1,26 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Compass, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!email || !password) { setError('Completá todos los campos'); return; }
+  const handleSubmit = async event => {
+    event.preventDefault();
+    if (!email || !password) {
+      setError('Completa todos los campos');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
       await login(email, password);
-      // App.jsx redirige según rol automáticamente
     } catch (err) {
       setError(err.message || 'No se pudo entrar');
     } finally {
@@ -26,77 +29,58 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6"
-      style={{ background: 'linear-gradient(180deg, #0F1518 0%, #11191A 100%)' }}>
-
-      {/* Ember glow decoration */}
-      <div className="pointer-events-none fixed bottom-0 left-0 right-0 h-64"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,122,26,0.08) 0%, transparent 70%)' }} />
-
-      <div className="w-full max-w-sm relative z-10">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <h1 className="font-serif text-5xl font-bold mb-2"
-            style={{ color: '#F59E0B', textShadow: '0 2px 14px rgba(245,158,11,0.45)' }}>
-            DnD World
-          </h1>
-          <p className="italic text-sm" style={{ color: '#A89F8E' }}>Entra al reino</p>
+    <div className="auth-shell">
+      <section className="auth-card">
+        <div className="text-center mb-9">
+          <div className="auth-emblem"><Compass size={31} strokeWidth={1.1} /></div>
+          <p className="label-caps mb-2 text-[#a9864c]">Portal del aventurero</p>
+          <h1>DnD World</h1>
+          <p className="auth-subtitle">Regresa a la campaña</p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
-              style={{ color: '#C8A36A' }} />
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Email"
-              className="input-base pl-11"
-              autoComplete="email"
-            />
-          </div>
+          <label className="block">
+            <span className="label-caps block mb-2">Correo electrónico</span>
+            <span className="relative block">
+              <Mail size={16} className="auth-field-icon" aria-hidden="true" />
+              <input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="tu@email.com" className="input-base auth-input-leading" autoComplete="email" />
+            </span>
+          </label>
+          <label className="block">
+            <span className="label-caps block mb-2">Contraseña</span>
+            <span className="relative block">
+              <Lock size={16} className="auth-field-icon" aria-hidden="true" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                placeholder="Tu contraseña"
+                className="input-base auth-input-leading auth-input-trailing"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(current => !current)}
+                className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-[#746a57] transition-colors hover:text-[#c2a269] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#c2a269]"
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </span>
+          </label>
 
-          <div className="relative">
-            <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2"
-              style={{ color: '#C8A36A' }} />
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Contraseña"
-              className="input-base pl-11"
-              autoComplete="current-password"
-            />
-          </div>
+          {error && <p className="text-xs text-center text-[#b95246]">{error}</p>}
 
-          {error && (
-            <p className="text-xs font-bold text-center" style={{ color: '#C2452F' }}>{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-12 rounded-lg font-black text-base tracking-wider glow-ember transition-opacity disabled:opacity-60"
-            style={{ background: '#FF7A1A', color: '#1A0E04' }}
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                Entrando...
-              </span>
-            ) : 'Entrar'}
+          <button type="submit" disabled={loading} className="auth-submit disabled:opacity-50">
+            {loading ? <span className="flex items-center justify-center gap-2"><i className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />Abriendo portal...</span> : 'Entrar a la campaña'}
           </button>
         </form>
 
-        <p className="text-center mt-6 text-sm" style={{ color: '#A89F8E' }}>
-          ¿No tenés cuenta?{' '}
-          <Link to="/register" className="font-bold" style={{ color: '#F59E0B' }}>
-            Crear una
-          </Link>
+        <p className="mt-7 text-center text-xs text-[#777269]">
+          ¿Primera vez en este mundo? <Link to="/register" className="ml-1 text-[#c2a269] hover:text-[#dfc58f]">Crear cuenta</Link>
         </p>
-      </div>
+      </section>
     </div>
   );
 }

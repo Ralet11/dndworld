@@ -79,6 +79,54 @@ const Character = sequelize.define('Character', {
         type: DataTypes.INTEGER,
         defaultValue: 30
     },
+    size: {
+        type: DataTypes.STRING(24),
+        allowNull: true
+    },
+    creature_type: {
+        type: DataTypes.STRING(80),
+        allowNull: true
+    },
+    challenge_rating: {
+        type: DataTypes.STRING(16),
+        allowNull: true
+    },
+    proficiency_bonus: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    passive_perception: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    saving_throws: {
+        type: DataTypes.JSONB,
+        defaultValue: {}
+    },
+    damage_resistances: {
+        type: DataTypes.JSONB,
+        defaultValue: []
+    },
+    damage_vulnerabilities: {
+        type: DataTypes.JSONB,
+        defaultValue: []
+    },
+    damage_immunities: {
+        type: DataTypes.JSONB,
+        defaultValue: []
+    },
+    condition_immunities: {
+        type: DataTypes.JSONB,
+        defaultValue: []
+    },
+    senses: {
+        type: DataTypes.JSONB,
+        defaultValue: []
+    },
+    languages: {
+        type: DataTypes.JSONB,
+        defaultValue: []
+    },
     inspiration: {
         type: DataTypes.BOOLEAN,
         defaultValue: false

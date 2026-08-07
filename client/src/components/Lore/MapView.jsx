@@ -1,375 +1,440 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  MapPin, Tent, Mountain, User, ScrollText, Store, Home,
-  ChevronLeft, X, Map as MapIcon, Plus,
+  ChevronLeft, Crosshair, Layers3, Map as MapIcon, MapPin, Plus, X,
 } from 'lucide-react';
+import {
+  ImageOverlay, MapContainer, Marker, Tooltip, useMap, useMapEvents, ZoomControl,
+} from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import API_URL from '../../config';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 
-// Dimensiones virtuales del mapa (igual que mobile)
-const MAP_W = 2400;
-const MAP_H = 1600;
-const MIN_SCALE = 0.25;
-const MAX_SCALE = 3;
+const MAP_WIDTH = 2400;
+const MAP_HEIGHT = 1600;
+const WORLD_MAP_IMAGE = '/westamar.jpg';
+const CONTINENT_MAP = { id: 'seven-cities', title: 'Las Siete Ciudades', image: '/sieteciudades.png', width: 1881, height: 836 };
+const WESTAMAR_MAP = { id: 'westamar', title: 'Westamar', image: WORLD_MAP_IMAGE, width: MAP_WIDTH, height: MAP_HEIGHT };
+const REGIONS = [
+  { id: 'westamar', title: 'Westamar', top: '29%', left: '20%', color: '#E5A948', target: 'westamar' },
+];
 
-function parsePercent(val) {
-  return parseFloat(String(val).replace('%', ''));
+const TYPE_META = {
+  city: { label: 'Ciudad', symbol: 'C', color: '#E5A948' },
+  camp: { label: 'Campamento', symbol: 'T', color: '#FF7A1A' },
+  dungeon: { label: 'Mazmorra', symbol: 'D', color: '#9B5DE5' },
+  cave: { label: 'Cueva', symbol: 'V', color: '#A89F8E' },
+  npc: { label: 'NPC', symbol: 'N', color: '#3E84D6' },
+  quest: { label: 'Mision', symbol: '!', color: '#F5C518' },
+  shop: { label: 'Comercio', symbol: '$', color: '#5BA86B' },
+  place: { label: 'Lugar', symbol: 'P', color: '#A855F7' },
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+function parsePercent(value, fallback = 50) {
+  const parsed = Number.parseFloat(String(value).replace('%', ''));
+  return Number.isFinite(parsed) ? clamp(parsed, 0, 100) : fallback;
 }
 
 function questColor(questLevel, playerLevel = 1) {
-  const diff = (questLevel ?? 1) - playerLevel;
-  if (diff <= 1) return '#F5C518';
-  if (diff === 2) return '#F97316';
+  const difference = (questLevel ?? 1) - playerLevel;
+  if (difference <= 1) return '#F5C518';
+  if (difference === 2) return '#F97316';
   return '#EF4444';
 }
 
-const TYPE_ICONS = {
-  camp:    Tent,
-  dungeon: ({ ...p }) => <span style={{ fontSize: p.size || 14, color: p.color }}>☠</span>,
-  cave:    Mountain,
-  npc:     User,
-  quest:   ScrollText,
-  shop:    Store,
-  place:   Home,
-};
+function poiColor(poi, playerLevel) {
+  if (poi.type === 'quest') return questColor(poi.level, playerLevel);
+  return poi.color || TYPE_META[poi.type]?.color || '#E5A948';
+}
 
-function MarkerIcon({ type, color, size = 15 }) {
-  if (type === 'quest') {
-    return <span style={{ fontSize: size + 2, fontWeight: 900, lineHeight: 1, color }}>!</span>;
-  }
-  const Icon = TYPE_ICONS[type] || MapPin;
-  if (type === 'dungeon') {
-    return <span style={{ fontSize: size, lineHeight: 1, color }}>☠</span>;
-  }
-  return <Icon size={size} color={color} />;
+function poiToLatLng(poi, mapConfig) {
+  const left = parsePercent(poi.left);
+  const top = parsePercent(poi.top);
+  return L.latLng(mapConfig.height - (top / 100) * mapConfig.height, (left / 100) * mapConfig.width);
+}
+
+function latLngToPercent(latlng, mapConfig) {
+  const left = clamp((latlng.lng / mapConfig.width) * 100, 0, 100);
+  const top = clamp(((mapConfig.height - latlng.lat) / mapConfig.height) * 100, 0, 100);
+  return { top: `${top.toFixed(2)}%`, left: `${left.toFixed(2)}%` };
+}
+
+function createPoiIcon(poi, playerLevel, isDM) {
+  const meta = TYPE_META[poi.type] || TYPE_META.place;
+  const color = poiColor(poi, playerLevel);
+  return L.divIcon({
+    className: 'atlas-marker-host',
+    html: `<span class="atlas-marker ${isDM ? 'is-editable' : ''}" style="--marker-color:${color}"><b>${meta.symbol}</b></span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
+}
+
+function createRegionIcon(region) {
+  return L.divIcon({
+    className: 'atlas-region-host',
+    html: `<span class="atlas-region-marker" style="--region-color:${region.color}"><b>${region.title}</b><small>Explorar region</small></span>`,
+    iconSize: [148, 54],
+    iconAnchor: [74, 27],
+  });
+}
+
+function FitImageBounds({ mapKey, bounds, mapConfig }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.invalidateSize({ animate: false });
+    const fitZoom = map.getBoundsZoom(bounds, false, L.point(0, 0));
+    const viewport = map.getSize();
+    const viewportRatio = viewport.x / viewport.y;
+    const imageRatio = mapConfig.width / mapConfig.height;
+    const coverBoost = Math.abs(Math.log2(viewportRatio / imageRatio)) + 0.08;
+    const coverZoom = fitZoom + coverBoost;
+
+    map.setMaxBounds(bounds);
+    map.setView(bounds.getCenter(), coverZoom, { animate: false });
+  }, [map, mapKey, bounds, mapConfig]);
+
+  return null;
+}
+
+function MapInteractionHandler({ placing, mapConfig, onPlace, onZoomOut }) {
+  useMapEvents({
+    click(event) {
+      if (placing) onPlace(latLngToPercent(event.latlng, mapConfig));
+    },
+    contextmenu(event) {
+      event.originalEvent?.preventDefault();
+      onZoomOut();
+    },
+  });
+  return null;
 }
 
 export default function MapView({ onBack }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const { socket } = useSocket();
   const isDM = user?.role === 'DM' || user?.role === 'ADMIN';
 
-  // pan/zoom state
-  const containerRef = useRef(null);
-  const [scale, setScale] = useState(0.35);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const drag = useRef(null);
-
-  // map data
   const [markers, setMarkers] = useState([]);
+  const [atlasLevel, setAtlasLevel] = useState('westamar');
   const [parentStack, setParentStack] = useState([]);
-  const currentParent = parentStack.length ? parentStack[parentStack.length - 1] : null;
-  const currentParentId = currentParent?.id ?? null;
-
   const [selectedPOI, setSelectedPOI] = useState(null);
   const [playerLevel, setPlayerLevel] = useState(1);
-
-  // DM create
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [placingPOI, setPlacingPOI] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [createPosition, setCreatePosition] = useState({ top: '50.00%', left: '50.00%' });
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('city');
+  const [newLevel, setNewLevel] = useState('1');
+
+  const currentParent = parentStack.at(-1) || null;
+  const currentParentId = currentParent?.id ?? null;
+  const isContinentView = atlasLevel === 'continent' && !currentParent;
+  const mapConfig = isContinentView ? CONTINENT_MAP : WESTAMAR_MAP;
+  const mapImage = currentParent ? currentParent.map_image : mapConfig.image;
+  const mapKey = currentParentId ? `poi-${currentParentId}` : mapConfig.id;
+  const mapBounds = useMemo(
+    () => L.latLngBounds([[0, 0], [mapConfig.height, mapConfig.width]]),
+    [mapConfig],
+  );
+  const canEditPOIs = isDM && !isContinentView;
+  const availableTypes = currentParent
+    ? ['npc', 'quest', 'shop', 'place']
+    : ['city', 'camp', 'dungeon', 'cave'];
+
+  const requestHeaders = useMemo(() => ({
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }), [token]);
 
   const fetchMarkers = useCallback(async (parentId) => {
+    setLoading(true);
+    setError('');
     try {
-      const q = parentId === null || parentId === undefined ? 'null' : parentId;
-      const res = await fetch(`${API_URL}/api/pois?parent_id=${q}`);
-      if (res.ok) setMarkers(await res.json());
-    } catch (e) {
-      console.error('fetch POIs error', e);
+      const query = parentId === null || parentId === undefined ? 'null' : parentId;
+      const response = await fetch(`${API_URL}/api/pois?parent_id=${query}`);
+      if (!response.ok) throw new Error('No se pudieron cargar los puntos del mapa.');
+      setMarkers(await response.json());
+    } catch (fetchError) {
+      setError(fetchError.message || 'No se pudo cargar el Atlas.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchMarkers(currentParentId); }, [currentParentId]);
+  useEffect(() => {
+    if (isContinentView) {
+      setMarkers([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
+    fetchMarkers(currentParentId);
+  }, [currentParentId, fetchMarkers, isContinentView]);
 
-  // ─── Mouse pan ────────────────────────────────────────────────
-  const onMouseDown = (e) => {
-    drag.current = { startX: e.clientX - offset.x, startY: e.clientY - offset.y };
-  };
-  const onMouseMove = (e) => {
-    if (!drag.current) return;
-    setOffset({ x: e.clientX - drag.current.startX, y: e.clientY - drag.current.startY });
-  };
-  const onMouseUp = () => { drag.current = null; };
+  useEffect(() => {
+    if (!socket || !user) return undefined;
+    const updateLevel = (players) => {
+      const character = players.find((player) => player.UserId === user.id);
+      if (character?.level) setPlayerLevel(character.level);
+    };
+    socket.emit('get-players');
+    socket.on('players-data', updateLevel);
+    socket.on('stats-updated', updateLevel);
+    return () => {
+      socket.off('players-data', updateLevel);
+      socket.off('stats-updated', updateLevel);
+    };
+  }, [socket, user]);
 
-  // ─── Scroll wheel zoom ────────────────────────────────────────
-  const onWheel = (e) => {
-    e.preventDefault();
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor));
-    const scaleDiff = newScale / scale;
-    setOffset(prev => ({
-      x: mouseX - scaleDiff * (mouseX - prev.x),
-      y: mouseY - scaleDiff * (mouseY - prev.y),
-    }));
-    setScale(newScale);
+  const updateMarkerPosition = async (poi, latlng) => {
+    const position = latLngToPercent(latlng, mapConfig);
+    const previous = { top: poi.top, left: poi.left };
+    setMarkers((current) => current.map((item) => item.id === poi.id ? { ...item, ...position } : item));
+    try {
+      const response = await fetch(`${API_URL}/api/pois/${poi.id}`, {
+        method: 'PUT',
+        headers: requestHeaders,
+        body: JSON.stringify(position),
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      setMarkers((current) => current.map((item) => item.id === poi.id ? { ...item, ...previous } : item));
+      setError('No se pudo guardar la nueva posicion.');
+    }
   };
 
-  // ─── Create POI ───────────────────────────────────────────────
+  const beginPlacement = () => {
+    setSelectedPOI(null);
+    setPlacingPOI((current) => !current);
+  };
+
+  const handlePlace = (position) => {
+    setCreatePosition(position);
+    setNewType(currentParent ? 'npc' : 'city');
+    setPlacingPOI(false);
+    setShowCreate(true);
+  };
+
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const colorMap = {
-      city: '#F59E0B', camp: '#FF7A1A', dungeon: '#9B5DE5', cave: '#6B6557',
-      npc: '#3E84D6', quest: '#F59E0B', shop: '#5BA86B', place: '#A855F7',
+    const meta = TYPE_META[newType] || TYPE_META.place;
+    const payload = {
+      title: newName.trim(),
+      ...createPosition,
+      color: meta.color,
+      type: newType,
+      parent_id: currentParentId,
+      ...(newType === 'quest' ? { level: Number.parseInt(newLevel, 10) || 1 } : {}),
     };
-    try {
-      const res = await fetch(`${API_URL}/api/pois`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newName.trim(),
-          top: '50.00%', left: '50.00%',
-          color: colorMap[newType] || '#F59E0B',
-          type: newType,
-          parent_id: currentParentId,
-        }),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setMarkers(prev => [...prev, created]);
-      }
-    } catch (e) { console.error(e); }
-    setShowCreate(false);
-    setNewName('');
-    setNewType('city');
-  };
 
-  const handleSelectPOI = (poi) => {
-    if (poi.map_image || (poi.type === 'city' && isDM)) {
-      // Could enter sub-map
+    try {
+      const response = await fetch(`${API_URL}/api/pois`, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error('No se pudo crear el punto.');
+      const created = await response.json();
+      setMarkers((current) => [...current, created]);
+      setShowCreate(false);
+      setNewName('');
+      setNewLevel('1');
+    } catch (createError) {
+      setError(createError.message || 'No se pudo crear el punto.');
     }
-    setSelectedPOI(poi);
   };
 
   const enterPOI = (poi) => {
     setSelectedPOI(null);
-    setMarkers([]);
-    setParentStack(s => [...s, poi]);
-    setScale(0.35);
-    setOffset({ x: 0, y: 0 });
+    setParentStack((current) => [...current, poi]);
   };
 
   const exitToParent = () => {
     setSelectedPOI(null);
-    setMarkers([]);
-    setParentStack(s => s.slice(0, -1));
-    setScale(0.35);
-    setOffset({ x: 0, y: 0 });
+    setParentStack((current) => current.slice(0, -1));
   };
 
-  const mapImageSrc = currentParent?.map_image ? currentParent.map_image : '/westamar.jpg';
-  const showPlaceholder = currentParent && !currentParent.map_image;
+  const zoomOutLevel = () => {
+    setSelectedPOI(null);
+    setPlacingPOI(false);
+    if (currentParent) {
+      setParentStack((current) => current.slice(0, -1));
+      return;
+    }
+    if (atlasLevel === 'westamar') setAtlasLevel('continent');
+  };
+
+  const enterRegion = (region) => {
+    if (region.target !== 'westamar') return;
+    setSelectedPOI(null);
+    setAtlasLevel('westamar');
+  };
 
   return (
-    <div
-      className="relative overflow-hidden"
-      style={{ background: '#0F1518', width: '100%', height: '100%' }}
-      ref={containerRef}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
-      onWheel={onWheel}
-    >
-      {/* Map canvas */}
-      <div
-        style={{
-          position: 'absolute',
-          width: MAP_W,
-          height: MAP_H,
-          transformOrigin: '0 0',
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-          cursor: drag.current ? 'grabbing' : 'grab',
-          userSelect: 'none',
-        }}
+    <div className={`atlas-shell ${placingPOI ? 'is-placing' : ''}`}>
+      <MapContainer
+        key={mapKey}
+        className="atlas-map"
+        crs={L.CRS.Simple}
+        bounds={mapBounds}
+        minZoom={-2}
+        maxZoom={3}
+        zoomSnap={0.05}
+        zoomDelta={0.5}
+        wheelPxPerZoomLevel={90}
+        maxBounds={mapBounds}
+        maxBoundsViscosity={1}
+        zoomControl={false}
+        attributionControl={false}
       >
-        {showPlaceholder ? (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-4"
-            style={{ background: '#0F1518' }}>
-            <MapIcon size={64} style={{ color: '#2A3550' }} />
-            <p style={{ color: '#2A3550', fontWeight: 700 }}>
-              El DM aún no cargó el mapa de {currentParent.title}
-            </p>
-          </div>
-        ) : (
-          <img
-            src={mapImageSrc}
-            alt="Mapa de Westamar"
-            style={{ width: MAP_W, height: MAP_H, display: 'block', pointerEvents: 'none' }}
-            draggable={false}
+        <FitImageBounds mapKey={mapKey} bounds={mapBounds} mapConfig={mapConfig} />
+        <MapInteractionHandler
+          placing={placingPOI}
+          mapConfig={mapConfig}
+          onPlace={handlePlace}
+          onZoomOut={zoomOutLevel}
+        />
+        <ZoomControl position="bottomright" />
+
+        {mapImage && <ImageOverlay url={mapImage} bounds={mapBounds} />}
+
+        {isContinentView && REGIONS.map((region) => (
+          <Marker
+            key={region.id}
+            position={poiToLatLng(region, mapConfig)}
+            icon={createRegionIcon(region)}
+            bubblingMouseEvents={false}
+            eventHandlers={{ click: () => enterRegion(region) }}
           />
-        )}
+        ))}
 
-        {/* Markers */}
-        {markers.map((m) => {
-          const x = (parsePercent(m.left) / 100) * MAP_W;
-          const y = (parsePercent(m.top) / 100) * MAP_H;
-          const isQuest = m.type === 'quest';
-          const tint = isQuest ? questColor(m.level, playerLevel) : m.color;
+        {markers.map((poi) => (
+          <Marker
+            key={poi.id}
+            position={poiToLatLng(poi, mapConfig)}
+            icon={createPoiIcon(poi, playerLevel, isDM)}
+            draggable={canEditPOIs}
+            autoPan={canEditPOIs}
+            bubblingMouseEvents={false}
+            eventHandlers={{
+              click: () => setSelectedPOI(poi),
+              dragend: (event) => updateMarkerPosition(poi, event.target.getLatLng()),
+            }}
+          >
+            <Tooltip permanent direction="bottom" offset={[0, 13]} className="atlas-marker-label">
+              {poi.title}
+            </Tooltip>
+          </Marker>
+        ))}
+      </MapContainer>
 
-          return (
-            <div
-              key={m.id}
-              onClick={(e) => { e.stopPropagation(); handleSelectPOI(m); }}
-              style={{
-                position: 'absolute',
-                left: x,
-                top: y,
-                transform: `translate(-50%, -50%) scale(${1 / scale})`,
-                cursor: 'pointer',
-                zIndex: 10,
-              }}
-            >
-              <div
-                className="flex flex-col items-center gap-0.5"
-                style={{ pointerEvents: 'auto' }}
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center"
-                  style={{
-                    background: '#0F1518',
-                    border: `2px solid ${tint}`,
-                    boxShadow: `0 0 8px ${tint}66`,
-                  }}
-                >
-                  <MarkerIcon type={m.type} color={tint} size={14} />
-                </div>
-                <span
-                  className="font-bold whitespace-nowrap"
-                  style={{
-                    fontSize: 10,
-                    color: '#EDE6D8',
-                    textShadow: '0 1px 4px #000, 0 0 8px #000',
-                    maxWidth: 80,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {m.title}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── UI Overlay (no escala) ──────────────────────────────── */}
-      {/* Header badge */}
-      <div
-        className="absolute top-3 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-center"
-        style={{ background: 'rgba(15,21,24,0.85)', border: '1px solid #2A332F', backdropFilter: 'blur(8px)' }}
-      >
-        <p className="text-xs font-black" style={{ color: '#EDE6D8' }}>
-          {currentParent ? currentParent.title : 'Atlas de Westamar'}
-        </p>
-        <p className="text-[10px]" style={{ color: '#6B6557' }}>
-          {currentParent ? `Westamar › ${currentParent.title}` : 'Scroll para hacer zoom · Arrastrá para mover'}
-        </p>
-      </div>
-
-      {/* Back button (inside a city) */}
-      {currentParent && (
-        <button
-          onClick={exitToParent}
-          className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-2 rounded-full font-bold text-sm"
-          style={{ background: 'rgba(15,21,24,0.9)', border: '1px solid #8A6A3B', color: '#F59E0B' }}
-        >
-          <ChevronLeft size={18} /> Volver
-        </button>
-      )}
-
-      {/* Back to Lore button */}
-      {onBack && !currentParent && (
-        <button
-          onClick={onBack}
-          className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-2 rounded-full font-bold text-sm"
-          style={{ background: 'rgba(15,21,24,0.9)', border: '1px solid #5A4424', color: '#C8A36A' }}
-        >
-          <ChevronLeft size={18} /> Lore
-        </button>
-      )}
-
-      {/* DM: create POI */}
-      {isDM && (
-        <button
-          onClick={() => setShowCreate(true)}
-          className="absolute bottom-6 right-4 w-12 h-12 rounded-full flex items-center justify-center"
-          style={{ background: '#FF7A1A', boxShadow: '0 0 16px rgba(255,122,26,0.4)' }}
-        >
-          <Plus size={22} style={{ color: '#fff' }} />
-        </button>
-      )}
-
-      {/* POI detail card */}
-      {selectedPOI && (
-        <div
-          className="absolute bottom-0 left-0 right-0 p-4 rounded-t-2xl"
-          style={{ background: '#16211F', border: '1px solid #2A332F', borderBottom: 'none' }}
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <p className="label-caps mb-0.5" style={{ color: selectedPOI.color || '#C8A36A' }}>
-                {selectedPOI.type}
-              </p>
-              <h3 className="text-lg font-black" style={{ color: '#EDE6D8' }}>{selectedPOI.title}</h3>
-            </div>
-            <button onClick={() => setSelectedPOI(null)}><X size={18} style={{ color: '#6B6557' }} /></button>
-          </div>
-          {selectedPOI.description && (
-            <p className="text-sm italic mb-3" style={{ color: '#A89F8E' }}>{selectedPOI.description}</p>
-          )}
-          {/* Enter sub-map */}
-          {(selectedPOI.map_image || (isDM && selectedPOI.type === 'city')) && (
-            <button
-              onClick={() => enterPOI(selectedPOI)}
-              className="w-full py-2 rounded-lg font-black text-sm"
-              style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', color: '#F59E0B' }}
-            >
-              Entrar al mapa de {selectedPOI.title}
-            </button>
-          )}
+      {!mapImage && (
+        <div className="atlas-empty-map">
+          <MapIcon size={44} />
+          <strong>Mapa pendiente</strong>
+          <span>El DM aun no cargo la imagen de {currentParent?.title}.</span>
         </div>
       )}
 
-      {/* Create POI modal */}
-      {showCreate && (
-        <div
-          className="absolute inset-0 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setShowCreate(false)}
-        >
-          <div className="w-full max-w-sm p-5 rounded-2xl space-y-3"
-            style={{ background: '#16211F', border: '1px solid #2A332F' }}
-            onClick={e => e.stopPropagation()}>
-            <h3 className="font-black" style={{ color: '#EDE6D8' }}>Nuevo POI</h3>
-            <input
-              className="input-base"
-              placeholder="Nombre del lugar"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-            />
-            <select
-              className="input-base"
-              value={newType}
-              onChange={e => setNewType(e.target.value)}
+      <div className="atlas-topbar">
+        <div className="atlas-topbar-left">
+          {(currentParent || onBack || atlasLevel === 'westamar') && (
+            <button
+              className="atlas-icon-button"
+              onClick={currentParent ? exitToParent : isContinentView ? onBack : zoomOutLevel}
+              aria-label="Subir un nivel"
             >
-              {['city','camp','dungeon','cave','npc','quest','shop','place'].map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <button onClick={() => setShowCreate(false)} className="flex-1 py-2 rounded-lg font-bold text-sm"
-                style={{ background: '#1E2A28', border: '1px solid #2A332F', color: '#A89F8E' }}>
-                Cancelar
+              <ChevronLeft size={19} />
+            </button>
+          )}
+          <div className="atlas-title-block">
+            <span>Atlas de las Siete Ciudades</span>
+            <strong>{currentParent?.title || mapConfig.title}</strong>
+          </div>
+        </div>
+        <div className="atlas-map-status">
+          <Layers3 size={14} /> {isContinentView ? `${REGIONS.length} regiones` : `${markers.length} puntos`}
+        </div>
+        {canEditPOIs && (
+          <button className={`atlas-place-button ${placingPOI ? 'is-active' : ''}`} onClick={beginPlacement}>
+            {placingPOI ? <X size={16} /> : <Plus size={16} />}
+            <span>{placingPOI ? 'Cancelar' : 'Agregar punto'}</span>
+          </button>
+        )}
+      </div>
+
+      {placingPOI && (
+        <div className="atlas-placement-hint"><Crosshair size={16} /> Haz clic donde quieras colocar el punto</div>
+      )}
+
+      {!placingPOI && !currentParent && (
+        <div className="atlas-level-hint">
+          {isContinentView ? 'Selecciona una region para explorarla' : 'Clic derecho para ver las Siete Ciudades'}
+        </div>
+      )}
+
+      {(loading || error) && (
+        <div className={`atlas-feedback ${error ? 'is-error' : ''}`}>
+          {loading ? 'Cargando puntos...' : error}
+          {error && <button onClick={() => fetchMarkers(currentParentId)}>Reintentar</button>}
+        </div>
+      )}
+
+      {selectedPOI && (
+        <aside className="atlas-inspector">
+          <button className="atlas-inspector-close" onClick={() => setSelectedPOI(null)} aria-label="Cerrar detalle">
+            <X size={18} />
+          </button>
+          {selectedPOI.image && <img src={selectedPOI.image} alt="" className="atlas-inspector-image" />}
+          <div className="atlas-inspector-body">
+            <span className="atlas-inspector-type" style={{ color: poiColor(selectedPOI, playerLevel) }}>
+              {TYPE_META[selectedPOI.type]?.label || selectedPOI.type}
+            </span>
+            <h2>{selectedPOI.title}</h2>
+            {selectedPOI.type === 'quest' && <span className="atlas-level-chip">Nivel {selectedPOI.level ?? 1}</span>}
+            <p>{selectedPOI.description || 'Todavia no hay una descripcion publica para este lugar.'}</p>
+            {(selectedPOI.map_image || (isDM && selectedPOI.type === 'city')) && (
+              <button className="atlas-enter-button" onClick={() => enterPOI(selectedPOI)}>
+                <MapPin size={16} /> Entrar a {selectedPOI.title}
               </button>
-              <button onClick={handleCreate} className="flex-1 py-2 rounded-lg font-bold text-sm"
-                style={{ background: 'rgba(255,122,26,0.2)', border: '1px solid rgba(255,122,26,0.4)', color: '#FF7A1A' }}>
-                Crear
-              </button>
+            )}
+            {canEditPOIs && <small>Arrastra el marcador para cambiar su posicion.</small>}
+          </div>
+        </aside>
+      )}
+
+      {showCreate && (
+        <div className="atlas-modal-backdrop" onClick={() => setShowCreate(false)}>
+          <div className="atlas-create-card" onClick={(event) => event.stopPropagation()}>
+            <div className="atlas-create-header">
+              <div><span>Nuevo punto</span><strong>{currentParent?.title || mapConfig.title}</strong></div>
+              <button onClick={() => setShowCreate(false)}><X size={18} /></button>
             </div>
+            <label>Nombre</label>
+            <input className="input-base" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Nombre del lugar" autoFocus />
+            <label>Tipo</label>
+            <div className="atlas-type-grid">
+              {availableTypes.map((type) => {
+                const meta = TYPE_META[type];
+                return (
+                  <button key={type} className={newType === type ? 'is-active' : ''} onClick={() => setNewType(type)}>
+                    <span style={{ color: meta.color }}>{meta.symbol}</span>{meta.label}
+                  </button>
+                );
+              })}
+            </div>
+            {newType === 'quest' && (
+              <><label>Nivel recomendado</label><input className="input-base" type="number" min="1" max="20" value={newLevel} onChange={(event) => setNewLevel(event.target.value)} /></>
+            )}
+            <div className="atlas-coordinate-preview">{createPosition.left} · {createPosition.top}</div>
+            <button className="atlas-create-submit" onClick={handleCreate} disabled={!newName.trim()}>Crear punto</button>
           </div>
         </div>
       )}
