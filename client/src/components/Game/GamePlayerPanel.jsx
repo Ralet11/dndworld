@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Check, Clock, DoorOpen, Pause, Shield, Swords, Users, X } from 'lucide-react';
+import { Check, Clock, DoorOpen, Heart, Pause, Shield, Swords, Users, X, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import CharacterSheet from '../Hero/CharacterSheet';
 import GameStage from './GameStage';
 import DiceTray from './DiceTray';
 
@@ -139,7 +138,8 @@ export default function GamePlayerPanel() {
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
 
-      <section className="game-player-stage-wrap">
+      <div className="game-player-workspace">
+        <section className="game-player-stage-wrap">
         <GameStage
           session={session}
           userId={user.id}
@@ -151,12 +151,45 @@ export default function GamePlayerPanel() {
           <span>{session.shared_type === 'MAP' ? 'Mapa de combate' : 'Escena compartida'}</span>
           <p>{isMyTurn ? 'Puedes mover tu token arrastrándolo sobre el mapa.' : 'Observa la escena; el movimiento se habilitará durante tu turno.'}</p>
         </div>
-      </section>
+        </section>
 
-      <section className="game-player-character">
-        <div className="game-character-heading"><span className="game-kicker">Panel de personaje</span><h2>Decide y actúa</h2></div>
-        {character ? <CharacterSheet character={character} embedded onRoll={roll => rollDice({ sides: 20, quantity: 1, modifier: roll.modifier || 0, label: roll.title || 'Tirada de caracteristica' })} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
-      </section>
+        <aside className="game-player-character" aria-label="Ficha básica del personaje">
+          {character ? <PlayerCombatSheet character={character} onRoll={rollDice} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function PlayerCombatSheet({ character, onRoll }) {
+  const attributes = character.stats || character.attributes || {};
+  const hp = Number(character.hp) || 0;
+  const maxHp = Number(character.maxHp) || 1;
+  const hpPercent = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const modifier = value => Math.floor(((Number(value) || 10) - 10) / 2);
+  const signed = value => value >= 0 ? `+${value}` : String(value);
+  const portrait = character.rendered_url || character.image_url;
+
+  return (
+    <div className="game-combat-sheet">
+      <div className="game-combat-sheet-header">
+        <div className="game-combat-portrait">{portrait ? <img src={portrait} alt="" /> : <Shield size={22} />}</div>
+        <div><span className="game-kicker">Tu personaje</span><h2>{character.name || 'Aventurero'}</h2><p>{[character.race, character.class].filter(Boolean).join(' · ') || 'Sin clase'}</p></div>
+      </div>
+      <div className="game-combat-hp"><div><span><Heart size={13} /> Puntos de golpe</span><strong>{hp}<small> / {maxHp}</small></strong></div><i><b style={{ width: `${hpPercent}%` }} /></i></div>
+      <div className="game-combat-vitals">
+        <div><Shield size={14} /><strong>{character.ac ?? 10}</strong><span>CA</span></div>
+        <div><Zap size={14} /><strong>{signed(character.initiative ?? modifier(attributes.dex))}</strong><span>Iniciativa</span></div>
+        <div><Swords size={14} /><strong>{character.speed ?? 30}</strong><span>Velocidad</span></div>
+      </div>
+      <div className="game-combat-abilities">
+        {[['str', 'FUE'], ['dex', 'DES'], ['con', 'CON'], ['int', 'INT'], ['wis', 'SAB'], ['cha', 'CAR']].map(([key, label]) => {
+          const score = Number(attributes[key]) || 10;
+          const value = modifier(score);
+          return <button key={key} type="button" onClick={() => onRoll({ sides: 20, quantity: 1, modifier: value, label: `Prueba de ${label}` })} title={`Tirar ${label}`}><span>{label}</span><strong>{signed(value)}</strong><small>{score}</small></button>;
+        })}
+      </div>
+      <p className="game-combat-sheet-tip">Toca una característica para tirar un d20. La ficha completa está en “Mi héroe”.</p>
     </div>
   );
 }

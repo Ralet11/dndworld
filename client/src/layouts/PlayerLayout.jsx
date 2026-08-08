@@ -66,7 +66,7 @@ export default function PlayerLayout() {
   }, [socket]);
 
   return (
-    <div className="app-frame">
+    <div className={`app-frame${location.pathname.startsWith('/game') ? ' is-game-mode' : ''}`}>
       {notification && <NotificationBanner data={notification} onClose={() => setNotification(null)} />}
 
       <aside className="app-rail hidden md:flex">
