@@ -46,15 +46,23 @@ class StatEngine {
             }
         });
 
-        // 5. Saving Throws (Simplified Class Logic for prototype)
-        // In a full DB, we'd have a 'proficiencies' relation.
+        // 5. Saving Throws. Player-specific choices stored in saving_throws take
+        // precedence over the class fallback (useful for multiclass/custom PCs).
+        const configuredSaves = character.saving_throws || {};
+        const hasConfiguredSaves = !character.is_npc && Object.keys(configuredSaves).length > 0;
+        const saveIsProficient = (key, classFallback) => {
+            if (!hasConfiguredSaves) return classFallback;
+            const configured = configuredSaves[key];
+            return configured === true || typeof configured === 'number' || configured?.proficient === true;
+        };
+        const classKey = String(character.class_slug || character.class || '').toLowerCase();
         const savingThrows = {
-            str: { mod: mods.str, proficient: false },
-            dex: { mod: mods.dex, proficient: character.class === 'Ranger' || character.class === 'Rogue' },
-            con: { mod: mods.con, proficient: character.class === 'Fighter' || character.class === 'Barbarian' },
-            int: { mod: mods.int, proficient: character.class === 'Wizard' },
-            wis: { mod: mods.wis, proficient: character.class === 'Cleric' || character.class === 'Druid' },
-            cha: { mod: mods.cha, proficient: character.class === 'Bard' || character.class === 'Paladin' }
+            str: { mod: mods.str, proficient: saveIsProficient('str', ['ranger', 'fighter', 'barbarian', 'explorador', 'guerrero', 'bárbaro'].includes(classKey)) },
+            dex: { mod: mods.dex, proficient: saveIsProficient('dex', ['ranger', 'rogue', 'explorador', 'pícaro'].includes(classKey)) },
+            con: { mod: mods.con, proficient: saveIsProficient('con', ['fighter', 'barbarian', 'guerrero', 'bárbaro'].includes(classKey)) },
+            int: { mod: mods.int, proficient: saveIsProficient('int', ['wizard', 'rogue', 'mago', 'pícaro'].includes(classKey)) },
+            wis: { mod: mods.wis, proficient: saveIsProficient('wis', ['cleric', 'druid', 'clérigo', 'druida'].includes(classKey)) },
+            cha: { mod: mods.cha, proficient: saveIsProficient('cha', ['bard', 'paladin', 'bardo', 'paladín'].includes(classKey)) }
         };
 
         // Apply proficiency to saves
