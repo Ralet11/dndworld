@@ -377,6 +377,7 @@ const getNpcsForClient = async () => {
 
 io.on('connection', async (socket) => {
     console.log('User connected:', socket.id);
+    // Live-table state, annotations, and media tools share this socket contract.
     registerGameSessionSocket(io, socket);
 
     // The live table needs this catalog during its initial socket handshake.

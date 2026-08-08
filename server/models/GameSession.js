@@ -80,6 +80,11 @@ const GameSession = sequelize.define('GameSession', {
         allowNull: false,
         defaultValue: [],
     },
+    stage_annotations: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+    },
     map_fit: {
         type: DataTypes.STRING(12),
         allowNull: false,

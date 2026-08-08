@@ -32,6 +32,7 @@ import { useAuth } from '../context/AuthContext';
 import API_URL from '../config';
 import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';
+import DiceTray from '../components/Game/DiceTray';
 
 function resolveMediaUrl(value) {
   if (!value || /^(?:https?:|data:|blob:)/i.test(value)) return value;
@@ -56,6 +57,7 @@ export default function GameMasterPanel() {
   const [uploading, setUploading] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [rightTab, setRightTab] = useState('session');
+  const [partyView, setPartyView] = useState('npcs');
   const [composerOpen, setComposerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [assetFilter, setAssetFilter] = useState('ALL');
@@ -71,6 +73,7 @@ export default function GameMasterPanel() {
   const [quickNpcOpen, setQuickNpcOpen] = useState(false);
   const [creatingNpcToken, setCreatingNpcToken] = useState(false);
   const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
+  const [stageToolbarHost, setStageToolbarHost] = useState(null);
   const deferredAssetSearch = useDeferredValue(assetSearch);
 
   useEffect(() => {
@@ -147,6 +150,20 @@ export default function GameMasterPanel() {
   const emit = (event, payload = {}) => {
     setError('');
     socket?.emit(event, payload);
+  };
+
+  const rollDice = (request, done) => {
+    setError('');
+    socket?.emit('game:roll-dice', { sessionId: session.id, ...request }, response => {
+      done?.();
+      if (!response?.ok) setError(response?.message || 'No se pudo completar la tirada.');
+    });
+  };
+
+  const resolveDiceRoll = (rollId, results) => {
+    socket?.emit('game:resolve-roll', { sessionId: session.id, rollId, results }, response => {
+      if (!response?.ok) setError(response?.message || 'No se pudo confirmar el resultado de los dados.');
+    });
   };
 
   const createSession = () => {
@@ -410,13 +427,17 @@ export default function GameMasterPanel() {
                 <strong>{session.shared_type === 'NONE' ? 'Sin publicar' : 'Visible para jugadores'}</strong>
               </div>
               <span>{session.shared_type === 'NONE' ? 'Prepara la escena antes de mostrarla' : `${connectedPlayers} jugadores reciben este contenido en vivo`}</span>
+              <div ref={setStageToolbarHost} className="game-stage-toolbar-host" />
               <button onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><MonitorUp size={14} /> Cambiar contenido</button>
             </div>
             <div
               className={`game-stage-wrap-dm${assetOverStage ? ' is-asset-over' : ''}`}
               onDragEnter={event => {
                 event.preventDefault();
-                const isNarrativeAsset = session.shared_type === 'IMAGE' && Array.from(event.dataTransfer.types).includes('application/x-game-asset');
+                const dragTypes = Array.from(event.dataTransfer.types);
+                const isNarrativeAsset = session.shared_type === 'IMAGE' && (
+                  dragTypes.includes('application/x-game-asset') || dragTypes.includes('application/x-game-scene')
+                );
                 setAssetOverStage(!isNarrativeAsset);
               }}
               onDragOver={event => event.preventDefault()}
@@ -427,7 +448,8 @@ export default function GameMasterPanel() {
                 event.preventDefault();
                 setAssetOverStage(false);
                 const assetId = event.dataTransfer.getData('application/x-game-asset');
-                if (session.shared_type === 'IMAGE' && assetId) return;
+                const sceneData = event.dataTransfer.getData('application/x-game-scene');
+                if (session.shared_type === 'IMAGE' && (assetId || sceneData)) return;
                 const asset = (session.assets || []).find(item => item.id === assetId);
                 if (asset) publishAsset(asset);
               }}
@@ -445,7 +467,15 @@ export default function GameMasterPanel() {
                 onDuplicateToken={tokenId => emit('game:duplicate-token', { sessionId: session.id, tokenId })}
                 onGridStyleChange={settings => emit('game:update-grid-style', { sessionId: session.id, ...settings })}
                 onNarrativeStyleChange={settings => emit('game:update-narrative-style', { sessionId: session.id, ...settings })}
-                onNarrativePanelDrop={(slotIndex, assetId) => emit('game:update-narrative-style', { sessionId: session.id, slotIndex, assetId })}
+                onNarrativePanelDrop={(slotIndex, panel) => emit('game:update-narrative-style', { sessionId: session.id, slotIndex, ...panel })}
+                onHideContent={() => emit('game:share', { sessionId: session.id, type: 'NONE' })}
+                onAddAnnotation={annotation => emit('game:add-annotation', { sessionId: session.id, annotation })}
+                onUpdateAnnotation={(annotationId, changes) => emit('game:update-annotation', { sessionId: session.id, annotationId, ...changes })}
+                onDeleteAnnotation={annotationId => emit('game:delete-annotation', { sessionId: session.id, annotationId })}
+                onClearAnnotations={() => emit('game:clear-annotations', { sessionId: session.id })}
+                onDismissRoll={rollId => emit('game:dismiss-roll', { sessionId: session.id, rollId })}
+                onResolveRoll={resolveDiceRoll}
+                toolbarHost={stageToolbarHost}
               />
             </div>
             <div className="game-scene-actions">
@@ -541,6 +571,7 @@ export default function GameMasterPanel() {
                     event.dataTransfer.setData('application/x-game-asset', asset.id);
                     event.dataTransfer.setData('text/plain', asset.id);
                   }}
+                  onDragEnd={() => setAssetOverStage(false)}
                   onDragOver={event => event.preventDefault()}
                   onDrop={event => {
                     event.preventDefault();
@@ -551,7 +582,7 @@ export default function GameMasterPanel() {
                   role="button"
                   tabIndex={0}
                 >
-                  <img src={resolveMediaUrl(asset.url)} alt="" />
+                  <img src={resolveMediaUrl(asset.url)} alt="" draggable={false} />
                   <span>{asset.title}</span>
                   <small>{session.shared_url === asset.url ? 'En mesa' : asset.type === 'MAP' ? 'Mapa' : 'Escena'}</small>
                   <i><GripVertical size={11} /></i>
@@ -559,7 +590,26 @@ export default function GameMasterPanel() {
                 </article>
               ))}
               {filteredScenes.map(scene => (
-                <button key={`scene-${scene.id}`} onClick={() => publish(scene.imageUrl, scene.title, 'IMAGE')}><img src={resolveMediaUrl(scene.imageUrl)} alt="" /><span>{scene.title}</span><small>Archivo</small></button>
+                <button
+                  key={`scene-${scene.id}`}
+                  draggable
+                  onDragStart={event => {
+                    event.dataTransfer.effectAllowed = 'copy';
+                    event.dataTransfer.setData('application/x-game-asset', `scene:${scene.id}`);
+                    event.dataTransfer.setData('application/x-game-scene', JSON.stringify({
+                      id: scene.id,
+                      url: scene.imageUrl,
+                      title: scene.title,
+                    }));
+                    event.dataTransfer.setData('text/plain', `scene:${scene.id}`);
+                  }}
+                  onDragEnd={() => setAssetOverStage(false)}
+                  onClick={() => publish(scene.imageUrl, scene.title, 'IMAGE')}
+                >
+                  <img src={resolveMediaUrl(scene.imageUrl)} alt="" draggable={false} />
+                  <span>{scene.title}</span>
+                  <small>Archivo</small>
+                </button>
               ))}
               {!preparedAssets.length && !filteredScenes.length && <div className="game-library-empty"><ImageIcon size={22} /><span>{normalizedAssetSearch ? 'No hay assets que coincidan con la búsqueda.' : 'Tu bandeja está vacía. Agrega mapas o escenas para tenerlos a mano.'}</span></div>}
             </div>
@@ -598,6 +648,7 @@ export default function GameMasterPanel() {
                   <div><span>Jugadores</span><strong>{connectedPlayers}/{session.participants.length}</strong></div>
                   <div><span>Tokens</span><strong>{session.tokens.length}</strong></div>
                 </div>
+                <DiceTray onRoll={rollDice} />
                 <div className="game-turn-card">
                   <span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong>
                   <small>{session.status === 'WAITING' ? 'La iniciativa comienza al iniciar la partida.' : `Ronda ${session.round}`}</small>
@@ -616,62 +667,79 @@ export default function GameMasterPanel() {
             {rightTab === 'party' && (
               <div className="game-console-section">
                 <div className="game-console-heading"><div><span>Fichas y tokens</span><h2>Personajes en la mesa</h2></div><strong>{session.tokens.length}</strong></div>
-                <div className="game-token-manager-title"><span>Jugadores</span><strong>{connectedPlayers}/{session.participants.length} conectados</strong></div>
-                <div className="game-roster-list game-console-roster">
-                  {session.participants.map(participant => (
-                    <article key={participant.id} className={participant.character_id === session.active_character_id ? 'is-turn' : ''}>
-                      <div className="game-avatar">{participant.character?.image_url ? <img src={resolveMediaUrl(participant.character.image_url)} alt="" /> : participant.user?.username?.slice(0, 1)}</div>
-                      <div><strong>{participant.user?.username}</strong><span>{participant.character?.name || 'Sin personaje'}</span></div>
-                      <i className={participant.connected ? 'is-online' : ''} />
-                      <small className={participant.is_ready ? 'is-ready' : ''}>{participant.is_ready ? 'Listo' : 'No listo'}</small>
-                      {participant.character && !session.tokens.some(token => token.character_id === participant.character_id) && (
-                        <button title="Asignar token" onClick={() => emit('game:create-token', { sessionId: session.id, characterId: participant.character_id })}><Plus size={13} /></button>
-                      )}
-                    </article>
-                  ))}
+                <div className="game-party-switch" role="tablist" aria-label="Contenido del grupo">
+                  <button role="tab" aria-selected={partyView === 'players'} className={partyView === 'players' ? 'is-active' : ''} onClick={() => setPartyView('players')}>
+                    <Users size={13} /><span>Jugadores</span><strong>{session.participants.length}</strong>
+                  </button>
+                  <button role="tab" aria-selected={partyView === 'npcs'} className={partyView === 'npcs' ? 'is-active' : ''} onClick={() => setPartyView('npcs')}>
+                    <Skull size={13} /><span>NPCs</span><strong>{npcs.length}</strong>
+                  </button>
                 </div>
-                {!session.participants.length && <div className="game-panel-empty"><Users size={28} /><h3>Esperando aventureros</h3><p>Comparte el código <strong>{session.code}</strong> para recibir jugadores.</p><button onClick={copyCode}><Clipboard size={13} /> Copiar invitación</button></div>}
 
-                <div className="game-token-manager-title is-npc"><span>NPCs y criaturas</span><button onClick={() => setQuickNpcOpen(current => !current)}><Plus size={12} /> Crear rápido</button></div>
-                {quickNpcOpen && (
-                  <div className="game-quick-npc-form">
-                    <label className="is-wide"><span>Nombre</span><input value={quickNpc.name} onChange={event => setQuickNpc(current => ({ ...current, name: event.target.value }))} placeholder="Ej. Goblin explorador" /></label>
-                    <label><span>PG</span><input type="number" min="1" value={quickNpc.hpMax} onChange={event => setQuickNpc(current => ({ ...current, hpMax: event.target.value }))} /></label>
-                    <label><span>CA</span><input type="number" min="1" value={quickNpc.armorClass} onChange={event => setQuickNpc(current => ({ ...current, armorClass: event.target.value }))} /></label>
-                    <label><span>Tipo</span><select value={quickNpc.npcType} onChange={event => setQuickNpc(current => ({ ...current, npcType: event.target.value }))}><option value="enemigo">Enemigo</option><option value="neutral">Neutral</option><option value="amigo">Aliado</option></select></label>
-                    <label className="is-wide"><span>URL de retrato opcional</span><input value={quickNpc.imageUrl} onChange={event => setQuickNpc(current => ({ ...current, imageUrl: event.target.value }))} placeholder="https://..." /></label>
-                    <button disabled={creatingNpcToken || !quickNpc.name.trim()} onClick={createQuickNpcToken}><Skull size={13} />{creatingNpcToken ? 'Creando...' : 'Crear ficha y token'}</button>
+                {partyView === 'players' && (
+                  <div className="game-party-view">
+                    <div className="game-token-manager-title"><span>Jugadores</span><strong>{connectedPlayers}/{session.participants.length} conectados</strong></div>
+                    <div className="game-roster-list game-console-roster">
+                      {session.participants.map(participant => (
+                        <article key={participant.id} className={participant.character_id === session.active_character_id ? 'is-turn' : ''}>
+                          <div className="game-avatar">{participant.character?.image_url ? <img src={resolveMediaUrl(participant.character.image_url)} alt="" /> : participant.user?.username?.slice(0, 1)}</div>
+                          <div><strong>{participant.user?.username}</strong><span>{participant.character?.name || 'Sin personaje'}</span></div>
+                          <i className={participant.connected ? 'is-online' : ''} />
+                          <small className={participant.is_ready ? 'is-ready' : ''}>{participant.is_ready ? 'Listo' : 'No listo'}</small>
+                          {participant.character && !session.tokens.some(token => token.character_id === participant.character_id) && (
+                            <button title="Asignar token" onClick={() => emit('game:create-token', { sessionId: session.id, characterId: participant.character_id })}><Plus size={13} /></button>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                    {!session.participants.length && <div className="game-panel-empty"><Users size={28} /><h3>Esperando aventureros</h3><p>Comparte el código <strong>{session.code}</strong> para recibir jugadores.</p><button onClick={copyCode}><Clipboard size={13} /> Copiar invitación</button></div>}
                   </div>
                 )}
-                <label className="game-npc-search"><Search size={13} /><input value={npcSearch} onChange={event => setNpcSearch(event.target.value)} placeholder="Buscar NPC por nombre..." /></label>
-                <div className="game-npc-token-grid">
-                  {filteredNpcs.map(npc => {
-                    const tokenExists = session.tokens.some(token => token.character_id === npc.id);
-                    const visibleInScene = (session.scene_npcs || []).some(character => character.id === npc.id);
-                    const isSpeaking = session.speaking_npc_id === npc.id;
-                    return (
-                      <article key={npc.id} className={`${tokenExists ? 'is-added' : ''}${visibleInScene ? ' is-on-scene' : ''}${isSpeaking ? ' is-speaking' : ''}`}>
-                        <div className="game-npc-token-avatar">{npc.image_url ? <img src={resolveMediaUrl(npc.image_url)} alt="" /> : <Skull size={16} />}</div>
-                        <div><strong>{npc.name}</strong><span>{npc.race || 'Criatura'} · {npc.npc_type || 'neutral'}</span></div>
-                        <small><Heart size={9} />{npc.hp_max || 10}</small><small><Shield size={9} />{npc.ac_base || 10}</small>
-                        <div className="game-npc-row-actions">
-                          <button className={visibleInScene ? 'is-visible' : ''} onClick={() => emit('game:toggle-scene-npc', { sessionId: session.id, characterId: npc.id })}>
-                            {visibleInScene ? <EyeOff size={10} /> : <Eye size={10} />}{visibleInScene ? 'Ocultar' : 'Mostrar'}
-                          </button>
-                          <button className={isSpeaking ? 'is-speaking' : ''} disabled={!visibleInScene} onClick={() => emit('game:set-scene-speaker', { sessionId: session.id, characterId: npc.id })}>
-                            <MessageCircle size={10} />{isSpeaking ? 'Hablando' : 'Hablar'}
-                          </button>
-                          <button disabled={tokenExists} onClick={() => emit('game:create-token', { sessionId: session.id, characterId: npc.id })}>{tokenExists ? 'En mapa' : <><Plus size={10} /> Token</>}</button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                  {npcsLoading && <p className="game-console-empty">Sincronizando NPCs y criaturas...</p>}
-                  {!npcsLoading && npcsError && <p className="game-console-empty is-error">{npcsError}</p>}
-                  {!npcsLoading && !npcsError && !filteredNpcs.length && (
-                    <p className="game-console-empty">{npcSearch.trim() ? 'No hay NPCs que coincidan con la búsqueda.' : 'No hay NPCs registrados en la campaña.'}</p>
-                  )}
-                </div>
+
+                {partyView === 'npcs' && (
+                  <div className="game-party-view">
+                    <div className="game-token-manager-title"><span>NPCs y criaturas</span><button onClick={() => setQuickNpcOpen(current => !current)}><Plus size={12} /> Crear rápido</button></div>
+                    {quickNpcOpen && (
+                      <div className="game-quick-npc-form">
+                        <label className="is-wide"><span>Nombre</span><input value={quickNpc.name} onChange={event => setQuickNpc(current => ({ ...current, name: event.target.value }))} placeholder="Ej. Goblin explorador" /></label>
+                        <label><span>PG</span><input type="number" min="1" value={quickNpc.hpMax} onChange={event => setQuickNpc(current => ({ ...current, hpMax: event.target.value }))} /></label>
+                        <label><span>CA</span><input type="number" min="1" value={quickNpc.armorClass} onChange={event => setQuickNpc(current => ({ ...current, armorClass: event.target.value }))} /></label>
+                        <label><span>Tipo</span><select value={quickNpc.npcType} onChange={event => setQuickNpc(current => ({ ...current, npcType: event.target.value }))}><option value="enemigo">Enemigo</option><option value="neutral">Neutral</option><option value="amigo">Aliado</option></select></label>
+                        <label className="is-wide"><span>URL de retrato opcional</span><input value={quickNpc.imageUrl} onChange={event => setQuickNpc(current => ({ ...current, imageUrl: event.target.value }))} placeholder="https://..." /></label>
+                        <button disabled={creatingNpcToken || !quickNpc.name.trim()} onClick={createQuickNpcToken}><Skull size={13} />{creatingNpcToken ? 'Creando...' : 'Crear ficha y token'}</button>
+                      </div>
+                    )}
+                    <label className="game-npc-search"><Search size={13} /><input value={npcSearch} onChange={event => setNpcSearch(event.target.value)} placeholder="Buscar NPC por nombre..." /></label>
+                    <div className="game-npc-token-grid">
+                      {filteredNpcs.map(npc => {
+                        const tokenExists = session.tokens.some(token => token.character_id === npc.id);
+                        const visibleInScene = (session.scene_npcs || []).some(character => character.id === npc.id);
+                        const isSpeaking = session.speaking_npc_id === npc.id;
+                        return (
+                          <article key={npc.id} className={`${tokenExists ? 'is-added' : ''}${visibleInScene ? ' is-on-scene' : ''}${isSpeaking ? ' is-speaking' : ''}`}>
+                            <div className="game-npc-token-avatar">{npc.image_url ? <img src={resolveMediaUrl(npc.image_url)} alt="" /> : <Skull size={16} />}</div>
+                            <div><strong>{npc.name}</strong><span>{npc.race || 'Criatura'} · {npc.npc_type || 'neutral'}</span></div>
+                            <small><Heart size={9} />{npc.hp_max || 10}</small><small><Shield size={9} />{npc.ac_base || 10}</small>
+                            <div className="game-npc-row-actions">
+                              <button className={visibleInScene ? 'is-visible' : ''} onClick={() => emit('game:toggle-scene-npc', { sessionId: session.id, characterId: npc.id })}>
+                                {visibleInScene ? <EyeOff size={10} /> : <Eye size={10} />}{visibleInScene ? 'Ocultar' : 'Mostrar'}
+                              </button>
+                              <button className={isSpeaking ? 'is-speaking' : ''} disabled={!visibleInScene} onClick={() => emit('game:set-scene-speaker', { sessionId: session.id, characterId: npc.id })}>
+                                <MessageCircle size={10} />{isSpeaking ? 'Hablando' : 'Hablar'}
+                              </button>
+                              <button disabled={tokenExists} onClick={() => emit('game:create-token', { sessionId: session.id, characterId: npc.id })}>{tokenExists ? 'En mapa' : <><Plus size={10} /> Token</>}</button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                      {npcsLoading && <p className="game-console-empty">Sincronizando NPCs y criaturas...</p>}
+                      {!npcsLoading && npcsError && <p className="game-console-empty is-error">{npcsError}</p>}
+                      {!npcsLoading && !npcsError && !filteredNpcs.length && (
+                        <p className="game-console-empty">{npcSearch.trim() ? 'No hay NPCs que coincidan con la búsqueda.' : 'No hay NPCs registrados en la campaña.'}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

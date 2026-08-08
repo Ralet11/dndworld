@@ -1,18 +1,22 @@
 const { Op } = require('sequelize');
+const { randomUUID } = require('crypto');
 const {
     AbilityScore,
     Character,
     GameAsset,
     GameParticipant,
+    GameRoll,
     GameSession,
     GameToken,
     NpcAction,
+    Scene,
     Skill,
     User,
 } = require('../models');
 const { resolveCharacterImage } = require('../utils/npcImages');
 
 const presence = new Map();
+const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
 
 function roomName(sessionId) {
     return `game:${sessionId}`;
@@ -24,6 +28,15 @@ function isDm(socket) {
 
 function clamp(value) {
     return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function annotationViewKey(session) {
+    return `${session.shared_type}:${session.shared_url || ''}`;
+}
+
+function validAnnotationColor(value) {
+    const color = String(value || '').trim().toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(color) ? color : '#e8c66a';
 }
 
 function fail(socket, message) {
@@ -98,6 +111,15 @@ async function loadSession(sessionId) {
             {
                 model: GameAsset,
                 as: 'assets',
+            },
+            {
+                model: GameRoll,
+                as: 'rolls',
+                where: { dismissed: false },
+                required: false,
+                separate: true,
+                limit: 12,
+                order: [['createdAt', 'DESC']],
             },
         ],
         order: [
@@ -357,7 +379,7 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, session.id);
     });
 
-    socket.on('game:update-narrative-style', async ({ sessionId, fit, layout, slotIndex, assetId } = {}) => {
+    socket.on('game:update-narrative-style', async ({ sessionId, fit, layout, slotIndex, assetId, sceneId, panelUrl, panelTitle, clearSlot } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return fail(socket, 'No tienes permiso para ajustar la escena narrativa.');
         if (session.shared_type !== 'IMAGE') return fail(socket, 'El encuadre narrativo sólo puede configurarse sobre una imagen.');
@@ -372,17 +394,115 @@ function registerGameSessionSocket(io, socket) {
         const normalizedSlot = Number(slotIndex);
         if (Number.isInteger(normalizedSlot) && normalizedSlot >= 0 && normalizedSlot < 4) {
             const panels = Array.isArray(session.narrative_panels) ? [...session.narrative_panels] : [];
-            if (assetId) {
+            if (clearSlot === true) {
+                panels[normalizedSlot] = null;
+            } else if (assetId) {
                 const asset = await GameAsset.findOne({ where: { id: assetId, session_id: session.id } });
                 if (!asset) return fail(socket, 'El asset seleccionado no pertenece a esta sala.');
                 panels[normalizedSlot] = { asset_id: asset.id, url: asset.url, title: asset.title };
+            } else if (sceneId) {
+                const scene = await Scene.findByPk(sceneId, { attributes: ['id', 'title', 'imageUrl'] });
+                if (!scene?.imageUrl) return fail(socket, 'La escena seleccionada no tiene una imagen válida.');
+                panels[normalizedSlot] = {
+                    asset_id: null,
+                    scene_id: scene.id,
+                    url: scene.imageUrl,
+                    title: scene.title,
+                };
+            } else if (panelUrl) {
+                panels[normalizedSlot] = {
+                    asset_id: null,
+                    url: String(panelUrl).trim(),
+                    title: String(panelTitle || `Área ${normalizedSlot + 1}`).trim().slice(0, 160),
+                };
             } else if (normalizedSlot === 0 && session.shared_url) {
                 panels[0] = { asset_id: null, url: session.shared_url, title: session.shared_title };
             } else {
                 panels[normalizedSlot] = null;
             }
             session.narrative_panels = panels;
+            if (clearSlot === true && !panels.slice(0, session.narrative_layout).some(panel => panel?.url)) {
+                session.shared_type = 'NONE';
+                session.shared_url = null;
+                session.shared_title = null;
+            }
         }
+        await session.save();
+        await broadcastSession(io, session.id);
+    });
+
+    socket.on('game:add-annotation', async ({ sessionId, annotation } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || session.shared_type === 'NONE' || !annotation) return;
+        const type = annotation.type === 'path' && session.shared_type === 'MAP' ? 'path' : annotation.type === 'text' ? 'text' : null;
+        if (!type) return fail(socket, 'La anotación no es válida para esta vista.');
+
+        const item = {
+            id: randomUUID(),
+            type,
+            view_key: annotationViewKey(session),
+            color: validAnnotationColor(annotation.color),
+        };
+        if (type === 'path') {
+            const points = Array.isArray(annotation.points) ? annotation.points.slice(0, 600) : [];
+            if (points.length < 2) return;
+            item.points = points.map(point => ({ x: clamp(point.x), y: clamp(point.y) }));
+            item.width = Math.max(1, Math.min(18, Number(annotation.width) || 3));
+        } else {
+            const text = String(annotation.text || '').trim().slice(0, 500);
+            if (!text) return;
+            item.text = text;
+            item.x = clamp(annotation.x);
+            item.y = clamp(annotation.y);
+            item.size = Math.max(12, Math.min(72, Number(annotation.size) || 28));
+            item.background = annotation.background !== false;
+        }
+
+        const annotations = Array.isArray(session.stage_annotations) ? [...session.stage_annotations] : [];
+        session.stage_annotations = [...annotations.slice(-299), item];
+        await session.save();
+        await broadcastSession(io, session.id);
+    });
+
+    socket.on('game:update-annotation', async ({ sessionId, annotationId, x, y, text, color, size, background } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || !annotationId) return;
+        const annotations = Array.isArray(session.stage_annotations) ? [...session.stage_annotations] : [];
+        const index = annotations.findIndex(item => item.id === annotationId && item.view_key === annotationViewKey(session));
+        if (index < 0 || annotations[index].type !== 'text') return;
+        const current = annotations[index];
+        const next = { ...current };
+        if (x != null) next.x = clamp(x);
+        if (y != null) next.y = clamp(y);
+        if (text != null) {
+            const normalizedText = String(text).trim().slice(0, 500);
+            if (!normalizedText) return;
+            next.text = normalizedText;
+        }
+        if (color != null) next.color = validAnnotationColor(color);
+        if (size != null) next.size = Math.max(12, Math.min(72, Number(size) || current.size || 28));
+        if (typeof background === 'boolean') next.background = background;
+        annotations[index] = next;
+        session.stage_annotations = annotations;
+        await session.save();
+        await broadcastSession(io, session.id);
+    });
+
+    socket.on('game:delete-annotation', async ({ sessionId, annotationId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || !annotationId) return;
+        const annotations = Array.isArray(session.stage_annotations) ? session.stage_annotations : [];
+        session.stage_annotations = annotations.filter(item => item.id !== annotationId || item.view_key !== annotationViewKey(session));
+        await session.save();
+        await broadcastSession(io, session.id);
+    });
+
+    socket.on('game:clear-annotations', async ({ sessionId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session) return;
+        const viewKey = annotationViewKey(session);
+        const annotations = Array.isArray(session.stage_annotations) ? session.stage_annotations : [];
+        session.stage_annotations = annotations.filter(item => item.view_key !== viewKey);
         await session.save();
         await broadcastSession(io, session.id);
     });
@@ -654,6 +774,98 @@ function registerGameSessionSocket(io, socket) {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
         await GameToken.destroy({ where: { id: tokenId, session_id: sessionId } });
+        await broadcastSession(io, session.id);
+    });
+
+    socket.on('game:roll-dice', async ({ sessionId, sides, quantity = 1, modifier = 0, label } = {}, reply = () => {}) => {
+        try {
+            const session = await GameSession.findByPk(sessionId);
+            if (!session) return reply({ ok: false, message: 'La mesa ya no esta disponible.' });
+
+            const dmRoll = isDm(socket) && session.dm_user_id === socket.user.id;
+            const participant = dmRoll ? null : await GameParticipant.findOne({
+                where: { session_id: session.id, user_id: socket.user.id },
+                include: [{ model: Character, as: 'character' }],
+            });
+            if (!dmRoll && !participant) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+
+            const parsedSides = Number.parseInt(sides, 10);
+            const parsedQuantity = Math.max(1, Math.min(20, Number.parseInt(quantity, 10) || 1));
+            const parsedModifier = Math.max(-100, Math.min(100, Number.parseInt(modifier, 10) || 0));
+            const participants = dmRoll ? [] : await GameParticipant.findAll({
+                where: { session_id: session.id },
+                attributes: ['user_id'],
+                order: [['createdAt', 'ASC']],
+            });
+            const playerColorIndex = Math.max(0, participants.findIndex(item => item.user_id === socket.user.id));
+            const themeColor = dmRoll ? '#c89b43' : PLAYER_DICE_COLORS[playerColorIndex % PLAYER_DICE_COLORS.length];
+            if (![4, 6, 8, 10, 12, 20, 100].includes(parsedSides)) {
+                return reply({ ok: false, message: 'Ese dado no esta permitido.' });
+            }
+
+            const character = participant?.character || null;
+            const roll = await GameRoll.create({
+                session_id: session.id,
+                user_id: socket.user.id,
+                character_id: character?.id || null,
+                roller_name: socket.user.username || (dmRoll ? 'Dungeon Master' : 'Jugador'),
+                character_name: character?.name || (dmRoll ? 'Dungeon Master' : null),
+                character_image: character ? resolveCharacterImage(character) : null,
+                label: String(label || `Tirada de d${parsedSides}`).trim().slice(0, 120) || `Tirada de d${parsedSides}`,
+                sides: parsedSides,
+                quantity: parsedQuantity,
+                modifier: parsedModifier,
+                theme_color: themeColor,
+                results: [],
+                total: parsedModifier,
+                resolved: false,
+            });
+
+            const staleRolls = await GameRoll.findAll({
+                where: { session_id: session.id, dismissed: false },
+                order: [['createdAt', 'DESC']],
+                offset: 12,
+            });
+            if (staleRolls.length) {
+                await GameRoll.update({ dismissed: true }, { where: { id: staleRolls.map(item => item.id) } });
+            }
+
+            await broadcastSession(io, session.id);
+            reply({ ok: true, roll: roll.toJSON() });
+        } catch (error) {
+            console.error('game:roll-dice error:', error);
+            reply({ ok: false, message: 'No se pudo completar la tirada.' });
+        }
+    });
+
+    socket.on('game:resolve-roll', async ({ sessionId, rollId, results } = {}, reply = () => {}) => {
+        try {
+            const roll = await GameRoll.findOne({
+                where: { id: rollId, session_id: sessionId, user_id: socket.user.id, resolved: false },
+            });
+            if (!roll) return reply({ ok: false, message: 'La tirada ya fue resuelta o no te pertenece.' });
+
+            const values = Array.isArray(results) ? results.map(value => Number.parseInt(value, 10)) : [];
+            const validResults = values.length === roll.quantity
+                && values.every(value => Number.isInteger(value) && value >= 1 && value <= roll.sides);
+            if (!validResults) return reply({ ok: false, message: 'El resultado fisico de los dados no es valido.' });
+
+            roll.results = values;
+            roll.total = values.reduce((sum, value) => sum + value, 0) + roll.modifier;
+            roll.resolved = true;
+            await roll.save();
+            await broadcastSession(io, roll.session_id);
+            reply({ ok: true, roll: roll.toJSON() });
+        } catch (error) {
+            console.error('game:resolve-roll error:', error);
+            reply({ ok: false, message: 'No se pudo confirmar el resultado de los dados.' });
+        }
+    });
+
+    socket.on('game:dismiss-roll', async ({ sessionId, rollId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session) return;
+        await GameRoll.update({ dismissed: true }, { where: { id: rollId, session_id: session.id } });
         await broadcastSession(io, session.id);
     });
 

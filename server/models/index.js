@@ -23,6 +23,7 @@ const GameSession = require('./GameSession');
 const GameParticipant = require('./GameParticipant');
 const GameToken = require('./GameToken');
 const GameAsset = require('./GameAsset');
+const GameRoll = require('./GameRoll');
 const NpcAction = require('./NpcAction');
 
 // Character Relationships
@@ -102,6 +103,10 @@ GameToken.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
 GameToken.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
 GameSession.hasMany(GameAsset, { foreignKey: 'session_id', as: 'assets', onDelete: 'CASCADE' });
 GameAsset.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+GameSession.hasMany(GameRoll, { foreignKey: 'session_id', as: 'rolls', onDelete: 'CASCADE' });
+GameRoll.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+GameRoll.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+GameRoll.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
 
 module.exports = {
     Character,
@@ -128,5 +133,6 @@ module.exports = {
     GameParticipant,
     GameToken,
     GameAsset,
+    GameRoll,
     NpcAction
 };

@@ -1114,13 +1114,15 @@ function DesktopSectionIntro({ tab, character }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────
-export default function CharacterSheet({ character, embedded = false }) {
+export default function CharacterSheet({ character, embedded = false, onRoll }) {
   const [activeTab, setActiveTab] = useState('stats');
   const [rollTarget, setRollTarget] = useState(null);
   if (!character) return null;
 
+  const handleRoll = onRoll || setRollTarget;
+
   const renderTabContent = (tab) => {
-    if (tab === 'stats')     return <StatsOverviewTab character={character} onRoll={setRollTarget} />;
+    if (tab === 'stats')     return <StatsOverviewTab character={character} onRoll={handleRoll} />;
     if (tab === 'inventory') return <InventorySection character={character} />;
     if (tab === 'social')    return <RasgosTab character={character} />;
     if (tab === 'magic')     return <SpellsManager character={character} />;
@@ -1143,7 +1145,7 @@ export default function CharacterSheet({ character, embedded = false }) {
           <div className={`hero-workspace-content hero-workspace-content--${activeTab}`}>
             <DesktopSectionIntro tab={activeTab} character={character} />
             {activeTab === 'stats'
-              ? <DesktopStatsTab character={character} onRoll={setRollTarget} />
+              ? <DesktopStatsTab character={character} onRoll={handleRoll} />
               : renderTabContent(activeTab)}
           </div>
         </div>
@@ -1159,12 +1161,12 @@ export default function CharacterSheet({ character, embedded = false }) {
         </div>
         <div className="px-4 py-4 pb-8">
           {activeTab === 'stats'
-            ? <MobileStatsTab character={character} onRoll={setRollTarget} />
+            ? <MobileStatsTab character={character} onRoll={handleRoll} />
             : renderTabContent(activeTab)}
         </div>
       </div>
 
-      <RollModal roll={rollTarget} onClose={() => setRollTarget(null)} />
+      {!onRoll && <RollModal roll={rollTarget} onClose={() => setRollTarget(null)} />}
     </>
   );
 }

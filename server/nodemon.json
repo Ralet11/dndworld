@@ -4,6 +4,7 @@
     "controllers",
     "models",
     "routes",
+    "sockets",
     "middleware",
     "config",
     "utils",

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, Equal, Heart, Image as ImageIcon, Map as MapIcon, Minus, Move, Palette, Plus, Settings2, Shield, Trash2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Check, Copy, Equal, Eraser, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Trash2, Type, X } from 'lucide-react';
 import API_URL from '../../config';
+import DiceRollOverlay from './DiceRollOverlay';
 
 const CONDITIONS = ['Envenenado', 'Aturdido', 'Derribado', 'Invisible', 'Concentración'];
 const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -47,6 +49,14 @@ export default function GameStage({
   onGridStyleChange,
   onNarrativeStyleChange,
   onNarrativePanelDrop,
+  onHideContent,
+  onAddAnnotation,
+  onUpdateAnnotation,
+  onDeleteAnnotation,
+  onClearAnnotations,
+  onDismissRoll,
+  onResolveRoll,
+  toolbarHost,
 }) {
   const stageRef = useRef(null);
   const interactionRef = useRef(null);
@@ -54,6 +64,7 @@ export default function GameStage({
   const animationFrameRef = useRef(null);
   const pendingPreviewRef = useRef(null);
   const tokenElementsRef = useRef(new Map());
+  const annotationElementsRef = useRef(new Map());
   const contextCardRef = useRef(null);
   const contextDragRef = useRef(null);
   const [selectionBox, setSelectionBox] = useState(null);
@@ -62,8 +73,14 @@ export default function GameStage({
   const [hpEditor, setHpEditor] = useState(null);
   const [detailTab, setDetailTab] = useState('sheet');
   const [showAllHealth, setShowAllHealth] = useState(false);
-  const [gridToolsOpen, setGridToolsOpen] = useState(false);
   const [narrativeDropTarget, setNarrativeDropTarget] = useState(null);
+  const [annotationTool, setAnnotationTool] = useState('cursor');
+  const [annotationColor, setAnnotationColor] = useState('#e8c66a');
+  const [annotationWidth, setAnnotationWidth] = useState(3);
+  const [annotationSize, setAnnotationSize] = useState(28);
+  const [annotationBackground, setAnnotationBackground] = useState(true);
+  const [draftPath, setDraftPath] = useState(null);
+  const [textEditor, setTextEditor] = useState(null);
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -71,11 +88,18 @@ export default function GameStage({
   const speakingNpcId = session?.speaking_npc_id;
   const narrativeLayout = Math.max(1, Math.min(4, Number(session?.narrative_layout) || 1));
   const storedNarrativePanels = Array.isArray(session?.narrative_panels) ? session.narrative_panels : [];
-  const narrativePanels = Array.from({ length: narrativeLayout }, (_, index) => (
-    storedNarrativePanels[index] || (index === 0 && session?.shared_url
+  const narrativePanels = Array.from({ length: narrativeLayout }, (_, index) => {
+    if (Object.prototype.hasOwnProperty.call(storedNarrativePanels, index)) return storedNarrativePanels[index];
+    return index === 0 && session?.shared_url
       ? { asset_id: null, url: session.shared_url, title: session.shared_title }
-      : null)
-  ));
+      : null;
+  });
+  const displayedNarrativePanels = isDm ? narrativePanels : narrativePanels.filter(panel => panel?.url);
+  const displayedNarrativeLayout = isDm
+    ? narrativeLayout
+    : Math.max(1, Math.min(4, displayedNarrativePanels.length));
+  const annotationViewKey = `${session?.shared_type}:${session?.shared_url || ''}`;
+  const annotations = (session?.stage_annotations || []).filter(item => item.view_key === annotationViewKey);
   const latestSceneNpcsRef = useRef(sceneNpcs);
   const renderedSceneNpcsRef = useRef(sceneNpcs);
   const sceneNpcExitTimersRef = useRef(new Map());
@@ -139,6 +163,16 @@ export default function GameStage({
   }, []);
 
   useEffect(() => {
+    const clearNarrativeDrop = () => setNarrativeDropTarget(null);
+    window.addEventListener('dragend', clearNarrativeDrop);
+    window.addEventListener('drop', clearNarrativeDrop);
+    return () => {
+      window.removeEventListener('dragend', clearNarrativeDrop);
+      window.removeEventListener('drop', clearNarrativeDrop);
+    };
+  }, []);
+
+  useEffect(() => {
     runtimeRef.current = {
       tokens: (session?.tokens || []).filter(token => token.visible),
       isDm,
@@ -146,8 +180,10 @@ export default function GameStage({
       userId,
       onMoveToken,
       onMoveTokens,
+      onAddAnnotation,
+      onUpdateAnnotation,
     };
-  }, [session, userId, isDm, onMoveToken, onMoveTokens]);
+  }, [session, userId, isDm, onMoveToken, onMoveTokens, onAddAnnotation, onUpdateAnnotation]);
 
   useEffect(() => {
     const applyTokenPositions = positions => {
@@ -186,6 +222,37 @@ export default function GameStage({
       const rect = stageRef.current?.getBoundingClientRect();
       if (!interaction || !rect) return;
 
+      if (interaction.type === 'annotation-path') {
+        const point = {
+          x: clamp(((event.clientX - rect.left) / rect.width) * 100),
+          y: clamp(((event.clientY - rect.top) / rect.height) * 100),
+        };
+        const previous = interaction.points.at(-1);
+        if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.18) return;
+        interaction.points.push(point);
+        setDraftPath({ ...interaction, points: [...interaction.points] });
+        return;
+      }
+
+      if (interaction.type === 'annotation-drag') {
+        const x = clamp(interaction.x + ((event.clientX - interaction.startClientX) / rect.width) * 100);
+        const y = clamp(interaction.y + ((event.clientY - interaction.startClientY) / rect.height) * 100);
+        interaction.current = { x, y };
+        const element = annotationElementsRef.current.get(interaction.id);
+        if (element) {
+          element.style.left = `${x}%`;
+          element.style.top = `${y}%`;
+        }
+        return;
+      }
+
+      if (interaction.type === 'annotation-editor-drag') {
+        const x = clamp(interaction.x + ((event.clientX - interaction.startClientX) / rect.width) * 100);
+        const y = clamp(interaction.y + ((event.clientY - interaction.startClientY) / rect.height) * 100);
+        setTextEditor(current => current ? { ...current, x, y } : current);
+        return;
+      }
+
       if (interaction.type === 'selection') {
         const current = {
           x: clamp(((event.clientX - rect.left) / rect.width) * 100),
@@ -206,6 +273,31 @@ export default function GameStage({
       if (!interaction) return;
       const runtime = runtimeRef.current;
       const rect = stageRef.current?.getBoundingClientRect();
+
+      if (interaction.type === 'annotation-path') {
+        if (interaction.points.length > 1) runtime.onAddAnnotation?.({
+          type: 'path',
+          points: interaction.points,
+          color: interaction.color,
+          width: interaction.width,
+        });
+        setDraftPath(null);
+        interactionRef.current = null;
+        return;
+      }
+
+      if (interaction.type === 'annotation-drag') {
+        const position = interaction.current || { x: interaction.x, y: interaction.y };
+        runtime.onUpdateAnnotation?.(interaction.id, { x: position.x, y: position.y });
+        interactionRef.current = null;
+        return;
+      }
+
+
+      if (interaction.type === 'annotation-editor-drag') {
+        interactionRef.current = null;
+        return;
+      }
 
       if (interaction.type === 'selection') {
         const endPosition = rect ? {
@@ -338,14 +430,40 @@ export default function GameStage({
   return (
     <div
       ref={stageRef}
-      className={`game-stage${session?.shared_type === 'MAP' && session?.grid_enabled ? ' has-grid' : ''}${hasMedia ? ' has-media' : ''}${session?.shared_type === 'MAP' ? ` is-map map-fit-${String(session?.map_fit || 'COVER').toLowerCase()}` : ` is-narrative fit-${String(session?.narrative_fit || 'COVER').toLowerCase()}`}${showAllHealth ? ' is-showing-health' : ''}`}
+      className={`game-stage${session?.shared_type === 'MAP' && session?.grid_enabled ? ' has-grid' : ''}${hasMedia ? ' has-media' : ''}${session?.shared_type === 'MAP' ? ` is-map map-fit-${String(session?.map_fit || 'COVER').toLowerCase()}` : ` is-narrative fit-${String(session?.narrative_fit || 'COVER').toLowerCase()}`}${showAllHealth ? ' is-showing-health' : ''}${isDm && annotationTool !== 'cursor' ? ` is-annotating tool-${annotationTool}` : ''}`}
       style={{
         '--game-grid-color': session?.grid_color || '#d8cdb1',
         '--game-grid-line-width': `${session?.grid_line_width ?? 1}px`,
       }}
       onContextMenu={event => event.preventDefault()}
       onPointerDown={event => {
-        if (event.button !== 0 || !isDm || session?.shared_type !== 'MAP') return;
+        if (event.button !== 0 || !isDm) return;
+        if (annotationTool === 'pen' && session?.shared_type === 'MAP') {
+          event.preventDefault();
+          setContextMenu(null);
+          const start = positionFromEvent(event);
+          if (!start) return;
+          const interaction = { type: 'annotation-path', points: [start], color: annotationColor, width: annotationWidth };
+          interactionRef.current = interaction;
+          setDraftPath(interaction);
+          return;
+        }
+        if (annotationTool === 'text') {
+          event.preventDefault();
+          const position = positionFromEvent(event);
+          if (!position) return;
+          setTextEditor({
+            id: null,
+            text: '',
+            x: position.x,
+            y: position.y,
+            color: annotationColor,
+            size: annotationSize,
+            background: annotationBackground,
+          });
+          return;
+        }
+        if (annotationTool !== 'cursor' || session?.shared_type !== 'MAP') return;
         event.preventDefault();
         setContextMenu(null);
         const start = positionFromEvent(event);
@@ -357,20 +475,22 @@ export default function GameStage({
     >
       {hasMedia ? (
         session.shared_type === 'IMAGE' ? (
-          <div className={`game-narrative-grid layout-${narrativeLayout}${isDm ? ' is-editable' : ''}`}>
-            {narrativePanels.map((panel, index) => (
+          <div className={`game-narrative-grid layout-${displayedNarrativeLayout}${isDm ? ' is-editable' : ''}`}>
+            {displayedNarrativePanels.map((panel, index) => (
               <div
                 key={`${index}-${panel?.asset_id || panel?.url || 'empty'}`}
                 className={`game-narrative-panel${narrativeDropTarget === index ? ' is-drop-target' : ''}`}
                 data-drop-label={`Soltar en área ${index + 1}`}
                 onDragEnter={isDm ? event => {
-                  if (!Array.from(event.dataTransfer.types).includes('application/x-game-asset')) return;
+                  const types = Array.from(event.dataTransfer.types);
+                  if (!types.includes('application/x-game-asset') && !types.includes('application/x-game-scene')) return;
                   event.preventDefault();
                   event.stopPropagation();
                   setNarrativeDropTarget(index);
                 } : undefined}
                 onDragOver={isDm ? event => {
-                  if (!Array.from(event.dataTransfer.types).includes('application/x-game-asset')) return;
+                  const types = Array.from(event.dataTransfer.types);
+                  if (!types.includes('application/x-game-asset') && !types.includes('application/x-game-scene')) return;
                   event.preventDefault();
                   event.stopPropagation();
                   event.dataTransfer.dropEffect = 'copy';
@@ -383,13 +503,49 @@ export default function GameStage({
                 onDrop={isDm ? event => {
                   event.preventDefault();
                   event.stopPropagation();
-                  const assetId = event.dataTransfer.getData('application/x-game-asset') || event.dataTransfer.getData('text/plain');
+                  const assetPayload = event.dataTransfer.getData('application/x-game-asset');
+                  const sceneData = event.dataTransfer.getData('application/x-game-scene');
                   setNarrativeDropTarget(null);
-                  if (assetId) onNarrativePanelDrop?.(index, assetId);
+                  if (assetPayload?.startsWith('scene:')) {
+                    onNarrativePanelDrop?.(index, { sceneId: assetPayload.slice(6) });
+                    return;
+                  }
+                  if (assetPayload) {
+                    onNarrativePanelDrop?.(index, { assetId: assetPayload });
+                    return;
+                  }
+                  if (sceneData) {
+                    try {
+                      const scene = JSON.parse(sceneData);
+                      if (scene.id) onNarrativePanelDrop?.(index, { sceneId: scene.id });
+                      else if (scene.url) onNarrativePanelDrop?.(index, { panelUrl: scene.url, panelTitle: scene.title });
+                    } catch {
+                      // Ignore malformed external drag data.
+                    }
+                  }
                 } : undefined}
               >
                 {panel?.url ? <img src={resolveUrl(panel.url)} alt={panel.title || `Imagen narrativa ${index + 1}`} draggable={false} /> : <div><ImageIcon size={22} /><span>Área {index + 1}</span><small>Sin imagen asignada</small></div>}
-                {panel?.title && narrativeLayout > 1 && <span>{panel.title}</span>}
+                {panel?.title && displayedNarrativeLayout > 1 && <span>{panel.title}</span>}
+                {isDm && panel?.url && (
+                  <button
+                    type="button"
+                    className="game-narrative-panel-clear"
+                    aria-label={`Quitar imagen del área ${index + 1}`}
+                    title="Quitar de este cuadrante"
+                    onPointerDown={event => event.stopPropagation()}
+                    onClick={event => {
+                      event.stopPropagation();
+                      if (narrativePanels.filter(item => item?.url).length === 1) {
+                        onHideContent?.();
+                      } else {
+                        onNarrativePanelDrop?.(index, { clearSlot: true });
+                      }
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -402,9 +558,144 @@ export default function GameStage({
         </div>
       )}
 
-      {isDm && session?.shared_type !== 'NONE' && (
-        <div className={`game-grid-tools${gridToolsOpen ? ' is-open' : ''}`} onPointerDown={event => event.stopPropagation()}>
-          {gridToolsOpen && (
+      {!!(annotations.length || draftPath || textEditor) && (
+        <div className={`game-annotation-layer${isDm ? ' is-dm' : ''}`} aria-label="Anotaciones compartidas">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            {annotations.filter(item => item.type === 'path').map(item => {
+              const points = item.points.map(point => `${point.x},${point.y}`).join(' ');
+              return (
+                <g key={item.id}>
+                  <polyline className="game-annotation-path" points={points} fill="none" stroke={item.color} strokeWidth={item.width} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+                  {isDm && annotationTool === 'eraser' && <polyline className="game-annotation-path-hit" points={points} fill="none" stroke="transparent" strokeWidth={Math.max(14, item.width + 10)} vectorEffect="non-scaling-stroke" onPointerDown={event => { event.stopPropagation(); onDeleteAnnotation?.(item.id); }} />}
+                </g>
+              );
+            })}
+            {draftPath && <polyline className="game-annotation-path is-draft" points={draftPath.points.map(point => `${point.x},${point.y}`).join(' ')} fill="none" stroke={draftPath.color} strokeWidth={draftPath.width} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />}
+          </svg>
+          {annotations.filter(item => item.type === 'text').map(item => (
+            <div
+              key={item.id}
+              ref={element => {
+                if (element) annotationElementsRef.current.set(item.id, element);
+                else annotationElementsRef.current.delete(item.id);
+              }}
+              className={`game-stage-annotation-text${item.background ? ' has-background' : ''}${isDm && annotationTool !== 'eraser' ? ' is-movable' : ''}${isDm && annotationTool === 'eraser' ? ' is-erasable' : ''}`}
+              style={{ left: `${item.x}%`, top: `${item.y}%`, color: item.color, fontSize: `${item.size}px` }}
+              onPointerDown={isDm ? event => {
+                event.stopPropagation();
+                if (annotationTool === 'eraser') {
+                  onDeleteAnnotation?.(item.id);
+                  return;
+                }
+                if (event.button !== 0) return;
+                event.preventDefault();
+                interactionRef.current = {
+                  type: 'annotation-drag',
+                  id: item.id,
+                  x: item.x,
+                  y: item.y,
+                  startClientX: event.clientX,
+                  startClientY: event.clientY,
+                };
+              } : undefined}
+              onDoubleClick={isDm ? event => {
+                event.stopPropagation();
+                event.preventDefault();
+                setTextEditor({ ...item });
+              } : undefined}
+            >
+              {item.text}
+              {isDm && (
+                <button
+                  type="button"
+                  className="game-stage-annotation-close"
+                  aria-label="Eliminar texto"
+                  title="Eliminar texto"
+                  onPointerDown={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onDeleteAnnotation?.(item.id);
+                    setTextEditor(current => current?.id === item.id ? null : current);
+                  }}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          ))}
+          {isDm && textEditor && (
+            <div
+              className="game-stage-text-editor"
+              style={{ left: `${textEditor.x}%`, top: `${textEditor.y}%`, '--editor-color': textEditor.color }}
+              onPointerDown={event => event.stopPropagation()}
+            >
+              <div
+                className="game-stage-text-editor-handle"
+                onPointerDown={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  interactionRef.current = {
+                    type: 'annotation-editor-drag',
+                    x: textEditor.x,
+                    y: textEditor.y,
+                    startClientX: event.clientX,
+                    startClientY: event.clientY,
+                  };
+                }}
+              >
+                <Move size={12} /><span>{textEditor.id ? 'Editar texto' : 'Nuevo texto'}</span><small>Arrastra para mover</small>
+              </div>
+              <textarea
+                autoFocus
+                rows="3"
+                maxLength="500"
+                value={textEditor.text}
+                onChange={event => setTextEditor(current => ({ ...current, text: event.target.value }))}
+                placeholder="Escribe directamente aquí..."
+                style={{ color: textEditor.color, fontSize: `${Math.max(13, textEditor.size * 0.58)}px` }}
+              />
+              <div className="game-stage-text-editor-controls">
+                <label title="Color del texto"><input type="color" value={textEditor.color} onChange={event => setTextEditor(current => ({ ...current, color: event.target.value }))} /></label>
+                <button title="Achicar texto" onClick={() => setTextEditor(current => ({ ...current, size: Math.max(12, current.size - 2) }))}><Minus size={13} /></button>
+                <output>{textEditor.size}px</output>
+                <button title="Agrandar texto" onClick={() => setTextEditor(current => ({ ...current, size: Math.min(72, current.size + 2) }))}><Plus size={13} /></button>
+                <button className={textEditor.background ? 'is-active' : ''} title="Alternar fondo" onClick={() => setTextEditor(current => ({ ...current, background: !current.background }))}>Fondo</button>
+              </div>
+              <div className="game-stage-text-editor-actions">
+                {textEditor.id && <button className="is-delete" title="Eliminar texto" onClick={() => { onDeleteAnnotation?.(textEditor.id); setTextEditor(null); }}><Trash2 size={12} /> Eliminar</button>}
+                <button title="Cancelar" onClick={() => setTextEditor(null)}><X size={13} /> Cancelar</button>
+                <button
+                  className="is-save"
+                  disabled={!textEditor.text.trim()}
+                  onClick={() => {
+                    const payload = {
+                      text: textEditor.text,
+                      x: textEditor.x,
+                      y: textEditor.y,
+                      color: textEditor.color,
+                      size: textEditor.size,
+                      background: textEditor.background,
+                    };
+                    if (textEditor.id) onUpdateAnnotation?.(textEditor.id, payload);
+                    else onAddAnnotation?.({ type: 'text', ...payload });
+                    setAnnotationColor(textEditor.color);
+                    setAnnotationSize(textEditor.size);
+                    setAnnotationBackground(textEditor.background);
+                    setTextEditor(null);
+                  }}
+                ><Check size={13} /> Guardar</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isDm && session?.shared_type !== 'NONE' && toolbarHost && createPortal(
+        <div className="game-grid-tools is-open is-inline" onPointerDown={event => event.stopPropagation()}>
             <div className="game-grid-tools-panel">
               {session.shared_type === 'MAP' ? (
                 <>
@@ -457,13 +748,35 @@ export default function GameStage({
                   </div>
                 </>
               )}
+              <div className="game-annotation-tools">
+                <div className="game-annotation-tools-title"><span>{session.shared_type === 'MAP' ? 'Marcas de combate' : 'Texto sobre escena'}</span><strong>{annotations.length}</strong></div>
+                <div className="game-annotation-tool-buttons">
+                  <button className={annotationTool === 'cursor' ? 'is-active' : ''} onClick={() => setAnnotationTool('cursor')} title="Seleccionar y mover"><MousePointer2 size={13} /><span>Cursor</span></button>
+                  {session.shared_type === 'MAP' && <button className={annotationTool === 'pen' ? 'is-active' : ''} onClick={() => setAnnotationTool('pen')} title="Dibujar"><Pencil size={13} /><span>Pincel</span></button>}
+                  <button className={annotationTool === 'text' ? 'is-active' : ''} onClick={() => setAnnotationTool('text')} title="Agregar texto"><Type size={13} /><span>Texto</span></button>
+                  <button className={annotationTool === 'eraser' ? 'is-active' : ''} onClick={() => setAnnotationTool('eraser')} title="Borrar anotación"><Eraser size={13} /><span>Borrar</span></button>
+                </div>
+                {annotationTool === 'pen' && (
+                  <label className="game-annotation-color">
+                    <span>Color</span>
+                    <div><input type="color" value={annotationColor} onChange={event => setAnnotationColor(event.target.value)} /><output>{annotationColor}</output></div>
+                  </label>
+                )}
+                {annotationTool === 'pen' && session.shared_type === 'MAP' && (
+                  <label className="game-annotation-range">
+                    <span>Grosor <output>{annotationWidth}px</output></span>
+                    <input type="range" min="1" max="18" step="1" value={annotationWidth} onChange={event => setAnnotationWidth(Number(event.target.value))} />
+                  </label>
+                )}
+                {annotationTool === 'text' && (
+                  <p className="game-annotation-hint">Haz clic sobre la imagen y escribe directamente allí. Haz doble clic sobre un texto para volver a editarlo.</p>
+                )}
+                {annotationTool === 'eraser' && <p className="game-annotation-hint">Haz clic sobre un trazo o texto para eliminarlo.</p>}
+                <button className="game-annotation-clear" disabled={!annotations.length} onClick={() => onClearAnnotations?.()}><Trash2 size={12} /> Limpiar anotaciones</button>
+              </div>
             </div>
-          )}
-          <button className="game-grid-tools-trigger" onClick={() => setGridToolsOpen(current => !current)} title="Herramientas visuales" aria-label="Abrir herramientas visuales" aria-expanded={gridToolsOpen}>
-            {gridToolsOpen ? <X size={15} /> : <Settings2 size={15} />}
-          </button>
         </div>
-      )}
+      , toolbarHost)}
 
       {!!renderedSceneNpcs.length && (
         <div className="game-scene-cast" aria-live="polite" aria-label="Personajes presentes en la escena">
@@ -500,6 +813,7 @@ export default function GameStage({
           })}
         </div>
       )}
+      <DiceRollOverlay rolls={session?.rolls || []} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} />
       {selectionBox && <div className="game-token-selection-box" style={boxStyle} />}
 
       {session?.shared_type === 'MAP' && tokens.map(token => {
@@ -525,6 +839,7 @@ export default function GameStage({
               if (isDm || ownedByPlayer) openTokenMenu(event, token);
             }}
             onPointerDown={event => {
+              if (isDm && event.button === 0 && annotationTool !== 'cursor') return;
               event.stopPropagation();
               if (event.button === 2) {
                 event.preventDefault();

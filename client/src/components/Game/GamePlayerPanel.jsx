@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import CharacterSheet from '../Hero/CharacterSheet';
 import GameStage from './GameStage';
+import DiceTray from './DiceTray';
 
 export default function GamePlayerPanel() {
   const { user } = useAuth();
@@ -55,6 +56,20 @@ export default function GamePlayerPanel() {
     setError('');
     setLoading(true);
     socket?.emit('game:join', { code: code.trim().toUpperCase(), characterId: character?.id });
+  };
+
+  const rollDice = (request, done) => {
+    setError('');
+    socket?.emit('game:roll-dice', { sessionId: session.id, ...request }, response => {
+      done?.();
+      if (!response?.ok) setError(response?.message || 'No se pudo completar la tirada.');
+    });
+  };
+
+  const resolveDiceRoll = (rollId, results) => {
+    socket?.emit('game:resolve-roll', { sessionId: session.id, rollId, results }, response => {
+      if (!response?.ok) setError(response?.message || 'No se pudo confirmar el resultado de los dados.');
+    });
   };
 
   if (loading && !session) {
@@ -129,8 +144,10 @@ export default function GamePlayerPanel() {
           session={session}
           userId={user.id}
           onMoveToken={(tokenId, x, y) => socket.emit('game:move-token', { sessionId: session.id, tokenId, x, y })}
+          onResolveRoll={resolveDiceRoll}
         />
         <div className="game-player-stage-note">
+          <DiceTray onRoll={rollDice} compact />
           <span>{session.shared_type === 'MAP' ? 'Mapa de combate' : 'Escena compartida'}</span>
           <p>{isMyTurn ? 'Puedes mover tu token arrastrándolo sobre el mapa.' : 'Observa la escena; el movimiento se habilitará durante tu turno.'}</p>
         </div>
@@ -138,7 +155,7 @@ export default function GamePlayerPanel() {
 
       <section className="game-player-character">
         <div className="game-character-heading"><span className="game-kicker">Panel de personaje</span><h2>Decide y actúa</h2></div>
-        {character ? <CharacterSheet character={character} embedded /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
+        {character ? <CharacterSheet character={character} embedded onRoll={roll => rollDice({ sides: 20, quantity: 1, modifier: roll.modifier || 0, label: roll.title || 'Tirada de caracteristica' })} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
       </section>
     </div>
   );
