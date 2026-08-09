@@ -18,38 +18,18 @@ function fallbackResults(quantity, sides) {
   return Array.from(values, value => (value % sides) + 1);
 }
 
-function rollTone(roll) {
-  if (roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20) return 'critical';
-  if (roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1) return 'fumble';
-  return 'standard';
-}
-
-function rollEyebrow(tone) {
-  if (tone === 'critical') return 'Golpe crítico';
-  if (tone === 'fumble') return 'Fallo crítico';
-  return 'Resultado de la tirada';
-}
-
 export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDismiss, onResolveRoll }) {
   const boxRef = useRef(null);
   const diceReadyRef = useRef(Promise.resolve(null));
   const initializedRef = useRef(false);
   const seededRef = useRef(false);
-  const revealSeededRef = useRef(false);
   const processedRollsRef = useRef(new Set());
-  const revealedRollsRef = useRef(new Set());
   const queueRef = useRef(Promise.resolve());
-  const revealQueueRef = useRef(Promise.resolve());
   const hideTimerRef = useRef(null);
-  const revealTimerRef = useRef(null);
   const [activeRoll, setActiveRoll] = useState(null);
-  const [featuredRoll, setFeaturedRoll] = useState(null);
   const [fallback, setFallback] = useState(false);
 
-  useEffect(() => () => {
-    window.clearTimeout(hideTimerRef.current);
-    window.clearTimeout(revealTimerRef.current);
-  }, []);
+  useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
 
   useEffect(() => {
     if (!boxRef.current || initializedRef.current) return;
@@ -140,34 +120,6 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
     });
   }, [onResolveRoll, rolls, userId]);
 
-  useEffect(() => {
-    if (!seededRef.current) return;
-
-    const resolvedRolls = [...rolls]
-      .filter(roll => roll.resolved && Array.isArray(roll.results) && roll.results.length)
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-
-    if (!revealSeededRef.current) {
-      resolvedRolls.forEach(roll => revealedRollsRef.current.add(String(roll.id)));
-      revealSeededRef.current = true;
-      return;
-    }
-
-    resolvedRolls
-      .filter(roll => !revealedRollsRef.current.has(String(roll.id)))
-      .forEach(roll => {
-        revealedRollsRef.current.add(String(roll.id));
-        revealQueueRef.current = revealQueueRef.current.then(async () => {
-          setFeaturedRoll(roll);
-          await new Promise(resolve => {
-            revealTimerRef.current = window.setTimeout(resolve, 3600);
-          });
-          setFeaturedRoll(null);
-          await new Promise(resolve => window.setTimeout(resolve, 180));
-        });
-      });
-  }, [rolls]);
-
   const orderedRolls = rolls.filter(roll => roll.resolved).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   return (
@@ -175,50 +127,6 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
         <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
       </div>
-      {featuredRoll && (() => {
-        const tone = rollTone(featuredRoll);
-        const modifier = Number(featuredRoll.modifier) || 0;
-        return (
-          <div
-            className={`game-roll-reveal is-${tone}`}
-            style={{ '--roll-accent': featuredRoll.theme_color || '#c89b43' }}
-            role="status"
-            aria-live="assertive"
-          >
-            <div className="game-roll-reveal-vignette" />
-            <div className="game-roll-reveal-particles" aria-hidden="true">
-              {Array.from({ length: 18 }, (_, index) => (
-                <i key={index} style={{ '--particle-angle': `${index * 20}deg`, '--particle-delay': `${110 + index * 18}ms` }} />
-              ))}
-            </div>
-            <article className="game-roll-reveal-card">
-              <div className="game-roll-reveal-glint" aria-hidden="true" />
-              <div className="game-roll-reveal-portrait">
-                {featuredRoll.character_image
-                  ? <img src={resolveImage(featuredRoll.character_image)} alt="" />
-                  : <Crown size={36} />}
-              </div>
-              <div className="game-roll-reveal-copy">
-                <span>{rollEyebrow(tone)}</span>
-                <small>{featuredRoll.character_name || featuredRoll.roller_name}</small>
-                <h3>{featuredRoll.label}</h3>
-                <div className="game-roll-reveal-formula">{formula(featuredRoll)}</div>
-                <div className="game-roll-reveal-values">
-                  {featuredRoll.results.map((result, index) => (
-                    <b key={`${featuredRoll.id}-result-${index}`} className={`is-${tone}`}>{result}</b>
-                  ))}
-                  {modifier !== 0 && <em>{modifier > 0 ? '+' : '−'} {Math.abs(modifier)}</em>}
-                </div>
-              </div>
-              <div className="game-roll-reveal-total">
-                <Dices size={19} />
-                <small>Total</small>
-                <strong>{featuredRoll.total}</strong>
-              </div>
-            </article>
-          </div>
-        );
-      })()}
       {!!orderedRolls.length && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">
           {orderedRolls.map(roll => {
@@ -226,6 +134,9 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
             return (
               <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}`}>
+                <div className="game-roll-card-effects" aria-hidden="true">
+                  {Array.from({ length: 8 }, (_, index) => <i key={index} />)}
+                </div>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>

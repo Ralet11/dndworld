@@ -1003,17 +1003,6 @@ function registerGameSessionSocket(io, socket) {
                 resolved: false,
             });
 
-            const staleRolls = await GameRoll.findAll({
-                where: { session_id: session.id, dismissed: false },
-                order: [['createdAt', 'DESC']],
-                offset: 12,
-            });
-            if (staleRolls.length) {
-                const staleIds = staleRolls.map(item => item.id);
-                await GameRoll.update({ dismissed: true }, { where: { id: staleIds } });
-                io.to(roomName(session.id)).emit('game:roll-dismissed', { rollIds: staleIds });
-            }
-
             io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
             reply({ ok: true, roll: roll.toJSON() });
         } catch (error) {

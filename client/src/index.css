@@ -4760,72 +4760,43 @@ a:focus-visible {
 .game-dice-box,
 .game-dice-box > canvas { width: 100% !important; height: 100% !important; position: absolute !important; inset: 0; z-index: 1; }
 
-.game-roll-reveal { --reveal-color: var(--roll-accent, #c89b43); position: absolute; inset: 0; z-index: 96; display: grid; place-items: center; overflow: hidden; pointer-events: none; isolation: isolate; animation: game-roll-reveal-life 3.6s ease both; }
-.game-roll-reveal.is-critical { --reveal-color: #f3bd43; }
-.game-roll-reveal.is-fumble { --reveal-color: #c84f43; }
-.game-roll-reveal-vignette { position: absolute; inset: 0; z-index: -2; background: radial-gradient(ellipse at center, color-mix(in srgb, var(--reveal-color) 12%, transparent) 0, rgba(2, 5, 4, .54) 42%, rgba(2, 5, 4, .08) 76%); backdrop-filter: blur(1.5px) saturate(.75); animation: game-roll-vignette-pulse 3.6s ease both; }
-.game-roll-reveal-card { width: min(610px, calc(100% - 44px)); min-height: 172px; position: relative; display: grid; grid-template-columns: 126px minmax(0, 1fr) 104px; overflow: hidden; color: #e9dfca; border: 1px solid color-mix(in srgb, var(--reveal-color) 76%, #6b6759); background: linear-gradient(112deg, rgba(8, 16, 13, .985), rgba(15, 22, 18, .975) 58%, rgba(7, 12, 10, .99)); box-shadow: 0 28px 80px rgba(0, 0, 0, .78), 0 0 44px color-mix(in srgb, var(--reveal-color) 17%, transparent), inset 0 1px rgba(255, 239, 194, .09); transform-origin: center; animation: game-roll-reveal-card 3.6s cubic-bezier(.18, .82, .25, 1) both; }
-.game-roll-reveal-card::before { content: ""; position: absolute; inset: 7px; z-index: 4; border: 1px solid color-mix(in srgb, var(--reveal-color) 22%, transparent); pointer-events: none; }
-.game-roll-reveal-card::after { content: ""; width: 74%; height: 1px; position: absolute; right: -8%; bottom: 10px; z-index: 4; background: linear-gradient(90deg, transparent, var(--reveal-color), transparent); opacity: .6; }
-.game-roll-reveal-glint { width: 42%; height: 240%; position: absolute; top: -70%; left: -58%; z-index: 5; opacity: 0; background: linear-gradient(90deg, transparent, rgba(255, 244, 210, .16), transparent); transform: rotate(17deg); animation: game-roll-reveal-glint 3.6s ease-out both; }
-.game-roll-reveal-portrait { position: relative; z-index: 1; display: grid; place-items: center; overflow: hidden; color: var(--reveal-color); border-right: 1px solid color-mix(in srgb, var(--reveal-color) 32%, #26312c); background: radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--reveal-color) 20%, #18241e), #080e0b 72%); }
-.game-roll-reveal-portrait::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 55%, #09100d), linear-gradient(0deg, rgba(5, 10, 8, .72), transparent 54%); }
-.game-roll-reveal-portrait img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center 20%; filter: contrast(1.05) saturate(.86); animation: game-roll-reveal-portrait 3.6s ease-out both; }
-.game-roll-reveal-copy { min-width: 0; position: relative; z-index: 2; padding: 24px 22px 20px; }
-.game-roll-reveal-copy > span { display: block; color: var(--reveal-color); font-size: 7px; font-weight: 900; letter-spacing: .22em; text-transform: uppercase; }
-.game-roll-reveal-copy > small { display: block; margin-top: 6px; overflow: hidden; color: #828c84; font-size: 7px; font-weight: 800; letter-spacing: .12em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.game-roll-reveal-copy h3 { margin: 7px 0 0; overflow: hidden; color: #f0e5cf; font-family: var(--font-display); font-size: clamp(17px, 2vw, 24px); font-weight: 500; line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 3px 14px rgba(0, 0, 0, .75); }
-.game-roll-reveal-formula { margin-top: 8px; color: #9d9586; font-family: var(--font-display); font-size: 10px; letter-spacing: .08em; }
-.game-roll-reveal-values { min-height: 28px; margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.game-roll-reveal-values b { min-width: 27px; height: 27px; padding: 0 6px; display: grid; place-items: center; color: color-mix(in srgb, var(--reveal-color) 74%, #fff4d9); border: 1px solid color-mix(in srgb, var(--reveal-color) 52%, #38433d); background: color-mix(in srgb, var(--reveal-color) 9%, #0b120f); box-shadow: inset 0 0 10px rgba(0, 0, 0, .32); font-family: var(--font-display); font-size: 13px; font-weight: 500; animation: game-roll-value-in 430ms cubic-bezier(.2, .9, .3, 1.15) calc(430ms + var(--value-delay, 0ms)) both; }
-.game-roll-reveal-values b:nth-child(2) { --value-delay: 55ms; }
-.game-roll-reveal-values b:nth-child(3) { --value-delay: 110ms; }
-.game-roll-reveal-values b:nth-child(4) { --value-delay: 165ms; }
-.game-roll-reveal-values b:nth-child(n+5) { --value-delay: 210ms; }
-.game-roll-reveal-values em { color: #a69c8b; font-family: var(--font-display); font-size: 11px; font-style: normal; }
-.game-roll-reveal-total { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--reveal-color); border-left: 1px solid color-mix(in srgb, var(--reveal-color) 28%, #29342e); background: linear-gradient(180deg, color-mix(in srgb, var(--reveal-color) 10%, transparent), rgba(4, 9, 7, .36)); }
-.game-roll-reveal-total::before { content: ""; width: 62px; height: 62px; position: absolute; border: 1px solid color-mix(in srgb, var(--reveal-color) 20%, transparent); transform: rotate(45deg); }
-.game-roll-reveal-total svg { margin-bottom: 4px; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--reveal-color) 50%, transparent)); }
-.game-roll-reveal-total small { color: #817e73; font-size: 6px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
-.game-roll-reveal-total strong { margin-top: 2px; color: color-mix(in srgb, var(--reveal-color) 62%, #fff0ca); font-family: var(--font-display); font-size: 42px; font-weight: 500; line-height: 1; text-shadow: 0 0 18px color-mix(in srgb, var(--reveal-color) 30%, transparent); animation: game-roll-total-impact 3.6s cubic-bezier(.17, .89, .32, 1.2) both; }
-.game-roll-reveal-particles { position: absolute; top: 50%; left: 50%; z-index: -1; }
-.game-roll-reveal-particles i { width: 2px; height: 18px; position: absolute; top: -9px; left: -1px; opacity: 0; border-radius: 999px; background: linear-gradient(transparent, var(--reveal-color)); box-shadow: 0 0 8px var(--reveal-color); transform-origin: 50% 50%; animation: game-roll-particle 1.25s ease-out var(--particle-delay) both; }
-.game-roll-reveal.is-critical .game-roll-reveal-card { box-shadow: 0 28px 90px rgba(0, 0, 0, .82), 0 0 62px rgba(238, 181, 55, .34), inset 0 1px rgba(255, 244, 204, .16); }
-.game-roll-reveal.is-fumble .game-roll-reveal-card { background: linear-gradient(112deg, rgba(22, 8, 8, .99), rgba(18, 14, 12, .98) 58%, rgba(8, 8, 7, .99)); }
-@keyframes game-roll-reveal-life { 0%, 100% { visibility: hidden; } 1%, 94% { visibility: visible; } }
-@keyframes game-roll-vignette-pulse { 0% { opacity: 0; } 12%, 80% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes game-roll-reveal-card { 0% { opacity: 0; filter: blur(8px); transform: translate3d(0, 28px, 0) scale(.78); } 10% { opacity: 1; filter: blur(0); transform: translate3d(0, -3px, 0) scale(1.025); } 16%, 84% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } 94%, 100% { opacity: 0; filter: blur(3px); transform: translate3d(0, -12px, 0) scale(.97); } }
-@keyframes game-roll-reveal-glint { 0%, 12% { left: -58%; opacity: 0; } 18% { opacity: 1; } 36%, 100% { left: 125%; opacity: 0; } }
-@keyframes game-roll-reveal-portrait { 0% { opacity: .25; transform: scale(1.16); } 18%, 100% { opacity: 1; transform: scale(1.03); } }
-@keyframes game-roll-value-in { from { opacity: 0; transform: translateY(8px) rotate(8deg) scale(.65); } to { opacity: 1; transform: translateY(0) rotate(0) scale(1); } }
-@keyframes game-roll-total-impact { 0%, 12% { opacity: 0; transform: scale(2.1); } 20% { opacity: 1; transform: scale(.88); } 27%, 100% { opacity: 1; transform: scale(1); } }
-@keyframes game-roll-particle { 0% { opacity: 0; transform: rotate(var(--particle-angle)) translateY(-55px) scaleY(.25); } 18% { opacity: .9; } 100% { opacity: 0; transform: rotate(var(--particle-angle)) translateY(-245px) scaleY(1.7); } }
-
 .game-roll-stack { max-width: calc(100% - 160px); position: absolute; top: 14px; left: 14px; z-index: 82; display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 8px; pointer-events: none; scrollbar-width: thin; scrollbar-color: #6d5229 transparent; }
 .game-roll-card { width: 188px; min-width: 188px; min-height: 102px; position: relative; display: grid; grid-template-columns: 49px 1fr; grid-template-rows: 1fr auto; overflow: hidden; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--roll-accent) 72%, #26312b); background: linear-gradient(145deg, rgba(15, 24, 20, .98), rgba(5, 10, 8, .98)); box-shadow: 0 12px 28px rgba(0, 0, 0, .42), inset 0 1px rgba(255, 226, 158, .05); animation: game-roll-card-in 380ms cubic-bezier(.18, .82, .25, 1) both; }
-.game-roll-card::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, rgba(255,255,255,.05), transparent 28%); }
-.game-roll-card-portrait { grid-row: 1 / 3; overflow: hidden; display: grid; place-items: center; color: #bc954c; border-right: 1px solid #333c36; background: radial-gradient(circle, #263329, #0b110e 70%); }
+.game-roll-card::before { content: ""; height: 42%; position: absolute; right: -10%; bottom: -20%; left: 18%; z-index: 0; opacity: .48; background: radial-gradient(ellipse at center bottom, color-mix(in srgb, var(--roll-accent) 42%, transparent), transparent 68%); filter: blur(7px); animation: game-roll-card-flame 2.2s ease-in-out infinite alternate; pointer-events: none; }
+.game-roll-card::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: linear-gradient(115deg, rgba(255,255,255,.06), transparent 28%), linear-gradient(0deg, color-mix(in srgb, var(--roll-accent) 7%, transparent), transparent 48%); }
+.game-roll-card-effects { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+.game-roll-card-effects::after { content: ""; width: 70%; height: 1px; position: absolute; right: -12%; bottom: 4px; opacity: .42; background: linear-gradient(90deg, transparent, var(--roll-accent), transparent); animation: game-roll-card-ember-line 1.8s ease-in-out infinite alternate; }
+.game-roll-card-effects i { --ember-x: 28%; width: 2px; height: 2px; position: absolute; bottom: 1px; left: var(--ember-x); opacity: 0; border-radius: 50%; background: color-mix(in srgb, var(--roll-accent) 78%, #ffe6aa); box-shadow: 0 0 5px var(--roll-accent); animation: game-roll-card-ember 2.4s ease-out infinite; }
+.game-roll-card-effects i:nth-child(2) { --ember-x: 40%; animation-delay: -.45s; animation-duration: 2.8s; }
+.game-roll-card-effects i:nth-child(3) { --ember-x: 52%; animation-delay: -1.2s; animation-duration: 2.1s; }
+.game-roll-card-effects i:nth-child(4) { --ember-x: 63%; animation-delay: -.8s; animation-duration: 3s; }
+.game-roll-card-effects i:nth-child(5) { --ember-x: 72%; animation-delay: -1.7s; animation-duration: 2.6s; }
+.game-roll-card-effects i:nth-child(6) { --ember-x: 81%; animation-delay: -.2s; animation-duration: 2.2s; }
+.game-roll-card-effects i:nth-child(7) { --ember-x: 89%; animation-delay: -1.4s; animation-duration: 2.9s; }
+.game-roll-card-effects i:nth-child(8) { --ember-x: 96%; animation-delay: -1s; animation-duration: 2.35s; }
+.game-roll-card-portrait { position: relative; z-index: 2; grid-row: 1 / 3; overflow: hidden; display: grid; place-items: center; color: #bc954c; border-right: 1px solid #333c36; background: radial-gradient(circle, #263329, #0b110e 70%); }
 .game-roll-card-portrait img { width: 100%; height: 100%; min-height: 102px; display: block; object-fit: cover; object-position: center 18%; }
-.game-roll-card-copy { min-width: 0; padding: 12px 26px 5px 9px; display: flex; flex-direction: column; }
+.game-roll-card-copy { min-width: 0; position: relative; z-index: 2; padding: 12px 26px 5px 9px; display: flex; flex-direction: column; }
 .game-roll-card-copy > span { overflow: hidden; color: #b78f46; font-size: 6px; font-weight: 900; letter-spacing: .1em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .game-roll-card-copy > strong { margin-top: 4px; overflow: hidden; color: #eee2cb; font-family: var(--font-display); font-size: 12px; font-weight: 500; line-height: 1.08; text-overflow: ellipsis; white-space: nowrap; }
 .game-roll-card-copy > small { margin-top: 4px; overflow: hidden; color: #7c867d; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
-.game-roll-total { min-height: 37px; display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding: 4px 9px; color: var(--roll-accent); border-top: 1px solid #333c36; background: color-mix(in srgb, var(--roll-accent) 9%, transparent); }
+.game-roll-total { min-height: 37px; position: relative; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding: 4px 9px; color: var(--roll-accent); border-top: 1px solid #333c36; background: color-mix(in srgb, var(--roll-accent) 9%, transparent); }
 .game-roll-total strong { color: color-mix(in srgb, var(--roll-accent) 72%, #fff1ce); font-family: var(--font-display); font-size: 25px; font-weight: 500; line-height: 1; }
 .game-roll-dismiss { width: 21px; height: 21px; position: absolute; top: 5px; right: 5px; z-index: 2; display: grid; place-items: center; color: #8e948e; border: 1px solid #343d37; background: rgba(6, 11, 9, .88); }
 .game-roll-dismiss:hover { color: #f0d39a; border-color: #9d7533; }
 .game-roll-card.is-critical { border-color: #d7a83e; box-shadow: 0 0 24px rgba(221, 169, 54, .25), 0 12px 28px rgba(0,0,0,.42); }
+.game-roll-card.is-critical::before { opacity: .82; animation-duration: 1.25s; }
+.game-roll-card.is-critical .game-roll-card-effects i { width: 3px; height: 3px; animation-duration: 1.7s; }
 .game-roll-card.is-critical .game-roll-total { background: linear-gradient(90deg, rgba(165, 117, 22, .12), rgba(212, 159, 49, .25)); }
 .game-roll-card.is-fumble { border-color: #773a32; }
+.game-roll-card.is-fumble::before { background: radial-gradient(ellipse at center bottom, rgba(178, 45, 34, .56), transparent 68%); }
 .game-roll-card.is-fumble .game-roll-total strong { color: #dc7465; }
 @keyframes game-roll-card-in { from { opacity: 0; filter: blur(5px); transform: translate3d(-16px, -8px, 0) scale(.94); } to { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes game-roll-card-flame { 0% { opacity: .28; transform: translate3d(-3px, 3px, 0) scale(.9, .78); } 52% { opacity: .64; transform: translate3d(4px, -2px, 0) scale(1.08, 1.16); } 100% { opacity: .4; transform: translate3d(-1px, 0, 0) scale(.96, 1.04); } }
+@keyframes game-roll-card-ember-line { from { opacity: .22; transform: scaleX(.72); } to { opacity: .64; transform: scaleX(1.06); } }
+@keyframes game-roll-card-ember { 0% { opacity: 0; transform: translate3d(0, 5px, 0) scale(.5); } 18% { opacity: .9; } 76% { opacity: .45; } 100% { opacity: 0; transform: translate3d(7px, -72px, 0) scale(1.4); } }
 
 @media (max-width: 900px) {
-  .game-roll-reveal-card { width: min(470px, calc(100% - 24px)); min-height: 140px; grid-template-columns: 88px minmax(0, 1fr) 78px; }
-  .game-roll-reveal-copy { padding: 18px 14px 15px; }
-  .game-roll-reveal-copy h3 { font-size: 16px; }
-  .game-roll-reveal-total strong { font-size: 32px; }
-  .game-roll-reveal-total::before { width: 48px; height: 48px; }
   .game-roll-stack { right: 8px; left: 8px; max-width: none; }
   .game-roll-card { width: 170px; min-width: 170px; }
   .game-dice-tray.is-compact { width: 100%; margin-top: 6px; grid-template-columns: auto minmax(0, 1fr); }
@@ -4834,9 +4805,7 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .game-roll-card { animation-duration: 1ms; }
   .game-dice-animation { transition-duration: 1ms; }
-  .game-roll-reveal-card, .game-roll-reveal-vignette, .game-roll-reveal-glint,
-  .game-roll-reveal-portrait img, .game-roll-reveal-total strong, .game-roll-reveal-values b { animation-duration: 1ms; }
-  .game-roll-reveal-particles { display: none; }
+  .game-roll-card::before, .game-roll-card-effects i, .game-roll-card-effects::after { animation: none; }
 }
 
 /* Player battle mode: the table remains the focus and the essentials stay visible. */
