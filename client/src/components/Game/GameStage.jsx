@@ -824,7 +824,7 @@ export default function GameStage({
         const hpMax = Number(token.character?.hp_max);
         const hasHp = Number.isFinite(hpCurrent) && Number.isFinite(hpMax) && hpMax > 0;
         const hpPercent = hasHp ? Math.max(0, Math.min(100, (hpCurrent / hpMax) * 100)) : 0;
-        const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 25 ? '#d0a348' : '#c94f43';
+        const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 20 ? '#d0a348' : '#c94f43';
         return (
           <button
             key={token.id}

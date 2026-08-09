@@ -392,7 +392,21 @@ export default function MapView({ onBack }) {
           <button className="atlas-inspector-close" onClick={() => setSelectedPOI(null)} aria-label="Cerrar detalle">
             <X size={18} />
           </button>
-          {selectedPOI.image && <img src={selectedPOI.image} alt="" className="atlas-inspector-image" />}
+          {(selectedPOI.image || selectedPOI.map_image) && (
+            <img
+              src={selectedPOI.image || selectedPOI.map_image}
+              alt=""
+              className="atlas-inspector-image"
+              onError={(event) => {
+                const fallback = selectedPOI.map_image;
+                if (fallback && event.currentTarget.src !== fallback) {
+                  event.currentTarget.src = fallback;
+                  return;
+                }
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+          )}
           <div className="atlas-inspector-body">
             <span className="atlas-inspector-type" style={{ color: poiColor(selectedPOI, playerLevel) }}>
               {TYPE_META[selectedPOI.type]?.label || selectedPOI.type}

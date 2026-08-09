@@ -196,6 +196,7 @@ function PlayerCombatSheet({ character, onRoll, onOpenSheet }) {
   const hp = Number(character.hp) || 0;
   const maxHp = Number(character.maxHp) || 1;
   const hpPercent = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 20 ? '#d0a348' : '#c94f43';
   const modifier = value => Math.floor(((Number(value) || 10) - 10) / 2);
   const signed = value => value >= 0 ? `+${value}` : String(value);
   const portrait = character.rendered_url || character.image_url;
@@ -219,7 +220,7 @@ function PlayerCombatSheet({ character, onRoll, onOpenSheet }) {
         <div className="game-combat-portrait">{portrait ? <img src={portrait} alt="" /> : <Shield size={22} />}</div>
         <div><span className="game-kicker">Tu personaje</span><h2>{character.name || 'Aventurero'}</h2><p>{[character.race, character.class].filter(Boolean).join(' · ') || 'Sin clase'}</p></div>
       </div>
-      <div className="game-combat-hp"><div><span><Heart size={13} /> Puntos de golpe</span><strong>{hp}<small> / {maxHp}</small></strong></div><i><b style={{ width: `${hpPercent}%` }} /></i></div>
+      <div className="game-combat-hp" style={{ '--player-hp-color': hpColor }}><div><span><Heart size={13} /> Puntos de golpe</span><strong>{hp}<small> / {maxHp}</small></strong></div><i><b style={{ width: `${hpPercent}%` }} /></i></div>
       <div className="game-combat-vitals">
         <div><Shield size={14} /><strong>{character.ac ?? 10}</strong><span>CA</span></div>
         <div><Zap size={14} /><strong>{signed(character.initiative ?? modifier(attributes.dex))}</strong><span>Iniciativa</span></div>

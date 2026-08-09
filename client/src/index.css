@@ -4779,13 +4779,13 @@ a:focus-visible {
 .game-combat-portrait img { width: 100%; height: 100%; object-fit: cover; }
 .game-combat-sheet-header h2 { margin-top: 2px; overflow: hidden; color: #e4d8c3; font-family: var(--font-display); font-size: 18px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .game-combat-sheet-header p { overflow: hidden; margin-top: 3px; color: #7d847c; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.game-combat-hp { margin-top: 14px; padding: 10px; border: 1px solid rgba(151, 70, 57, .48); background: rgba(103, 35, 27, .12); }
+.game-combat-hp { margin-top: 14px; padding: 10px; border: 1px solid color-mix(in srgb, var(--player-hp-color, #b64e40) 48%, transparent); background: color-mix(in srgb, var(--player-hp-color, #b64e40) 12%, transparent); }
 .game-combat-hp > div { display: flex; align-items: center; justify-content: space-between; }
-.game-combat-hp span { display: flex; align-items: center; gap: 5px; color: #b88075; font-size: 7px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.game-combat-hp span { display: flex; align-items: center; gap: 5px; color: var(--player-hp-color, #b88075); font-size: 7px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
 .game-combat-hp strong { color: #e4d7ca; font-family: var(--font-display); font-size: 18px; font-weight: 500; }
 .game-combat-hp strong small { color: #8e8377; font-size: 10px; }
 .game-combat-hp i { height: 5px; display: block; margin-top: 8px; overflow: hidden; background: #251b19; }
-.game-combat-hp b { height: 100%; display: block; background: #b64e40; box-shadow: 0 0 8px rgba(195, 72, 58, .45); }
+.game-combat-hp b { height: 100%; display: block; background: var(--player-hp-color, #b64e40); box-shadow: 0 0 8px color-mix(in srgb, var(--player-hp-color, #b64e40) 52%, transparent); }
 .game-combat-vitals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 10px; }
 .game-combat-vitals > div { min-height: 68px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #a98b4e; border: 1px solid #303a35; background: #0d1512; }
 .game-combat-vitals strong { color: #ddd1bc; font-family: var(--font-display); font-size: 17px; font-weight: 500; }
