@@ -966,6 +966,7 @@ a:focus-visible {
 .game-dm-audio > button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .game-dm-audio > button.is-playing { color: #d7b96f; border-color: #735b31; background: rgba(199, 163, 92, .08); }
 .game-dm-audio > button i { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: #65b678; box-shadow: 0 0 7px #65b678; }
+.game-dm-audio.needs-activation > button { color: #e4bf6a; border-color: #947038; box-shadow: 0 0 12px rgba(199, 163, 92, .16); }
 .game-audio-popover { width: min(380px, calc(100vw - 24px)); max-height: min(610px, calc(100vh - 135px)); position: fixed; top: 116px; left: 104px; z-index: 2450; display: grid; grid-template-rows: auto auto auto minmax(90px, 1fr) auto; overflow: hidden; color: #9ba39b; border: 1px solid #705832; background: #08100d; box-shadow: 0 24px 70px rgba(0,0,0,.72); text-transform: none; }
 .game-audio-popover > header { min-height: 48px; padding: 7px 8px 7px 12px; display: flex; align-items: center; border-bottom: 1px solid #303831; background: linear-gradient(90deg, #111a16, #080e0c); }
 .game-audio-popover > header > div { min-width: 0; flex: 1; }
@@ -976,6 +977,10 @@ a:focus-visible {
 .game-audio-transport button { min-width: 30px; height: 29px; padding: 0 8px; display: flex; align-items: center; justify-content: center; gap: 5px; color: #939b92; border: 1px solid #354039; background: #0d1612; font-size: 7px; text-transform: uppercase; }
 .game-audio-transport button.is-active { color: #d3b66f; border-color: #765f35; }
 .game-audio-transport button:disabled { opacity: .35; }
+.game-dm-volume { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.game-dm-volume > button { min-width: 28px; width: 28px; padding: 0; }
+.game-dm-volume input { width: 72px; height: 3px; accent-color: #b8934f; cursor: pointer; }
+.game-audio-transport .game-dm-audio-enable { color: #e4c16f; border-color: #876937; }
 .game-audio-search { height: 34px; margin: 8px 9px 5px; padding: 0 9px; display: flex; align-items: center; gap: 7px; color: #727a73; border: 1px solid #303a34; background: #0b1310; }
 .game-audio-search input { min-width: 0; flex: 1; color: #d4ccbd; border: 0; outline: 0; background: transparent; font-size: 9px; }
 .game-audio-list { min-height: 90px; margin: 0 9px; overflow-x: hidden; overflow-y: auto; border: 1px solid #2d3731; scrollbar-width: thin; scrollbar-color: #67512d #08100d; }

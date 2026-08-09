@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Music2, Pause, Play, Repeat2, Search, Square, Trash2, Upload, X } from 'lucide-react';
+import { Check, Music2, Pause, Play, Repeat2, Search, Square, Trash2, Upload, Volume2, VolumeX, X } from 'lucide-react';
 import API_URL from '../config';
+
+function expectedPosition(session) {
+  const base = Math.max(0, Number(session?.audio_position_seconds) || 0);
+  if (session?.audio_status !== 'PLAYING' || !session?.audio_started_at) return base;
+  return base + Math.max(0, (Date.now() - new Date(session.audio_started_at).getTime()) / 1000);
+}
 
 export default function GameAudioControl({ session, socket, onError }) {
   const [open, setOpen] = useState(false);
@@ -9,8 +15,60 @@ export default function GameAudioControl({ session, socket, onError }) {
   const [uploading, setUploading] = useState(false);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Ambiente');
+  const [volume, setVolume] = useState(() => Number(localStorage.getItem('dndworld_dm_audio_volume') ?? 0.65));
+  const [muted, setMuted] = useState(() => localStorage.getItem('dndworld_dm_audio_muted') === 'true');
+  const [needsActivation, setNeedsActivation] = useState(false);
   const fileRef = useRef(null);
+  const audioRef = useRef(null);
   const token = localStorage.getItem('dnd_token');
+  const track = session?.audioTrack;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track) return;
+    audio.volume = Math.max(0, Math.min(1, volume));
+    audio.muted = muted;
+  }, [muted, track, volume]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track) return;
+    const sync = () => {
+      const target = expectedPosition(session);
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && session.audio_loop !== false) audio.currentTime = target % audio.duration;
+      else if (Math.abs((audio.currentTime || 0) - target) > 2) audio.currentTime = target;
+
+      if (session.audio_status === 'PLAYING') {
+        audio.play().then(() => setNeedsActivation(false)).catch(() => setNeedsActivation(true));
+      } else {
+        audio.pause();
+        if (session.audio_status === 'STOPPED') audio.currentTime = 0;
+      }
+    };
+    if (audio.readyState >= 1) sync();
+    else audio.addEventListener('loadedmetadata', sync, { once: true });
+    return () => audio.removeEventListener('loadedmetadata', sync);
+  }, [session.audio_loop, session.audio_position_seconds, session.audio_started_at, session.audio_status, track]);
+
+  const updateVolume = next => {
+    const value = Number(next);
+    setVolume(value);
+    setMuted(false);
+    localStorage.setItem('dndworld_dm_audio_volume', String(value));
+    localStorage.setItem('dndworld_dm_audio_muted', 'false');
+  };
+
+  const toggleMute = () => setMuted(current => {
+    localStorage.setItem('dndworld_dm_audio_muted', String(!current));
+    return !current;
+  });
+
+  const openControl = () => {
+    setOpen(current => !current);
+    if (needsActivation && session.audio_status === 'PLAYING') {
+      audioRef.current?.play().then(() => setNeedsActivation(false)).catch(() => {});
+    }
+  };
 
   const loadTracks = useCallback(async () => {
     try {
@@ -62,8 +120,9 @@ export default function GameAudioControl({ session, socket, onError }) {
   };
 
   return (
-    <div className="game-dm-audio">
-      <button type="button" className={session.audio_status === 'PLAYING' ? 'is-playing' : ''} onClick={() => setOpen(current => !current)} title="Música de la partida">
+    <div className={`game-dm-audio${needsActivation ? ' needs-activation' : ''}`}>
+      {track && <audio ref={audioRef} src={track.url} loop={session.audio_loop !== false} preload="auto" />}
+      <button type="button" className={session.audio_status === 'PLAYING' ? 'is-playing' : ''} onClick={openControl} title={needsActivation ? 'Haz clic para activar el sonido' : 'Música de la partida'}>
         <Music2 size={12} /><span>{session.audioTrack?.name || 'Música'}</span>{session.audio_status === 'PLAYING' && <i />}
       </button>
       {open && <div className="game-audio-popover">
@@ -72,6 +131,11 @@ export default function GameAudioControl({ session, socket, onError }) {
           <button disabled={!session.audioTrack} onClick={() => command(session.audio_status === 'PLAYING' ? 'PAUSE' : 'PLAY')}>{session.audio_status === 'PLAYING' ? <Pause size={15} /> : <Play size={15} />}</button>
           <button disabled={!session.audioTrack} onClick={() => command('STOP')}><Square size={13} /></button>
           <button className={session.audio_loop ? 'is-active' : ''} disabled={!session.audioTrack} onClick={() => command('LOOP', { loop: !session.audio_loop })}><Repeat2 size={14} /> Repetir</button>
+          <div className="game-dm-volume">
+            <button type="button" onClick={toggleMute} aria-label={muted ? 'Activar audio local' : 'Silenciar audio local'}>{muted ? <VolumeX size={13} /> : <Volume2 size={13} />}</button>
+            <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => updateVolume(event.target.value)} aria-label="Volumen local del Dungeon Master" />
+          </div>
+          {needsActivation && <button className="game-dm-audio-enable" type="button" onClick={() => audioRef.current?.play().then(() => setNeedsActivation(false))}>Activar</button>}
         </div>
         <label className="game-audio-search"><Search size={12} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por nombre..." /></label>
         <div className="game-audio-list">
