@@ -10,15 +10,15 @@ const PointOfInterest = require('../models/PointOfInterest');
 const CITY_MAPS = [
     {
         titles: ['Prontera'],
-        url: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781330863/ChatGPT_Image_13_jun_2026_03_07_32_a.m._angdrx.png',
+        url: 'https://dndworld.prismadevs.com/api/media/production/migrated/1786250353226-68796b39-871b-4c82-a42a-c73fa808867c-chatgpt_image_13_jun_2026_03_07_32_a.m._angdrx.png',
     },
     {
         titles: ['Pantano Hachoverde'],
-        url: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781332217/ChatGPT_Image_13_jun_2026_03_29_51_a.m._vtw5w6.png',
+        url: 'https://dndworld.prismadevs.com/api/media/production/migrated/1786250352145-f7a8f5c8-07fa-4729-97c1-6115f56b70e4-chatgpt_image_13_jun_2026_03_29_51_a.m._vtw5w6.png',
     },
     {
         titles: ['Costa sombría', 'Costa Sombria', 'Costa Oscura'],
-        url: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1781329427/ChatGPT_Image_13_jun_2026_02_37_07_a.m._glhakw.png',
+        url: 'https://dndworld.prismadevs.com/api/media/production/migrated/1786250352626-fb628a79-bad5-41e7-8a53-69b531f97649-chatgpt_image_13_jun_2026_02_37_07_a.m._glhakw.png',
     },
 ];
 

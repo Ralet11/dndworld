@@ -6,7 +6,7 @@ const sequelize = require('./config/database');
 const MARKERS = [
     {
         title: 'Prontera', top: '39.18%', left: '18.41%', color: '#eab308', type: 'city',
-        image: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1772053044/ChatGPT_Image_25_feb_2026_05_55_14_p.m._d9hpms.png',
+        image: 'https://dndworld.prismadevs.com/api/media/production/migrated/1786250352947-92392bc9-1c61-4fa2-8afe-f9ee7f222965-chatgpt_image_25_feb_2026_05_55_14_p.m._d9hpms.png',
         description: 'La puerta de entrada a las tierras salvajes. Un asentamiento fortificado donde los comerciantes intercambian bienes antes de adentrarse en territorios peligrosos. La Guardia Fronteriza mantiene una estricta vigilancia sobre quienes entran y salen.',
         dmDescription: 'La humedad del pantano cercano siempre hace que el aire aquí se sienta pesado. Los guardias, extenuados, suelen pedir sobornos a los viajeros poco astutos.',
         partyKnowledge: 'Sabemos que el Herrero local, "Grum", tiene una deuda pendiente con los ladrones del bosque. Su armería podría tener acceso secreto a los túneles inferiores.',
@@ -36,7 +36,7 @@ const MARKERS = [
     },
     {
         title: 'Costa sombría', top: '47.62%', left: '3.49%', color: '#64748b', type: 'city',
-        image: 'https://res.cloudinary.com/doqyrz0sg/image/upload/v1772053634/ChatGPT_Image_25_feb_2026_06_04_45_p.m._zsmz7x.png',
+        image: 'https://dndworld.prismadevs.com/api/media/production/migrated/1786250352385-7adb9bdc-38a2-4764-9d18-76af1fc4bb33-chatgpt_image_25_feb_2026_06_04_45_p.m._zsmz7x.png',
         description: 'Un puerto envuelto en niebla perpetua. Se rumorea que los contrabandistas y piratas encuentran refugio seguro aquí, lejos de la mirada del Rey. El faro antiguo rara vez se enciende, guiando solo a aquellos que conocen los verdaderos caminos del mar.',
     },
     {
