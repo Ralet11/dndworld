@@ -143,7 +143,7 @@ app.all(/^\/api\/media\/(.+)$/, async (req, res) => {
             if (metadata.ContentLength != null) res.set('Content-Length', String(metadata.ContentLength));
             res.set('Accept-Ranges', 'bytes');
             res.set('Cache-Control', metadata.CacheControl || 'public, max-age=31536000, immutable');
-            return res.sendStatus(200);
+            return res.status(200).end();
         }
         const object = await getObject(key, req.headers.range);
         if (object.ContentType) res.type(object.ContentType);
