@@ -1840,11 +1840,17 @@ app.get(/.*/, (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+const RUN_STARTUP_SEED = /^(1|true|yes)$/i.test(String(process.env.RUN_STARTUP_SEED || ''));
 
 // Database Sync and Server Launch
 sequelize.sync({ alter: true }).then(async () => {
     console.log('Database connected and synced.');
-    await seedDatabase();
+    if (RUN_STARTUP_SEED) {
+        console.warn('RUN_STARTUP_SEED habilitado: ejecutando seed de arranque.');
+        await seedDatabase();
+    } else {
+        console.log('Seed de arranque deshabilitado. Usa `npm run seed` sólo cuando sea intencional.');
+    }
     // Listen on 0.0.0.0 to allow external connections (e.g. from Android Emulator)
     server.listen(PORT, '0.0.0.0', () => {
         console.log(`Master Server running on port ${PORT} `);
