@@ -17,6 +17,7 @@ const {
 const { resolveCharacterImage } = require('../utils/npcImages');
 
 const presence = new Map();
+const rollDismissTimers = new Map();
 const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
 
 function roomName(sessionId) {
@@ -142,7 +143,6 @@ async function loadSession(sessionId) {
                 where: { dismissed: false },
                 required: false,
                 separate: true,
-                limit: 12,
                 order: [['createdAt', 'DESC']],
             },
         ],
@@ -1038,8 +1038,24 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:dismiss-roll', async ({ sessionId, rollId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
-        await GameRoll.update({ dismissed: true }, { where: { id: rollId, session_id: session.id } });
-        io.to(roomName(session.id)).emit('game:roll-dismissed', { rollIds: [rollId] });
+        const roll = await GameRoll.findOne({ where: { id: rollId, session_id: session.id, dismissed: false } });
+        if (!roll) return;
+
+        const timerKey = `${session.id}:${roll.id}`;
+        if (rollDismissTimers.has(timerKey)) return;
+
+        io.to(roomName(session.id)).emit('game:roll-dismissing', { rollIds: [roll.id] });
+        const timer = setTimeout(async () => {
+            rollDismissTimers.delete(timerKey);
+            try {
+                await GameRoll.update({ dismissed: true }, { where: { id: roll.id, session_id: session.id } });
+                io.to(roomName(session.id)).emit('game:roll-dismissed', { rollIds: [roll.id] });
+            } catch (error) {
+                console.error('game:dismiss-roll error:', error);
+                io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
+            }
+        }, 1100);
+        rollDismissTimers.set(timerKey, timer);
     });
 
     socket.on('disconnect', () => {

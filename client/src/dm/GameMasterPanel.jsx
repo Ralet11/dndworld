@@ -145,12 +145,18 @@ export default function GameMasterPanel() {
     }) : current);
     const onRollUpsert = roll => setSession(current => current ? ({
       ...current,
-      rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)].slice(0, 12),
+      rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)],
     }) : current);
-    const onRollDismissed = ({ rollIds = [] } = {}) => setSession(current => current ? ({
-      ...current,
-      rolls: (current.rolls || []).filter(roll => !rollIds.includes(roll.id)),
-    }) : current);
+    const onRollDismissing = ({ rollIds = [] } = {}) => setSession(current => {
+      if (!current) return current;
+      const ids = new Set(rollIds.map(String));
+      return { ...current, rolls: (current.rolls || []).map(roll => ids.has(String(roll.id)) ? { ...roll, dismissing: true } : roll) };
+    });
+    const onRollDismissed = ({ rollIds = [] } = {}) => setSession(current => {
+      if (!current) return current;
+      const ids = new Set(rollIds.map(String));
+      return { ...current, rolls: (current.rolls || []).filter(roll => !ids.has(String(roll.id))) };
+    });
 
     const syncGame = () => {
       setSessionResolved(false);
@@ -176,6 +182,7 @@ export default function GameMasterPanel() {
     socket.on('game:annotation-deleted', onAnnotationDeleted);
     socket.on('game:annotations-cleared', onAnnotationsCleared);
     socket.on('game:roll-upsert', onRollUpsert);
+    socket.on('game:roll-dismissing', onRollDismissing);
     socket.on('game:roll-dismissed', onRollDismissed);
     socket.on('global-state-data', onWorldState);
     socket.on('connect', syncGame);
@@ -197,6 +204,7 @@ export default function GameMasterPanel() {
       socket.off('game:annotation-deleted', onAnnotationDeleted);
       socket.off('game:annotations-cleared', onAnnotationsCleared);
       socket.off('game:roll-upsert', onRollUpsert);
+      socket.off('game:roll-dismissing', onRollDismissing);
       socket.off('game:roll-dismissed', onRollDismissed);
       socket.off('global-state-data', onWorldState);
       socket.off('connect', syncGame);

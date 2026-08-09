@@ -133,7 +133,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
             const naturalTwenty = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20;
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
             return (
-              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}`}>
+              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}`}>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>
@@ -143,7 +143,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
                   <small>{formula(roll)} · {roll.results?.join(' + ')}</small>
                 </div>
                 <div className="game-roll-total"><Dices size={13} /><strong>{roll.total}</strong></div>
-                {isDm && <button className="game-roll-dismiss" onClick={() => onDismiss?.(roll.id)} aria-label="Cerrar resultado"><X size={12} /></button>}
+                {isDm && <button className="game-roll-dismiss" disabled={roll.dismissing} onClick={() => onDismiss?.(roll.id)} aria-label="Cerrar resultado"><X size={12} /></button>}
               </article>
             );
           })}

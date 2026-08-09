@@ -75,12 +75,18 @@ export default function GamePlayerPanel() {
     }) : current);
     const onRollUpsert = roll => setSession(current => current ? ({
       ...current,
-      rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)].slice(0, 12),
+      rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)],
     }) : current);
-    const onRollDismissed = ({ rollIds = [] } = {}) => setSession(current => current ? ({
-      ...current,
-      rolls: (current.rolls || []).filter(roll => !rollIds.includes(roll.id)),
-    }) : current);
+    const onRollDismissing = ({ rollIds = [] } = {}) => setSession(current => {
+      if (!current) return current;
+      const ids = new Set(rollIds.map(String));
+      return { ...current, rolls: (current.rolls || []).map(roll => ids.has(String(roll.id)) ? { ...roll, dismissing: true } : roll) };
+    });
+    const onRollDismissed = ({ rollIds = [] } = {}) => setSession(current => {
+      if (!current) return current;
+      const ids = new Set(rollIds.map(String));
+      return { ...current, rolls: (current.rolls || []).filter(roll => !ids.has(String(roll.id))) };
+    });
 
     socket.on('game:state', onState);
     socket.on('game:error', onError);
@@ -96,6 +102,7 @@ export default function GamePlayerPanel() {
     socket.on('game:annotation-deleted', onAnnotationDeleted);
     socket.on('game:annotations-cleared', onAnnotationsCleared);
     socket.on('game:roll-upsert', onRollUpsert);
+    socket.on('game:roll-dismissing', onRollDismissing);
     socket.on('game:roll-dismissed', onRollDismissed);
     socket.emit('game:get-current');
     socket.emit('get-players');
@@ -114,6 +121,7 @@ export default function GamePlayerPanel() {
       socket.off('game:annotation-deleted', onAnnotationDeleted);
       socket.off('game:annotations-cleared', onAnnotationsCleared);
       socket.off('game:roll-upsert', onRollUpsert);
+      socket.off('game:roll-dismissing', onRollDismissing);
       socket.off('game:roll-dismissed', onRollDismissed);
     };
   }, [socket, user.id]);
