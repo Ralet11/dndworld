@@ -4757,22 +4757,23 @@ a:focus-visible {
 .game-dice-animation { position: absolute; inset: 0; z-index: 90; overflow: hidden; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms ease, visibility 220ms ease; }
 .game-dice-animation.is-active { opacity: 1; visibility: visible; }
 .game-dice-animation::before { content: ""; position: absolute; inset: 0; z-index: 0; background: radial-gradient(circle at center, rgba(7, 12, 10, .08), rgba(3, 6, 5, .38)); backdrop-filter: saturate(.75); }
-.game-dice-box,
-.game-dice-box > canvas { width: 100% !important; height: 100% !important; position: absolute !important; inset: 0; z-index: 1; }
-.game-dice-animation.has-official-result .game-dice-box { opacity: .12; filter: blur(5px) saturate(.45); transform: scale(.98); transition: opacity 130ms ease, filter 130ms ease, transform 180ms ease; }
-.game-dice-official { min-width: 190px; max-width: min(520px, 88%); position: absolute; top: 50%; left: 50%; z-index: 3; display: grid; place-items: center; color: #d8c59e; filter: drop-shadow(0 16px 28px rgba(0, 0, 0, .75)); transform: translate(-50%, -50%); animation: game-dice-official-in 240ms cubic-bezier(.18, .82, .25, 1) both; }
-.game-dice-official > span { color: #d3ad5f; font-size: 7px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
-.game-dice-official > small { margin-top: 4px; color: #8c968e; font-size: 7px; letter-spacing: .07em; text-transform: uppercase; }
-.game-dice-official > div { max-width: 100%; margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
-.game-dice-official b { width: 64px; height: 64px; position: relative; display: grid; place-items: center; color: #f6deb0; border: 1px solid #b58a3e; background: radial-gradient(circle at 36% 28%, #3d3420, #17170f 58%, #080d0a); box-shadow: inset 0 0 0 3px rgba(221, 179, 91, .08), 0 0 24px rgba(197, 145, 55, .2); font-family: var(--font-display); font-size: 27px; font-weight: 500; clip-path: polygon(50% 0, 92% 24%, 100% 70%, 72% 100%, 28% 100%, 0 70%, 8% 24%); }
-.game-dice-official b.is-d4 { clip-path: polygon(50% 0, 100% 90%, 0 90%); }
-.game-dice-official b.is-d6 { border-radius: 7px; clip-path: none; }
-.game-dice-official b.is-d8 { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
-.game-dice-official b.is-d10,
-.game-dice-official b.is-d100 { clip-path: polygon(50% 0, 94% 34%, 76% 100%, 24% 100%, 6% 34%); }
-.game-dice-official b.is-d12 { clip-path: polygon(50% 0, 90% 18%, 100% 62%, 72% 100%, 28% 100%, 0 62%, 10% 18%); }
-.game-dice-official > strong { margin-top: 10px; padding: 5px 10px; color: #f1d28e; border: 1px solid rgba(183, 139, 66, .55); background: rgba(10, 15, 12, .88); font-family: var(--font-display); font-size: 14px; font-weight: 500; }
-@keyframes game-dice-official-in { from { opacity: 0; filter: blur(5px); transform: translate(-50%, -46%) scale(.82); } to { opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1); } }
+.game-dice-synced::before { background: radial-gradient(circle at center, rgba(30, 24, 13, .22), rgba(2, 5, 4, .72)); backdrop-filter: blur(2px) saturate(.7); }
+.game-dice-synced-roll { min-width: 190px; max-width: min(620px, 90%); position: absolute; top: 50%; left: 50%; z-index: 3; display: grid; place-items: center; color: #d8c59e; perspective: 900px; filter: drop-shadow(0 18px 32px rgba(0, 0, 0, .8)); transform: translate(-50%, -50%); }
+.game-dice-synced-roll > span { color: #d3ad5f; font-size: 8px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; animation: game-synced-caption-in 300ms 850ms both; }
+.game-dice-synced-roll > small { margin-top: 4px; color: #939c95; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; animation: game-synced-caption-in 300ms 900ms both; }
+.game-dice-synced-set { max-width: 100%; margin-top: 15px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; perspective: 900px; transform-style: preserve-3d; }
+.game-dice-synced-set > b { --die-delay: calc(var(--die-index) * 70ms); width: 70px; height: 70px; position: relative; display: grid; place-items: center; color: #f6deb0; border: 1px solid #b58a3e; background: radial-gradient(circle at 34% 25%, #4b3c21, #1b1a10 55%, #070c09); box-shadow: inset 0 0 0 3px rgba(221, 179, 91, .09), inset -10px -13px 20px rgba(0, 0, 0, .42), 0 12px 26px rgba(0, 0, 0, .62); font-family: var(--font-display); font-size: 29px; font-weight: 500; clip-path: polygon(50% 0, 92% 24%, 100% 70%, 72% 100%, 28% 100%, 0 70%, 8% 24%); transform-style: preserve-3d; animation: game-synced-die-roll 1.15s cubic-bezier(.16, .74, .24, 1) var(--die-delay) both; }
+.game-dice-synced-set > b::after { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(239, 204, 126, .24); clip-path: inherit; transform: translateZ(8px); }
+.game-dice-synced-set > b i { position: relative; z-index: 2; font-style: normal; text-shadow: 0 2px 2px #000, 0 0 8px rgba(242, 199, 107, .25); transform: translateZ(14px); }
+.game-dice-synced-set > b.is-d4 { clip-path: polygon(50% 0, 100% 90%, 0 90%); }
+.game-dice-synced-set > b.is-d6 { border-radius: 8px; clip-path: none; }
+.game-dice-synced-set > b.is-d8 { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.game-dice-synced-set > b.is-d10,
+.game-dice-synced-set > b.is-d100 { clip-path: polygon(50% 0, 94% 34%, 76% 100%, 24% 100%, 6% 34%); }
+.game-dice-synced-set > b.is-d12 { clip-path: polygon(50% 0, 90% 18%, 100% 62%, 72% 100%, 28% 100%, 0 62%, 10% 18%); }
+.game-dice-synced-roll > strong { margin-top: 12px; padding: 6px 12px; color: #f1d28e; border: 1px solid rgba(183, 139, 66, .58); background: rgba(10, 15, 12, .9); font-family: var(--font-display); font-size: 15px; font-weight: 500; animation: game-synced-caption-in 300ms 1.05s both; }
+@keyframes game-synced-die-roll { 0% { opacity: 0; filter: blur(3px); transform: translate3d(-110px, -80px, 160px) rotateX(620deg) rotateY(-510deg) rotateZ(240deg) scale(.42); } 58% { opacity: 1; filter: blur(0); transform: translate3d(18px, 12px, 28px) rotateX(82deg) rotateY(-46deg) rotateZ(24deg) scale(1.12); } 78% { transform: translate3d(-7px, -4px, 8px) rotateX(-18deg) rotateY(13deg) rotateZ(-8deg) scale(.96); } 100% { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) rotateZ(0) scale(1); } }
+@keyframes game-synced-caption-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
 .game-roll-stack { max-width: calc(100% - 160px); position: absolute; top: 14px; left: 14px; z-index: 82; display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 8px; pointer-events: none; scrollbar-width: thin; scrollbar-color: #6d5229 transparent; }
 .game-roll-card { width: 188px; min-width: 188px; min-height: 102px; position: relative; display: grid; grid-template-columns: 49px 1fr; grid-template-rows: 1fr auto; overflow: hidden; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--roll-accent) 72%, #26312b); background: linear-gradient(145deg, rgba(15, 24, 20, .98), rgba(5, 10, 8, .98)); box-shadow: 0 12px 28px rgba(0, 0, 0, .42), inset 0 1px rgba(255, 226, 158, .05); animation: game-roll-card-in 380ms cubic-bezier(.18, .82, .25, 1) both; }
