@@ -1,6 +1,6 @@
 /**
  * Genera un icono de ítem con IA (OpenAI gpt-image-1) para cada Item que no
- * tenga image_url, y lo sube a Cloudinary. Pensado para correr en lote en vez
+ * tenga image_url, y lo sube a S3. Pensado para correr en lote en vez
  * de generar imagen por imagen a mano.
  *
  * Uso:
@@ -13,7 +13,7 @@
 const OpenAI = require('openai');
 const { Op } = require('sequelize');
 const { Item } = require('../models');
-const { cloudinary } = require('../utils/cloudinary');
+const { uploadDataUri } = require('../utils/s3Storage');
 
 // Mismo lenguaje visual que heroRenderer.js (biblia de estilo "Ember"), pero
 // para objetos sueltos en vez de personajes de cuerpo entero.
@@ -83,15 +83,14 @@ async function run() {
             const b64 = result.data?.[0]?.b64_json;
             if (!b64) throw new Error('OpenAI no devolvió imagen.');
 
-            const uploaded = await cloudinary.uploader.upload(
-                `data:image/png;base64,${b64}`,
-                { folder: 'dndworld_uploads/items', public_id: `item_${item.id}` }
-            );
+            const uploaded = await uploadDataUri(`data:image/png;base64,${b64}`, {
+                folder: 'items', name: `item-${item.id}`, originalName: `item-${item.id}.png`,
+            });
 
-            item.image_url = uploaded.secure_url;
+            item.image_url = uploaded.url;
             await item.save();
             done++;
-            console.log(`  OK -> ${uploaded.secure_url}`);
+            console.log(`  OK -> ${uploaded.url}`);
         } catch (err) {
             console.error(`  ERROR en #${item.id} "${item.name}":`, err.message);
         }

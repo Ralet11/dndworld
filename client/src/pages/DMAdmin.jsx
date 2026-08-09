@@ -90,6 +90,7 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
         try {
             const res = await fetch(`${API_URL}/api/upload`, {
                 method: 'POST',
+                headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` },
                 body: formData
             });
             const data = await res.json();

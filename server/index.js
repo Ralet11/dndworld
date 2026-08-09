@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
-const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction, CharacterAuditLog, CharacterInventory } = require('./models');
+const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction, CharacterAuditLog, CharacterInventory, AudioTrack, GameSession } = require('./models');
 const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
@@ -15,6 +15,7 @@ const { renderHero, buildSignature } = require('./utils/heroRenderer');
 const { getAssistantContext, executeAssistantCommand } = require('./utils/dmAssistant');
 const { registerGameSessionSocket } = require('./sockets/gameSessionSocket');
 const { resolveCharacterImage } = require('./utils/npcImages');
+const { deriveWorldConditions, normalizeWorldTime } = require('./utils/worldTime');
 
 const app = express();
 const server = http.createServer(app);
@@ -37,10 +38,17 @@ app.use(express.json());
 
 const multer = require('multer');
 const path = require('path');
-// const fs = require('fs'); // Not needed for Cloudinary
-const { storage } = require('./utils/cloudinary'); // Import Cloudinary storage
-
-const upload = multer({ storage: storage });
+const { deleteObject, uploadBuffer } = require('./utils/s3Storage');
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 },
+    fileFilter: (_req, file, done) => done(null, /^image\/(?:jpeg|png|webp|gif)$/.test(file.mimetype)),
+});
+const audioUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 120 * 1024 * 1024 },
+    fileFilter: (_req, file, done) => done(null, /^audio\/(?:mpeg|ogg|wav|x-wav|mp4|aac|flac)$/.test(file.mimetype)),
+});
 const authController = require('./controllers/authController');
 const { verifyToken, isDm } = require('./middleware/auth');
 
@@ -52,7 +60,6 @@ app.get('/api/auth/me', verifyToken, authController.getMe);
 // POI Routes
 app.use('/api/pois', require('./routes/poiRoutes'));
 
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Not needed for Cloudinary
 app.use('/npc-images', express.static(path.join(__dirname, 'data', 'npc-images')));
 // Serve Static Frontend (Vite Build)
 app.use(express.static(path.join(__dirname, '../client/dist')));
@@ -102,21 +109,75 @@ app.post('/api/characters/assign', verifyToken, async (req, res) => {
     }
 });
 
-app.post('/api/upload', (req, res) => {
-    // Llamamos a multer manualmente para CAPTURAR el error de Cloudinary/multer
-    // (si no, cae en el handler por defecto de Express y devuelve HTML, lo que
-    // rompe el res.json() del cliente con un falso "error de conexión").
+app.post('/api/upload', verifyToken, (req, res) => {
     upload.single('image')(req, res, (err) => {
         if (err) {
             console.error('Server: Upload error →', err);
             return res.status(500).json({ message: err.message || 'Fallo al subir la imagen.' });
         }
         if (!req.file) {
-            return res.status(400).json({ message: 'No se recibió ningún archivo.' });
+            return res.status(400).json({ message: 'No se recibió una imagen JPG, PNG, WEBP o GIF válida.' });
         }
-        console.log('Server: File uploaded to Cloudinary:', req.file.path);
-        res.json({ url: req.file.path });
+        uploadBuffer(req.file.buffer, {
+            folder: 'images', originalName: req.file.originalname, contentType: req.file.mimetype,
+        }).then(result => {
+            console.log('Server: image uploaded to S3:', result.key);
+            res.json({ url: result.url, key: result.key });
+        }).catch(uploadError => {
+            console.error('Server: S3 image upload error →', uploadError);
+            res.status(uploadError.code === 'S3_NOT_CONFIGURED' ? 503 : 500).json({ message: uploadError.message || 'Fallo al guardar la imagen.' });
+        });
     });
+});
+
+app.get('/api/audio/tracks', verifyToken, async (_req, res) => {
+    try {
+        const tracks = await AudioTrack.findAll({ order: [['name', 'ASC']] });
+        res.json(tracks);
+    } catch (error) {
+        console.error('Audio library error:', error);
+        res.status(500).json({ message: 'No se pudo cargar la biblioteca de audio.' });
+    }
+});
+
+app.post('/api/audio/tracks', verifyToken, isDm, (req, res) => {
+    audioUpload.single('audio')(req, res, async error => {
+        if (error) return res.status(400).json({ message: error.message || 'No se pudo procesar el audio.' });
+        if (!req.file) return res.status(400).json({ message: 'Selecciona un archivo MP3, OGG, WAV, M4A, AAC o FLAC.' });
+        try {
+            const stored = await uploadBuffer(req.file.buffer, {
+                folder: 'audio', originalName: req.file.originalname, contentType: req.file.mimetype,
+                name: req.body?.name || req.file.originalname,
+            });
+            const track = await AudioTrack.create({
+                name: String(req.body?.name || req.file.originalname.replace(/\.[^.]+$/, '')).trim().slice(0, 160),
+                category: String(req.body?.category || 'Ambiente').trim().slice(0, 80),
+                url: stored.url,
+                storage_key: stored.key,
+                mime_type: req.file.mimetype,
+                size_bytes: req.file.size,
+                uploaded_by: req.user.id,
+            });
+            res.status(201).json(track);
+        } catch (uploadError) {
+            console.error('Audio upload error:', uploadError);
+            res.status(uploadError.code === 'S3_NOT_CONFIGURED' ? 503 : 500).json({ message: uploadError.message || 'No se pudo guardar el audio.' });
+        }
+    });
+});
+
+app.delete('/api/audio/tracks/:id', verifyToken, isDm, async (req, res) => {
+    try {
+        const track = await AudioTrack.findByPk(req.params.id);
+        if (!track) return res.status(404).json({ message: 'Tema no encontrado.' });
+        await GameSession.update({ audio_track_id: null, audio_status: 'STOPPED', audio_position_seconds: 0, audio_started_at: null }, { where: { audio_track_id: track.id } });
+        await deleteObject(track.storage_key);
+        await track.destroy();
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Audio delete error:', error);
+        res.status(500).json({ message: 'No se pudo eliminar el tema.' });
+    }
 });
 
 // AI Narrator Endpoint (Architecture Ready)
@@ -184,7 +245,7 @@ app.post('/api/dm-assistant/command', verifyToken, isDm, async (req, res) => {
     }
 });
 
-// Render del héroe con el equipo puesto (OpenAI gpt-image-1 → Cloudinary).
+// Render del héroe con el equipo puesto (OpenAI gpt-image-1 → S3).
 app.post('/api/characters/:id/render', verifyToken, async (req, res) => {
     try {
         const character = await Character.findByPk(req.params.id, {
@@ -753,25 +814,39 @@ io.on('connection', async (socket) => {
     socket.on('get-global-state', async () => {
         try {
             const [state] = await MapState.findOrCreate({ where: { id: 1 } });
+            const conditions = deriveWorldConditions(state.global_time);
+            if (state.global_time !== conditions.time || state.day_period !== conditions.dayPeriod || state.temperature_c !== conditions.temperatureC) {
+                await state.update({ global_time: conditions.time, day_period: conditions.dayPeriod, temperature_c: conditions.temperatureC });
+            }
             socket.emit('global-state-data', state);
         } catch (err) {
             console.error('Get global state error:', err);
         }
     });
 
-    socket.on('update-global-state', async (data) => {
+    socket.on('update-global-state', async (data = {}, reply = () => {}) => {
         try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede cambiar el estado del mundo.');
             const { global_time, global_location } = data;
             const [state] = await MapState.findOrCreate({ where: { id: 1 } });
 
-            if (global_time !== undefined) state.global_time = global_time;
+            if (global_time !== undefined) {
+                const normalizedTime = normalizeWorldTime(global_time);
+                if (!normalizedTime) throw new Error('La hora debe tener formato HH:MM.');
+                const conditions = deriveWorldConditions(normalizedTime);
+                state.global_time = conditions.time;
+                state.day_period = conditions.dayPeriod;
+                state.temperature_c = conditions.temperatureC;
+            }
             if (global_location !== undefined) state.global_location = global_location;
 
             await state.save();
             // Broadcast to absolutely everyone connected
             io.emit('global-state-data', state);
+            reply({ ok: true, state });
         } catch (err) {
             console.error('Update global state error:', err);
+            reply({ ok: false, message: err.message || 'No se pudo cambiar el estado del mundo.' });
         }
     });
 

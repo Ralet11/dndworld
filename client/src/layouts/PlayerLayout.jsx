@@ -52,7 +52,7 @@ export default function PlayerLayout() {
   const { user } = useAuth();
   const location = useLocation();
   const [notifications, setNotifications] = useState([]);
-  const toastTimers = useRef(new Map());
+  const toastTimers = useRef(new globalThis.Map());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [section, subtitle] = currentSection(location.pathname);
 

@@ -99,6 +99,29 @@ const GameSession = sequelize.define('GameSession', {
         type: DataTypes.INTEGER,
         allowNull: true,
     },
+    audio_track_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
+    audio_status: {
+        type: DataTypes.STRING(12),
+        allowNull: false,
+        defaultValue: 'STOPPED',
+    },
+    audio_position_seconds: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 0,
+    },
+    audio_started_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+    audio_loop: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+    },
     dm_user_id: {
         type: DataTypes.UUID,
         allowNull: false,

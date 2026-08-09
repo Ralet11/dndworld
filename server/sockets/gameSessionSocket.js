@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const { randomUUID } = require('crypto');
 const {
     AbilityScore,
+    AudioTrack,
     Character,
     GameAsset,
     GameParticipant,
@@ -113,6 +114,10 @@ async function loadSession(sessionId) {
                 as: 'assets',
             },
             {
+                model: AudioTrack,
+                as: 'audioTrack',
+            },
+            {
                 model: GameRoll,
                 as: 'rolls',
                 where: { dismissed: false },
@@ -186,7 +191,14 @@ function serializeSession(session, viewer) {
     });
     payload.dm_connected = Boolean(onlineUsers?.get(payload.dm_user_id)?.size);
     payload.active_character_id = payload.turn_order?.[payload.turn_index] ?? null;
+    payload.server_now = new Date().toISOString();
     return payload;
+}
+
+function currentAudioPosition(session) {
+    const base = Math.max(0, Number(session.audio_position_seconds) || 0);
+    if (session.audio_status !== 'PLAYING' || !session.audio_started_at) return base;
+    return base + Math.max(0, (Date.now() - new Date(session.audio_started_at).getTime()) / 1000);
 }
 
 async function broadcastSession(io, sessionId) {
@@ -429,6 +441,51 @@ function registerGameSessionSocket(io, socket) {
         }
         await session.save();
         await broadcastSession(io, session.id);
+    });
+
+    socket.on('game:update-audio', async ({ sessionId, action, trackId, position, loop } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'No tienes permiso para controlar el audio.' });
+            const normalizedAction = String(action || '').toUpperCase();
+
+            if (normalizedAction === 'SELECT') {
+                const track = await AudioTrack.findByPk(trackId);
+                if (!track) return reply({ ok: false, message: 'El tema seleccionado ya no existe.' });
+                session.audio_track_id = track.id;
+                session.audio_position_seconds = 0;
+                session.audio_status = 'PLAYING';
+                session.audio_started_at = new Date();
+            } else if (normalizedAction === 'PLAY') {
+                if (!session.audio_track_id) return reply({ ok: false, message: 'Selecciona un tema primero.' });
+                if (session.audio_status !== 'PLAYING') {
+                    session.audio_status = 'PLAYING';
+                    session.audio_started_at = new Date();
+                }
+            } else if (normalizedAction === 'PAUSE') {
+                session.audio_position_seconds = currentAudioPosition(session);
+                session.audio_status = 'PAUSED';
+                session.audio_started_at = null;
+            } else if (normalizedAction === 'STOP') {
+                session.audio_status = 'STOPPED';
+                session.audio_position_seconds = 0;
+                session.audio_started_at = null;
+            } else if (normalizedAction === 'SEEK') {
+                session.audio_position_seconds = Math.max(0, Number(position) || 0);
+                session.audio_started_at = session.audio_status === 'PLAYING' ? new Date() : null;
+            } else if (normalizedAction === 'LOOP') {
+                session.audio_loop = Boolean(loop);
+            } else {
+                return reply({ ok: false, message: 'Control de audio desconocido.' });
+            }
+
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:update-audio error:', error);
+            reply({ ok: false, message: 'No se pudo actualizar el audio de la partida.' });
+        }
     });
 
     socket.on('game:add-annotation', async ({ sessionId, annotation } = {}) => {

@@ -22,6 +22,14 @@ const MapState = sequelize.define('MapState', {
     global_location: {
         type: DataTypes.STRING,
         defaultValue: 'El mundo exterior'
+    },
+    day_period: {
+        type: DataTypes.STRING(20),
+        defaultValue: 'Día'
+    },
+    temperature_c: {
+        type: DataTypes.INTEGER,
+        defaultValue: 24
     }
 }, {
     timestamps: false

@@ -4,7 +4,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const sequelize = require('../config/database');
 const { Character } = require('../models');
-const { cloudinary } = require('../utils/cloudinary');
+const { uploadFile } = require('../utils/s3Storage');
 
 const DEFAULT_MAP_PATH = path.join(__dirname, '..', 'data', 'npc-image-map.json');
 const DEFAULT_IMAGES_DIR = path.join(__dirname, '..', 'data', 'npc-images');
@@ -57,11 +57,10 @@ function ensureFileExists(filePath, label) {
 }
 
 async function uploadImage(filePath, character) {
-    return cloudinary.uploader.upload(filePath, {
-        folder: 'dndworld_uploads/npcs',
-        public_id: `${character.id}-${slugify(character.name)}`,
-        overwrite: true,
-        resource_type: 'image',
+    return uploadFile(filePath, {
+        folder: 'npcs',
+        name: `${character.id}-${slugify(character.name)}`,
+        contentType: filePath.toLowerCase().endsWith('.webp') ? 'image/webp' : filePath.toLowerCase().endsWith('.jpg') || filePath.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' : 'image/png',
     });
 }
 
@@ -156,7 +155,7 @@ async function run() {
 
         try {
             const uploaded = await uploadImage(localPath, character);
-            character.image_url = uploaded.secure_url;
+            character.image_url = uploaded.url;
             await character.save();
 
             report.results.push({
@@ -164,8 +163,8 @@ async function run() {
                 characterId,
                 name: character.name,
                 file: fileName,
-                imageUrl: uploaded.secure_url,
-                publicId: uploaded.public_id,
+                imageUrl: uploaded.url,
+                storageKey: uploaded.key,
             });
 
             console.log(`Updated NPC ${character.id} ${character.name}`);

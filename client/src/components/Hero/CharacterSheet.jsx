@@ -1114,8 +1114,8 @@ function DesktopSectionIntro({ tab, character }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────
-export default function CharacterSheet({ character, embedded = false, onRoll }) {
-  const [activeTab, setActiveTab] = useState('stats');
+export default function CharacterSheet({ character, embedded = false, onRoll, initialTab = 'stats' }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [rollTarget, setRollTarget] = useState(null);
   if (!character) return null;
 

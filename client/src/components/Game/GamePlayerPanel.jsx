@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Check, Clock, DoorOpen, Heart, Pause, Shield, Swords, Users, X, Zap } from 'lucide-react';
+import { Backpack, Check, CheckCircle, Circle, Clock, DoorOpen, Edit3, Heart, Pause, Scroll, Shield, Sparkles, Swords, Target, UserRound, Users, X, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import GameStage from './GameStage';
 import DiceTray from './DiceTray';
+import CharacterSheet from '../Hero/CharacterSheet';
+import CharacterEditorModal from '../Hero/CharacterEditorModal';
+import GameAudioPlayer from './GameAudioPlayer';
 
 export default function GamePlayerPanel() {
   const { user } = useAuth();
@@ -13,6 +16,8 @@ export default function GamePlayerPanel() {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sheetSection, setSheetSection] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -49,6 +54,13 @@ export default function GamePlayerPanel() {
     };
   }, [socket, user.id]);
 
+  useEffect(() => {
+    if (!sheetSection) return undefined;
+    const closeOnEscape = event => { if (event.key === 'Escape') setSheetSection(null); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [sheetSection]);
+
   const join = event => {
     event.preventDefault();
     if (!code.trim()) return;
@@ -70,6 +82,13 @@ export default function GamePlayerPanel() {
       if (!response?.ok) setError(response?.message || 'No se pudo confirmar el resultado de los dados.');
     });
   };
+
+  const rollFromCharacterSheet = request => rollDice({
+    sides: 20,
+    quantity: 1,
+    modifier: request.modifier || 0,
+    label: request.label || request.title || 'Prueba de característica',
+  });
 
   if (loading && !session) {
     return <div className="game-player-loading"><div /><span>Buscando tu mesa...</span></div>;
@@ -154,14 +173,25 @@ export default function GamePlayerPanel() {
         </section>
 
         <aside className="game-player-character" aria-label="Ficha básica del personaje">
-          {character ? <PlayerCombatSheet character={character} onRoll={rollDice} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
+          <GameAudioPlayer session={session} />
+          {character ? <PlayerCombatSheet character={character} onRoll={rollDice} onOpenSheet={setSheetSection} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
         </aside>
       </div>
+
+      {sheetSection && character && (
+        <div className="game-character-drawer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setSheetSection(null); }}>
+          <aside className="game-character-drawer" aria-label="Ficha completa durante la partida">
+            <header><div><span className="game-kicker">Acceso de partida</span><strong>{character.name}</strong></div><nav>{character.self_edit_enabled && <button type="button" className="is-edit" onClick={() => { setSheetSection(null); setEditorOpen(true); }}><Edit3 size={12} />Editar ficha</button>}<button type="button" onClick={() => setSheetSection(null)} aria-label="Cerrar ficha"><X size={17} /></button></nav></header>
+            <div className="game-character-drawer-body"><CharacterSheet key={sheetSection} character={character} embedded initialTab={sheetSection} onRoll={rollFromCharacterSheet} /></div>
+          </aside>
+        </div>
+      )}
+      {editorOpen && character && <CharacterEditorModal character={character} socket={socket} onClose={() => setEditorOpen(false)} />}
     </div>
   );
 }
 
-function PlayerCombatSheet({ character, onRoll }) {
+function PlayerCombatSheet({ character, onRoll, onOpenSheet }) {
   const attributes = character.stats || character.attributes || {};
   const hp = Number(character.hp) || 0;
   const maxHp = Number(character.maxHp) || 1;
@@ -169,6 +199,19 @@ function PlayerCombatSheet({ character, onRoll }) {
   const modifier = value => Math.floor(((Number(value) || 10) - 10) / 2);
   const signed = value => value >= 0 ? `+${value}` : String(value);
   const portrait = character.rendered_url || character.image_url;
+  const proficiency = Number(character.proficiencyBonus) || 2;
+  const skills = [
+    ['Acrobacias', 'dex'], ['Trato con Animales', 'wis'], ['Arcana', 'int'],
+    ['Atletismo', 'str'], ['Engaño', 'cha'], ['Historia', 'int'],
+    ['Perspicacia', 'wis'], ['Intimidación', 'cha'], ['Investigación', 'int'],
+    ['Medicina', 'wis'], ['Naturaleza', 'int'], ['Percepción', 'wis'],
+    ['Interpretación', 'cha'], ['Persuasión', 'cha'], ['Religión', 'int'],
+    ['Juego de Manos', 'dex'], ['Sigilo', 'dex'], ['Supervivencia', 'wis'],
+  ].map(([name, attr]) => {
+    const configured = (character.skills || []).find(skill => skill.name === name);
+    const proficiencyLevel = Number(configured?.proficiency_level || (configured?.proficient ? 1 : 0));
+    return { name, attr, proficient: proficiencyLevel > 0, bonus: modifier(attributes[attr]) + (proficiencyLevel * proficiency) };
+  }).sort((left, right) => left.name.localeCompare(right.name));
 
   return (
     <div className="game-combat-sheet">
@@ -182,6 +225,14 @@ function PlayerCombatSheet({ character, onRoll }) {
         <div><Zap size={14} /><strong>{signed(character.initiative ?? modifier(attributes.dex))}</strong><span>Iniciativa</span></div>
         <div><Swords size={14} /><strong>{character.speed ?? 30}</strong><span>Velocidad</span></div>
       </div>
+      <nav className="game-combat-tools" aria-label="Secciones de la ficha">
+        {[
+          ['stats', 'Ficha', <UserRound key="stats-icon" size={13} />],
+          ['inventory', 'Equipo', <Backpack key="inventory-icon" size={13} />],
+          ['social', 'Rasgos', <Scroll key="social-icon" size={13} />],
+          ['magic', 'Magia', <Sparkles key="magic-icon" size={13} />],
+        ].map(([id, label, icon]) => <button key={id} type="button" onClick={() => onOpenSheet(id)}>{icon}<span>{label}</span></button>)}
+      </nav>
       <div className="game-combat-abilities">
         {[['str', 'FUE'], ['dex', 'DES'], ['con', 'CON'], ['int', 'INT'], ['wis', 'SAB'], ['cha', 'CAR']].map(([key, label]) => {
           const score = Number(attributes[key]) || 10;
@@ -189,7 +240,26 @@ function PlayerCombatSheet({ character, onRoll }) {
           return <button key={key} type="button" onClick={() => onRoll({ sides: 20, quantity: 1, modifier: value, label: `Prueba de ${label}` })} title={`Tirar ${label}`}><span>{label}</span><strong>{signed(value)}</strong><small>{score}</small></button>;
         })}
       </div>
-      <p className="game-combat-sheet-tip">Toca una característica para tirar un d20. La ficha completa está en “Mi héroe”.</p>
+      <section className="game-combat-skills" aria-label="Habilidades del personaje">
+        <header><span><Target size={11} /> Habilidades</span><small>Clic para tirar d20</small></header>
+        <div>
+          {skills.map(skill => (
+            <button
+              key={skill.name}
+              type="button"
+              className={skill.proficient ? 'is-proficient' : ''}
+              onClick={() => onRoll({ sides: 20, quantity: 1, modifier: skill.bonus, label: skill.name })}
+              title={`Tirar ${skill.name}`}
+            >
+              {skill.proficient ? <CheckCircle size={11} /> : <Circle size={11} />}
+              <span>{skill.name}</span>
+              <small>{skill.attr.toUpperCase()}</small>
+              <strong>{signed(skill.bonus)}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
+      <p className="game-combat-sheet-tip">Todas las tiradas esenciales están disponibles sin abandonar la mesa.</p>
     </div>
   );
 }

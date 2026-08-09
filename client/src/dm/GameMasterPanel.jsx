@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import {
   Check,
+  Clock3,
   Clipboard,
   Eye,
   EyeOff,
@@ -11,6 +12,7 @@ import {
   Map as MapIcon,
   MessageCircle,
   MonitorUp,
+  Moon,
   Pause,
   Play,
   Plus,
@@ -21,7 +23,10 @@ import {
   SkipForward,
   Sparkles,
   Skull,
+  Sun,
+  Sunset,
   Swords,
+  Thermometer,
   Trash2,
   Upload,
   Users,
@@ -33,6 +38,8 @@ import API_URL from '../config';
 import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';
 import DiceTray from '../components/Game/DiceTray';
+import GameAudioControl from './GameAudioControl';
+import { deriveWorldConditions } from '../utils/worldTime';
 
 function resolveMediaUrl(value) {
   if (!value || /^(?:https?:|data:|blob:)/i.test(value)) return value;
@@ -74,6 +81,7 @@ export default function GameMasterPanel() {
   const [creatingNpcToken, setCreatingNpcToken] = useState(false);
   const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
   const [stageToolbarHost, setStageToolbarHost] = useState(null);
+  const [worldState, setWorldState] = useState({ global_time: '12:00', day_period: 'Día', temperature_c: 24 });
   const deferredAssetSearch = useDeferredValue(assetSearch);
 
   useEffect(() => {
@@ -90,6 +98,7 @@ export default function GameMasterPanel() {
       setNpcsLoading(false);
       setNpcsError('');
     };
+    const onWorldState = state => setWorldState(current => ({ ...current, ...state }));
     const onTokenMoved = ({ tokenId, x, y }) => setSession(current => current ? ({
       ...current,
       tokens: current.tokens.map(token => token.id === tokenId ? { ...token, x, y } : token),
@@ -101,6 +110,7 @@ export default function GameMasterPanel() {
       socket.emit('get-players');
       socket.emit('get-scenes');
       socket.emit('get-all-npcs');
+      socket.emit('get-global-state');
     };
 
     socket.on('game:state', onState);
@@ -110,6 +120,7 @@ export default function GameMasterPanel() {
     socket.on('scenes-data', onScenes);
     socket.on('all-npcs', onNpcs);
     socket.on('game:token-moved', onTokenMoved);
+    socket.on('global-state-data', onWorldState);
     socket.on('connect', syncGame);
     if (socket.connected) syncGame();
     return () => {
@@ -120,6 +131,7 @@ export default function GameMasterPanel() {
       socket.off('scenes-data', onScenes);
       socket.off('all-npcs', onNpcs);
       socket.off('game:token-moved', onTokenMoved);
+      socket.off('global-state-data', onWorldState);
       socket.off('connect', syncGame);
     };
   }, [socket]);
@@ -150,6 +162,17 @@ export default function GameMasterPanel() {
   const emit = (event, payload = {}) => {
     setError('');
     socket?.emit(event, payload);
+  };
+
+  const updateWorldTime = value => {
+    const conditions = deriveWorldConditions(value);
+    setWorldState(current => ({ ...current, global_time: conditions.time, day_period: conditions.dayPeriod, temperature_c: conditions.temperatureC }));
+    socket.timeout(5000).emit('update-global-state', { global_time: conditions.time }, (timeoutError, response) => {
+      if (timeoutError || !response?.ok) {
+        setError(response?.message || 'No se pudo actualizar la hora del mundo.');
+        socket.emit('get-global-state');
+      }
+    });
   };
 
   const rollDice = (request, done) => {
@@ -191,7 +214,7 @@ export default function GameMasterPanel() {
     try {
       const form = new FormData();
       form.append('image', file);
-      const response = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: form });
+      const response = await fetch(`${API_URL}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` }, body: form });
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.message || 'No se pudo subir el archivo.');
       setMediaUrl(data.url);
@@ -260,7 +283,7 @@ export default function GameMasterPanel() {
       for (const file of imageFiles) {
         const form = new FormData();
         form.append('image', file);
-        const response = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: form });
+        const response = await fetch(`${API_URL}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` }, body: form });
         const data = await response.json();
         if (!response.ok || !data.url) throw new Error(data.message || `No se pudo subir ${file.name}.`);
         await saveDroppedAsset({ url: data.url, type }, file.name);
@@ -390,6 +413,7 @@ export default function GameMasterPanel() {
       return sceneNpcOrder.get(first.id) - sceneNpcOrder.get(second.id);
     });
   const statusLabel = session.status === 'WAITING' ? 'Sala de espera' : session.status === 'LIVE' ? 'En vivo' : session.status === 'PAUSED' ? 'Pausada' : 'Finalizada';
+  const WorldPeriodIcon = worldState.day_period === 'Día' ? Sun : worldState.day_period === 'Tarde' ? Sunset : Moon;
 
   return (
     <div className="game-dm-shell game-control-room">
@@ -402,6 +426,10 @@ export default function GameMasterPanel() {
         <div className="game-command-scene">
           <span>Escena en mesa</span>
           <strong>{session.shared_title || 'Sin contenido publicado'}</strong>
+        </div>
+        <div className="game-world-clock" title="Hora y clima actual del mundo">
+          <label><span><Clock3 size={8} />Hora mundial</span><input aria-label="Hora mundial" type="time" value={worldState.global_time || '12:00'} onClick={event => event.currentTarget.showPicker?.()} onChange={event => updateWorldTime(event.target.value)} /></label>
+          <div><span><WorldPeriodIcon size={10} />{worldState.day_period}</span><small><Thermometer size={9} />{worldState.temperature_c}°C</small></div>
         </div>
         <div className={`game-live-badge is-${session.status.toLowerCase()}`}><i />{statusLabel}</div>
         <div className="game-command-presence"><Users size={16} /><strong>{connectedPlayers} / {session.participants.length}</strong><span>Conectados</span></div>
@@ -427,6 +455,7 @@ export default function GameMasterPanel() {
                 <strong>{session.shared_type === 'NONE' ? 'Sin publicar' : 'Visible para jugadores'}</strong>
               </div>
               <span>{session.shared_type === 'NONE' ? 'Prepara la escena antes de mostrarla' : `${connectedPlayers} jugadores reciben este contenido en vivo`}</span>
+              <GameAudioControl session={session} socket={socket} onError={setError} />
               <div ref={setStageToolbarHost} className="game-stage-toolbar-host" />
               <button onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><MonitorUp size={14} /> Cambiar contenido</button>
             </div>

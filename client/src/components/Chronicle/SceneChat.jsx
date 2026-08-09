@@ -132,7 +132,7 @@ export default function SceneChat({ scene, onBack }) {
     const form = new FormData();
     form.append('image', file);
     try {
-      const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: form });
+      const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` }, body: form });
       const data = await res.json();
       if (data.url) setPendingImage(data.url);
     } catch (err) { console.error(err); }

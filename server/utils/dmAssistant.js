@@ -1,5 +1,6 @@
 const { Character, MapState, Quest, Scene, TimelineEvent } = require('../models');
 const { runAssistantConversation } = require('./dmAssistantLlm');
+const { deriveWorldConditions, normalizeWorldTime } = require('./worldTime');
 
 const undoStackByUser = new Map();
 
@@ -547,14 +548,17 @@ async function executeTimeSet({
     userId,
     io,
 }) {
-    const timeMatch = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(time || '').trim());
-    if (!timeMatch) {
+    const normalizedTime = normalizeWorldTime(time);
+    if (!normalizedTime) {
         return buildReply('error', 'La hora debe tener formato HH:MM, por ejemplo 19:30.');
     }
 
     const [state] = await MapState.findOrCreate({ where: { id: 1 } });
-    const previousValues = { global_time: state.global_time, global_location: state.global_location };
-    state.global_time = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+    const previousValues = { global_time: state.global_time, global_location: state.global_location, day_period: state.day_period, temperature_c: state.temperature_c };
+    const conditions = deriveWorldConditions(normalizedTime);
+    state.global_time = conditions.time;
+    state.day_period = conditions.dayPeriod;
+    state.temperature_c = conditions.temperatureC;
     await state.save();
     await emitWorldRefresh(io);
 
@@ -564,12 +568,14 @@ async function executeTimeSet({
         undoText: 'Listo, deshice el ultimo cambio de hora/ubicacion.',
     });
 
-    return buildReply('result', `Hora del mundo actualizada a ${state.global_time}.`, {
+    return buildReply('result', `Hora del mundo actualizada a ${state.global_time}: ${state.day_period}, ${state.temperature_c} °C.`, {
         tool: 'world.time.set',
         undoAvailable: true,
         data: {
             global_time: state.global_time,
             global_location: state.global_location,
+            day_period: state.day_period,
+            temperature_c: state.temperature_c,
         },
     });
 }

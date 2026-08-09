@@ -1,7 +1,7 @@
 const axios = require('axios');
 const OpenAI = require('openai');
 const { toFile } = require('openai');
-const { cloudinary } = require('./cloudinary');
+const { uploadDataUri } = require('./s3Storage');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BIBLIA DE ESTILO — única fuente de verdad del look de TODOS los retratos.
@@ -77,7 +77,7 @@ function buildSignature(equipment, inventory, extra = '') {
     return parts.join('|');
 }
 
-/** Descarga una imagen (Cloudinary u otra URL) a un buffer reutilizable. */
+/** Descarga una imagen remota a un buffer reutilizable. */
 async function urlToBuffer(url, name) {
     const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 20000 });
     const contentType = res.headers['content-type'] || 'image/png';
@@ -286,15 +286,16 @@ async function renderHero(character, { quality = 'medium', maxAttempts = 2, revi
         feedback = verdict.issues.join('; ');
     }
 
-    // Subimos a Cloudinary SOLO la mejor imagen del ciclo.
+    // Subimos a S3 SOLO la mejor imagen del ciclo.
     onProgress({ stage: 'Guardando el retrato…', pct: 92 });
-    const uploaded = await cloudinary.uploader.upload(
-        `data:image/png;base64,${best.b64}`,
-        { folder: 'dndworld_renders', public_id: `hero_${character.id}_${Date.now()}` }
-    );
+    const uploaded = await uploadDataUri(`data:image/png;base64,${best.b64}`, {
+        folder: 'renders',
+        name: `hero-${character.id}`,
+        originalName: `hero-${character.id}.png`,
+    });
 
     return {
-        url: uploaded.secure_url,
+        url: uploaded.url,
         signature: buildSignature(equipment, inventory, character.render_prompt),
         prompt: basePrompt,
         verdict: best.verdict,

@@ -27,6 +27,7 @@ const GameRoll = require('./GameRoll');
 const NpcAction = require('./NpcAction');
 const CharacterAuditLog = require('./CharacterAuditLog');
 const CharacterInventory = require('./CharacterInventory');
+const AudioTrack = require('./AudioTrack');
 
 // Character Relationships
 Character.belongsTo(Class, { foreignKey: 'class_slug', targetKey: 'slug', as: 'classData' });
@@ -112,6 +113,9 @@ GameSession.hasMany(GameRoll, { foreignKey: 'session_id', as: 'rolls', onDelete:
 GameRoll.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameRoll.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 GameRoll.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
+GameSession.belongsTo(AudioTrack, { foreignKey: 'audio_track_id', as: 'audioTrack' });
+AudioTrack.hasMany(GameSession, { foreignKey: 'audio_track_id', as: 'gameSessions' });
+AudioTrack.belongsTo(User, { foreignKey: 'uploaded_by', as: 'uploader' });
 
 module.exports = {
     Character,
@@ -141,5 +145,6 @@ module.exports = {
     GameRoll,
     NpcAction,
     CharacterAuditLog,
-    CharacterInventory
+    CharacterInventory,
+    AudioTrack
 };

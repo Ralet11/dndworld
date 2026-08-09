@@ -4,7 +4,7 @@
 
 - `server/data/npc-list-prod.json`: snapshot of NPCs currently in production.
 - `server/data/npc-image-map.example.json`: editable mapping template from NPC to local image file.
-- `server/scripts/import_npc_images.js`: uploads images to Cloudinary and updates `characters.image_url`.
+- `server/scripts/import_npc_images.js`: uploads images to S3 and updates `characters.image_url`.
 
 ## Expected workflow
 
@@ -34,7 +34,7 @@ node scripts/import_npc_images.js --overwrite
 
 ## Running on the EC2 database
 
-The safest setup is to run this script on the EC2 host where the production `.env` already points to the live PostgreSQL and Cloudinary credentials.
+The safest setup is to run this script on the EC2 host where the production `.env` already points to the live PostgreSQL and S3 configuration.
 
 Example:
 

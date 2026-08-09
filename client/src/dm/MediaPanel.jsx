@@ -42,7 +42,7 @@ export default function MediaPanel() {
     const form = new FormData();
     form.append('image', file);
     try {
-      const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', body: form });
+      const res = await fetch(`${API_URL}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` }, body: form });
       const data = await res.json();
       if (data.url) setImageUrl(data.url);
     } catch (err) {
