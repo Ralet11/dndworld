@@ -25,6 +25,7 @@ const GameToken = require('./GameToken');
 const GameAsset = require('./GameAsset');
 const GameRoll = require('./GameRoll');
 const NpcAction = require('./NpcAction');
+const CharacterAuditLog = require('./CharacterAuditLog');
 
 // Character Relationships
 Character.belongsTo(Class, { foreignKey: 'class_slug', targetKey: 'slug', as: 'classData' });
@@ -79,6 +80,9 @@ Character.hasMany(TimelineEvent, { foreignKey: 'author_id', as: 'events' });
 // User Relationships
 User.hasMany(Character, { foreignKey: 'UserId', as: 'characters' });
 Character.belongsTo(User, { foreignKey: 'UserId' });
+Character.hasMany(CharacterAuditLog, { foreignKey: 'character_id', as: 'auditLogs', onDelete: 'CASCADE' });
+CharacterAuditLog.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
+CharacterAuditLog.belongsTo(User, { foreignKey: 'actor_user_id', as: 'actor' });
 
 // User POI Lore Data
 User.belongsToMany(PointOfInterest, { through: UserPoiData, foreignKey: 'userId', as: 'knownLocations' });
@@ -134,5 +138,6 @@ module.exports = {
     GameToken,
     GameAsset,
     GameRoll,
-    NpcAction
+    NpcAction,
+    CharacterAuditLog
 };

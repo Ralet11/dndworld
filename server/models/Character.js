@@ -131,6 +131,11 @@ const Character = sequelize.define('Character', {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     },
+    self_edit_enabled: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false
+    },
     is_npc: {
         type: DataTypes.BOOLEAN,
         defaultValue: false

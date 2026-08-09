@@ -1,114 +1,50 @@
-import { useState, useEffect } from 'react';
-import { Heart, Shield, Zap, Activity, Edit3, X, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Lock, Unlock } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+import CharacterEditorModal from '../components/Hero/CharacterEditorModal';
 
 function HPBar({ hp, maxHp }) {
   const pct = Math.min(100, ((hp || 0) / (maxHp || 1)) * 100);
   const color = pct <= 20 ? '#C2452F' : pct <= 50 ? '#F59E0B' : '#5BA86B';
-  return (
-    <div className="hp-bar mt-2">
-      <div className="hp-bar-fill" style={{ width: `${pct}%`, background: color }} />
-    </div>
-  );
+  return <div className="hp-bar mt-2"><div className="hp-bar-fill" style={{ width: `${pct}%`, background: color }} /></div>;
 }
 
-function CharacterCard({ char, onEditHp, onEdit }) {
-  const [hpInput, setHpInput] = useState(char.hp || 0);
+function CharacterCard({ char, onEditHp, onEdit, onTogglePermission }) {
   const isCritical = (char.hp || 0) <= (char.maxHp || 1) * 0.2;
-
   return (
-    <div
-      className="panel p-4 space-y-3 cursor-pointer hover:border-bronze-dark transition-colors"
-      style={{ borderColor: isCritical ? '#C2452F44' : '#2A332F' }}
-      onClick={() => onEdit(char)}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full overflow-hidden" style={{ border: '1px solid #2A332F' }}>
-            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${char.name}`}
-              alt={char.name} className="w-full h-full object-cover" />
+    <div className="panel p-4 space-y-3 cursor-pointer hover:border-bronze-dark transition-colors" style={{ borderColor: isCritical ? '#C2452F44' : '#2A332F' }} onClick={() => onEdit(char.id)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 shrink-0 rounded-full overflow-hidden" style={{ border: '1px solid #2A332F' }}>
+            <img src={char.image_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${char.name}`} alt={char.name} className="w-full h-full object-cover" />
           </div>
-          <div>
-            <p className="font-black text-sm" style={{ color: '#EDE6D8' }}>{char.name}</p>
-            <p className="label-caps">{char.class} {char.level}</p>
-          </div>
+          <div className="min-w-0"><p className="font-black text-sm truncate" style={{ color: '#EDE6D8' }}>{char.name}</p><p className="label-caps truncate">{char.race} · {char.class} {char.level}</p></div>
         </div>
-        <div className="text-right">
-          <p className="label-caps">Percepción</p>
-          <p className="text-sm font-bold" style={{ color: '#EDE6D8' }}>{char.passivePerception || '—'}</p>
-        </div>
+        <div className="text-right shrink-0"><p className="label-caps">Percepción</p><p className="text-sm font-bold" style={{ color: '#EDE6D8' }}>{char.passivePerception || '—'}</p></div>
       </div>
 
-      {/* Stats row */}
+      <button
+        type="button"
+        onClick={event => { event.stopPropagation(); onTogglePermission(char); }}
+        className="w-full min-h-9 px-3 flex items-center justify-between gap-2 border text-[8px] font-black uppercase tracking-wider"
+        style={{ borderColor: char.self_edit_enabled ? '#416e4b' : '#5a3f38', color: char.self_edit_enabled ? '#71ad7b' : '#b97868', background: char.self_edit_enabled ? '#102017' : '#21120f' }}
+      >
+        <span className="flex items-center gap-2">{char.self_edit_enabled ? <Unlock size={13} /> : <Lock size={13} />}{char.self_edit_enabled ? 'Jugador puede editar' : 'Edición bloqueada'}</span>
+        <span>Cambiar</span>
+      </button>
+
       <div className="grid grid-cols-3 gap-2">
-        {[['CA', char.ac, '#3E84D6'],['INIC', char.initiative >= 0 ? `+${char.initiative}` : char.initiative, '#F59E0B'],['VEL', `${char.speed}'`, '#5BA86B']].map(([l, v, c]) => (
-          <div key={l} className="text-center p-1.5 rounded-lg" style={{ background: '#0F1518' }}>
-            <p className="label-caps">{l}</p>
-            <p className="text-sm font-black" style={{ color: c }}>{v ?? '—'}</p>
-          </div>
-        ))}
+        {[
+          ['CA', char.ac, '#3E84D6'],
+          ['INIC', char.initiative >= 0 ? `+${char.initiative}` : char.initiative, '#F59E0B'],
+          ['VEL', `${char.speed}'`, '#5BA86B'],
+        ].map(([label, value, color]) => <div key={label} className="text-center p-1.5 rounded-lg" style={{ background: '#0F1518' }}><p className="label-caps">{label}</p><p className="text-sm font-black" style={{ color }}>{value ?? '—'}</p></div>)}
       </div>
 
-      {/* HP */}
-      <div onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between mb-1">
-          <span className="label-caps" style={{ color: isCritical ? '#C2452F' : undefined }}>
-            Puntos de golpe
-          </span>
-          <span className="text-xs font-black" style={{ color: '#EDE6D8' }}>
-            {char.hp || 0} / {char.maxHp || 0}
-          </span>
-        </div>
+      <div onClick={event => event.stopPropagation()}>
+        <div className="flex justify-between mb-1"><span className="label-caps" style={{ color: isCritical ? '#C2452F' : undefined }}>Puntos de golpe</span><span className="text-xs font-black" style={{ color: '#EDE6D8' }}>{char.hp || 0} / {char.maxHp || 0}</span></div>
         <HPBar hp={char.hp} maxHp={char.maxHp} />
-        <input
-          type="number"
-          className="input-base mt-2 text-center text-sm"
-          style={{ height: 32 }}
-          defaultValue={char.hp || 0}
-          onBlur={e => onEditHp(char.id, e.target.value)}
-        />
-      </div>
-    </div>
-  );
-}
-
-function EditModal({ char, onClose, socket }) {
-  const [hp, setHp] = useState(char.hp || 0);
-  const [maxHp, setMaxHp] = useState(char.maxHp || char.hp_max || 0);
-  const [xp, setXp] = useState(char.xp || 0);
-  const [inspiration, setInspiration] = useState(char.inspiration || 0);
-
-  const handleSave = () => {
-    socket.emit('update-character-quick', { characterId: char.id, hp: parseInt(hp), xp: parseInt(xp), inspiration: parseInt(inspiration) });
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}>
-      <div className="panel-raised w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-black text-lg" style={{ color: '#EDE6D8' }}>{char.name}</h2>
-          <button onClick={onClose} style={{ color: '#6B6557' }}><X size={18} /></button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {[['HP actual', hp, setHp],['HP máximo', maxHp, setMaxHp],['XP', xp, setXp],['Inspiración', inspiration, setInspiration]].map(([label, val, setter]) => (
-            <div key={label}>
-              <p className="label-caps mb-1">{label}</p>
-              <input type="number" className="input-base"
-                value={val} onChange={e => setter(e.target.value)} />
-            </div>
-          ))}
-        </div>
-
-        <button onClick={handleSave}
-          className="w-full h-11 rounded-lg font-black flex items-center justify-center gap-2"
-          style={{ background: '#FF7A1A', color: '#1A0E04' }}>
-          <Save size={16} /> Guardar
-        </button>
+        <input key={`${char.id}-${char.hp}`} type="number" aria-label={`Vida actual de ${char.name}`} className="input-base mt-2 text-center text-sm" style={{ height: 32 }} defaultValue={char.hp ?? 0} onBlur={event => onEditHp(char.id, event.target.value)} />
       </div>
     </div>
   );
@@ -117,65 +53,36 @@ function EditModal({ char, onClose, socket }) {
 export default function PartyPanel() {
   const { socket } = useSocket();
   const [players, setPlayers] = useState([]);
-  const [editingChar, setEditingChar] = useState(null);
+  const [editingCharId, setEditingCharId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
+  const editingChar = players.find(character => character.id === editingCharId);
 
   useEffect(() => {
     if (!socket) return;
     socket.emit('get-all-players');
-
-    const handler = (data) => { setPlayers(data); setLoading(false); };
+    const handler = data => { setPlayers(data); setLoading(false); };
     socket.on('all-players', handler);
     socket.on('players-data', handler);
     socket.on('stats-updated', handler);
-    return () => {
-      socket.off('all-players', handler);
-      socket.off('players-data', handler);
-      socket.off('stats-updated', handler);
-    };
+    return () => { socket.off('all-players', handler); socket.off('players-data', handler); socket.off('stats-updated', handler); };
   }, [socket]);
 
-  const updateHp = (characterId, newHp) => {
-    socket.emit('update-hp', { characterId, newHp: parseInt(newHp) });
+  const updateHp = (characterId, newHp) => socket.emit('update-hp', { characterId, newHp: Number(newHp) });
+  const togglePermission = character => {
+    setMessage('');
+    socket.emit('character:set-self-edit', { characterId: character.id, enabled: !character.self_edit_enabled }, response => {
+      setMessage(response?.ok ? `Permiso actualizado para ${character.name}.` : response?.message || 'No se pudo cambiar el permiso.');
+    });
   };
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <p className="label-caps">Gestión del grupo</p>
-        <h1 className="text-3xl font-black mt-1" style={{ color: '#EDE6D8' }}>Party</h1>
-      </div>
-
-      {/* Connected indicator */}
-      <div className="flex items-center gap-2 mb-6 panel p-3 w-fit">
-        <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-        <span className="label-caps" style={{ color: '#5BA86B' }}>{players.length} héroe{players.length !== 1 ? 's' : ''} sincronizados</span>
-      </div>
-
-      {loading && (
-        <div className="flex justify-center py-10">
-          <div className="w-8 h-8 border-2 border-purple-400 rounded-full animate-spin" style={{ borderTopColor: 'transparent' }} />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {players.map(char => (
-          <CharacterCard
-            key={char.id}
-            char={char}
-            onEditHp={updateHp}
-            onEdit={setEditingChar}
-          />
-        ))}
-      </div>
-
-      {editingChar && (
-        <EditModal
-          char={editingChar}
-          onClose={() => setEditingChar(null)}
-          socket={socket}
-        />
-      )}
+      <div className="mb-5"><p className="label-caps">Gestión del grupo</p><h1 className="text-3xl font-black mt-1" style={{ color: '#EDE6D8' }}>Party</h1><p className="mt-2 text-xs text-[#777e77]">Abrí una ficha para editarla completa. El permiso de cada tarjeta controla si ese jugador puede modificar la suya.</p></div>
+      <div className="flex items-center gap-3 mb-6"><div className="flex items-center gap-2 panel p-3 w-fit"><div className="w-2 h-2 rounded-full bg-success animate-pulse" /><span className="label-caps" style={{ color: '#5BA86B' }}>{players.length} héroe{players.length !== 1 ? 's' : ''} sincronizados</span></div>{message && <span className="text-xs text-[#aaa294]">{message}</span>}</div>
+      {loading && <div className="flex justify-center py-10"><div className="w-8 h-8 border-2 border-purple-400 rounded-full animate-spin" style={{ borderTopColor: 'transparent' }} /></div>}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{players.map(char => <CharacterCard key={char.id} char={char} onEditHp={updateHp} onEdit={setEditingCharId} onTogglePermission={togglePermission} />)}</div>
+      {editingChar && <CharacterEditorModal character={editingChar} socket={socket} isDm onClose={() => setEditingCharId(null)} />}
     </div>
   );
 }

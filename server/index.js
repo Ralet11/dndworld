@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
-const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction } = require('./models');
+const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction, CharacterAuditLog } = require('./models');
 const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
@@ -208,9 +208,16 @@ app.post('/api/characters/:id/render', verifyToken, async (req, res) => {
         });
 
         if (!character) return res.status(404).json({ message: 'Personaje no encontrado.' });
+        const isPrivileged = req.user?.role === 'DM' || req.user?.role === 'ADMIN';
+        const ownsCharacter = character.UserId === req.user?.id;
+        if (!isPrivileged && (!ownsCharacter || !character.self_edit_enabled)) {
+            return res.status(403).json({ message: 'El DM no habilitó la edición de este personaje.' });
+        }
 
         // Indicaciones libres del jugador: si vienen en el body, se guardan y se
         // reaplicarán en este y los próximos renders.
+        const previousRenderPrompt = character.render_prompt;
+        const previousRenderedUrl = character.rendered_url;
         if (req.body?.customPrompt !== undefined) {
             character.render_prompt = String(req.body.customPrompt).slice(0, 1000);
         }
@@ -238,6 +245,17 @@ app.post('/api/characters/:id/render', verifyToken, async (req, res) => {
         character.rendered_url = url;
         character.rendered_signature = signature;
         await character.save();
+        await CharacterAuditLog.create({
+            character_id: character.id,
+            actor_user_id: req.user.id,
+            actor_username: req.user.username || req.user.email || 'Usuario',
+            actor_role: req.user.role,
+            source: isPrivileged ? 'dm-hero-render' : 'player-hero-render',
+            changes: {
+                rendered_url: { before: previousRenderedUrl, after: url },
+                ...(previousRenderPrompt !== character.render_prompt ? { render_prompt: { before: previousRenderPrompt, after: character.render_prompt } } : {}),
+            },
+        });
 
         // Avisar a todos para que la figura se actualice en vivo.
         const updatedStats = await getCalculatedPartyStats();
@@ -323,6 +341,7 @@ const getCalculatedPartyStats = async () => {
             id: char.id,
             name: char.name, // Explicitly return name
             race: char.race,
+            subrace: char.subrace,
             class: char.class,
             race_slug: char.race_slug,
             class_slug: char.class_slug,
@@ -333,6 +352,15 @@ const getCalculatedPartyStats = async () => {
             level: char.level,
             xp: char.xp,
             gold: char.gold,
+            hp_temp: char.hp_temp,
+            ac_base: char.ac_base,
+            initiative_bonus: char.initiative_bonus,
+            background: char.background,
+            alignment: char.alignment,
+            inspiration: char.inspiration,
+            notes: char.notes,
+            saving_throws: char.saving_throws,
+            self_edit_enabled: char.self_edit_enabled,
             inventory: char.items, // Map 'items' to 'inventory' for frontend
             quests: char.quests,
             equipment: char.equipment,
@@ -345,8 +373,8 @@ const getCalculatedPartyStats = async () => {
             render_prompt: char.render_prompt,
             image_scale: char.image_scale,
             image_offset_x: char.image_offset_x,
-            image_offset_x: char.image_offset_x,
             image_offset_y: char.image_offset_y,
+            is_npc: char.is_npc,
             // Magic
             spell_slots: char.spell_slots,
             spells_known: char.spells_known,
@@ -357,6 +385,128 @@ const getCalculatedPartyStats = async () => {
         };
     });
 };
+
+const DM_ROLES = new Set(['DM', 'ADMIN']);
+const EDITABLE_CHARACTER_FIELDS = {
+    name: 'string', race: 'string', subrace: 'string', class: 'string', background: 'string', alignment: 'string', notes: 'string',
+    level: 'number', xp: 'number', gold: 'number', hp_current: 'number', hp_max: 'number', hp_temp: 'number',
+    ac_base: 'number', initiative_bonus: 'number', speed: 'number', inspiration: 'boolean',
+    abilities_text: 'string', spell_slots: 'json', spells_known: 'json', spells_prepared: 'json',
+    custom_features: 'json', talent_choices: 'json', feature_choices: 'json',
+    image_url: 'string', base_body_url: 'string', image_scale: 'float', image_offset_x: 'float', image_offset_y: 'float',
+};
+
+function isDmUser(socket) {
+    return DM_ROLES.has(socket.user?.role);
+}
+
+function fail(socket, message) {
+    socket.emit('character:error', { message });
+    return null;
+}
+
+function canEditCharacter(socket, character) {
+    return isDmUser(socket) || (
+        socket.user?.role === 'PLAYER'
+        && character.UserId === socket.user.id
+        && character.self_edit_enabled
+    );
+}
+
+function normalizedFieldValue(type, value) {
+    if (type === 'number') return Number.isFinite(Number(value)) ? Math.trunc(Number(value)) : null;
+    if (type === 'float') return Number.isFinite(Number(value)) ? Number(value) : null;
+    if (type === 'boolean') return Boolean(value);
+    if (type === 'json') return value && typeof value === 'object' ? value : (Array.isArray(value) ? value : {});
+    return String(value ?? '').trim().slice(0, type === 'string' ? 4000 : 255);
+}
+
+function valuesEqual(before, after) {
+    if (before && typeof before === 'object') return JSON.stringify(before) === JSON.stringify(after);
+    return before === after;
+}
+
+async function updateCharacterSecure(io, socket, characterId, diff = {}, source = 'character-editor') {
+    const character = await Character.findByPk(characterId, {
+        include: [{ model: AbilityScore, as: 'abilityScores' }, { model: Skill, as: 'skills' }],
+    });
+    if (!character) throw new Error('Personaje no encontrado.');
+    if (!canEditCharacter(socket, character)) throw new Error('No tienes permiso para editar este personaje.');
+
+    const changes = {};
+    await sequelize.transaction(async transaction => {
+        const coreUpdates = {};
+        for (const [field, type] of Object.entries(EDITABLE_CHARACTER_FIELDS)) {
+            if (!Object.prototype.hasOwnProperty.call(diff, field)) continue;
+            const next = normalizedFieldValue(type, diff[field]);
+            if (next === null || valuesEqual(character[field], next)) continue;
+            changes[field] = { before: character[field], after: next };
+            coreUpdates[field] = next;
+        }
+
+        if (diff.savingThrows && typeof diff.savingThrows === 'object') {
+            const next = {};
+            ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(key => {
+                if (diff.savingThrows[key]) next[key] = true;
+            });
+            if (!valuesEqual(character.saving_throws || {}, next)) {
+                changes.saving_throws = { before: character.saving_throws || {}, after: next };
+                coreUpdates.saving_throws = next;
+            }
+        }
+        if (Object.keys(coreUpdates).length) await character.update(coreUpdates, { transaction });
+
+        if (diff.abilityScores && typeof diff.abilityScores === 'object') {
+            const before = {};
+            const after = {};
+            for (const ability of ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) {
+                if (!Object.prototype.hasOwnProperty.call(diff.abilityScores, ability)) continue;
+                const next = Math.max(1, Math.min(30, Math.trunc(Number(diff.abilityScores[ability]) || 10)));
+                let score = character.abilityScores.find(item => item.ability === ability);
+                const previous = score ? Number(score.base_value) : null;
+                if (previous === next) continue;
+                before[ability] = previous;
+                if (score) await score.update({ base_value: next }, { transaction });
+                else score = await AbilityScore.create({ character_id: character.id, ability, base_value: next, bonus_value: 0 }, { transaction });
+                after[ability] = next;
+            }
+            if (Object.keys(after).length) changes.abilityScores = { before, after };
+        }
+
+        if (diff.skills && typeof diff.skills === 'object') {
+            const before = {};
+            const after = {};
+            for (const [name, enabled] of Object.entries(diff.skills)) {
+                const safeName = String(name).trim().slice(0, 80);
+                if (!safeName) continue;
+                let skill = character.skills.find(item => item.name === safeName);
+                const previous = Number(skill?.proficiency_level || 0);
+                const level = enabled ? 1 : 0;
+                if (previous === level) continue;
+                before[safeName] = previous;
+                if (skill) await skill.update({ proficiency_level: level }, { transaction });
+                else skill = await Skill.create({ character_id: character.id, name: safeName, proficiency_level: level }, { transaction });
+                after[safeName] = level;
+            }
+            if (Object.keys(after).length) changes.skills = { before, after };
+        }
+
+        if (Object.keys(changes).length) {
+            await CharacterAuditLog.create({
+                character_id: character.id,
+                actor_user_id: socket.user?.id || null,
+                actor_username: socket.user?.username || socket.user?.email || 'Usuario',
+                actor_role: socket.user?.role || 'UNKNOWN',
+                source,
+                changes,
+            }, { transaction });
+        }
+    });
+
+    const updatedStats = await getCalculatedPartyStats();
+    io.emit('stats-updated', updatedStats);
+    return { character: updatedStats.find(item => item.id === Number(characterId)), changes };
+}
 
 const getNpcsForClient = async () => {
     const npcs = await Character.findAll({
@@ -379,6 +529,57 @@ io.on('connection', async (socket) => {
     console.log('User connected:', socket.id);
     // Live-table state, annotations, and media tools share this socket contract.
     registerGameSessionSocket(io, socket);
+
+    socket.on('character:update', async ({ characterId, diff } = {}, reply = () => {}) => {
+        try {
+            const result = await updateCharacterSecure(io, socket, characterId, diff, isDmUser(socket) ? 'dm-editor' : 'player-editor');
+            reply({ ok: true, ...result });
+        } catch (error) {
+            reply({ ok: false, message: error.message || 'No se pudo actualizar el personaje.' });
+        }
+    });
+
+    socket.on('character:set-self-edit', async ({ characterId, enabled } = {}, reply = () => {}) => {
+        try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede cambiar este permiso.');
+            const character = await Character.findByPk(characterId);
+            if (!character || character.is_npc) throw new Error('Jugador no encontrado.');
+            const before = Boolean(character.self_edit_enabled);
+            const after = Boolean(enabled);
+            if (before !== after) {
+                await sequelize.transaction(async transaction => {
+                    await character.update({ self_edit_enabled: after }, { transaction });
+                    await CharacterAuditLog.create({
+                        character_id: character.id,
+                        actor_user_id: socket.user.id,
+                        actor_username: socket.user.username || socket.user.email || 'DM',
+                        actor_role: socket.user.role,
+                        source: 'permission-control',
+                        changes: { self_edit_enabled: { before, after } },
+                    }, { transaction });
+                });
+            }
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+            reply({ ok: true, enabled: after });
+        } catch (error) {
+            reply({ ok: false, message: error.message || 'No se pudo cambiar el permiso.' });
+        }
+    });
+
+    socket.on('character:audit:list', async ({ characterId, limit = 100 } = {}, reply = () => {}) => {
+        try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede consultar el historial.');
+            const logs = await CharacterAuditLog.findAll({
+                where: { character_id: characterId },
+                order: [['createdAt', 'DESC']],
+                limit: Math.max(1, Math.min(250, Number(limit) || 100)),
+            });
+            reply({ ok: true, logs });
+        } catch (error) {
+            reply({ ok: false, message: error.message || 'No se pudo cargar el historial.' });
+        }
+    });
 
     // The live table needs this catalog during its initial socket handshake.
     socket.on('get-all-npcs', async (ack) => {
@@ -760,6 +961,7 @@ io.on('connection', async (socket) => {
     // Editar propiedades de un item (DM): material/categoría de armadura, etc.
     socket.on('update-item', async ({ itemId, updates }) => {
         try {
+            if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede editar objetos.');
             const item = await Item.findByPk(itemId);
             if (!item || !updates) return;
 
@@ -780,12 +982,14 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('get-all-players', async () => {
-        const players = await Character.findAll({ where: { is_npc: false } });
-        socket.emit('all-players', players);
+        if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede consultar el grupo completo.');
+        const players = await getCalculatedPartyStats();
+        socket.emit('all-players', players.filter(character => !character.is_npc));
     });
 
     socket.on('assign-item', async ({ characterId, itemId }) => {
         try {
+            if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede asignar objetos.');
             const char = await Character.findByPk(characterId);
             const item = await Item.findByPk(itemId);
             if (char && item) {
@@ -806,6 +1010,7 @@ io.on('connection', async (socket) => {
     // (puede subir varios niveles de una). characterIds: array de ids.
     socket.on('award-xp', async ({ characterIds, amount }) => {
         try {
+            if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede otorgar experiencia.');
             const amt = parseInt(amount, 10);
             if (!amt || !Array.isArray(characterIds) || !characterIds.length) return;
             const XP_THRESHOLDS = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
@@ -896,27 +1101,24 @@ io.on('connection', async (socket) => {
 
     socket.on('update-character-image', async ({ characterId, imageUrl, scale, offsetX, offsetY }) => {
         try {
-            await Character.update({
+            await updateCharacterSecure(io, socket, characterId, {
                 image_url: imageUrl,
                 image_scale: scale,
                 image_offset_x: offsetX,
                 image_offset_y: offsetY
-            }, { where: { id: characterId } });
-
-            const updatedStats = await getCalculatedPartyStats();
-            io.emit('stats-updated', updatedStats);
+            }, isDmUser(socket) ? 'dm-character-image' : 'player-character-image');
         } catch (err) {
             console.error('Update character image error:', err);
+            fail(socket, err.message);
         }
     });
 
     socket.on('update-character-base-body', async ({ characterId, imageUrl }) => {
         try {
-            await Character.update({ base_body_url: imageUrl }, { where: { id: characterId } });
-            const updatedStats = await getCalculatedPartyStats();
-            io.emit('stats-updated', updatedStats);
+            await updateCharacterSecure(io, socket, characterId, { base_body_url: imageUrl }, isDmUser(socket) ? 'dm-base-body' : 'player-base-body');
         } catch (err) {
             console.error('Update character base body error:', err);
+            fail(socket, err.message);
         }
     });
 
@@ -939,7 +1141,7 @@ io.on('connection', async (socket) => {
                     },
                 ],
             });
-            if (!char) return;
+            if (!char || !canEditCharacter(socket, char)) return fail(socket, 'No tienes permiso para editar talentos.');
 
             // Validar que el umbral esté desbloqueado (talento del equipo >= umbral).
             const armor = StatEngine.computeArmor(char, char.equipment || {}, 0);
@@ -960,6 +1162,7 @@ io.on('connection', async (socket) => {
             choices[tree] = treeChoices;
             char.talent_choices = choices;
             await char.save();
+            await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: 'talent-choice', changes: { talent_choices: { after: choices } } });
 
             const updatedStats = await getCalculatedPartyStats();
             io.emit('stats-updated', updatedStats);
@@ -973,7 +1176,7 @@ io.on('connection', async (socket) => {
         try {
             if (!classSlug || !feature) return;
             const char = await Character.findByPk(characterId);
-            if (!char) return;
+            if (!char || !canEditCharacter(socket, char)) return fail(socket, 'No tienes permiso para editar rasgos.');
             const k = `${classSlug}:${feature}`;
             const choices = { ...(char.feature_choices || {}) };
             if (multi) {
@@ -987,6 +1190,7 @@ io.on('connection', async (socket) => {
             }
             char.feature_choices = choices;
             await char.save();
+            await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: 'feature-choice', changes: { feature_choices: { after: choices } } });
             const updatedStats = await getCalculatedPartyStats();
             io.emit('stats-updated', updatedStats);
         } catch (err) {
@@ -996,30 +1200,26 @@ io.on('connection', async (socket) => {
 
     socket.on('update-abilities-text', async ({ characterId, text }) => {
         try {
-            await Character.update({ abilities_text: text }, { where: { id: characterId } });
-
-            // Emit stats updated so everyone (including DM) gets the new text
-            const updatedStats = await getCalculatedPartyStats();
-            io.emit('stats-updated', updatedStats);
+            await updateCharacterSecure(io, socket, characterId, { abilities_text: text }, isDmUser(socket) ? 'dm-abilities' : 'player-abilities');
         } catch (err) {
             console.error('Update abilities text error:', err);
+            fail(socket, err.message);
         }
     });
 
     socket.on('update-custom-features', async ({ characterId, customFeatures }) => {
         try {
-            const value = Array.isArray(customFeatures) ? customFeatures : [];
-            await Character.update({ custom_features: value }, { where: { id: characterId } });
-
-            const updatedStats = await getCalculatedPartyStats();
-            io.emit('stats-updated', updatedStats);
+            await updateCharacterSecure(io, socket, characterId, { custom_features: Array.isArray(customFeatures) ? customFeatures : [] }, isDmUser(socket) ? 'dm-features' : 'player-features');
         } catch (err) {
             console.error('Update custom features error:', err);
+            fail(socket, err.message);
         }
     });
 
     socket.on('toggle-skill-proficiency', async ({ characterId, skillName }) => {
         try {
+            const character = await Character.findByPk(characterId);
+            if (!character || !canEditCharacter(socket, character)) return fail(socket, 'No tienes permiso para editar competencias.');
             const [skill, created] = await Skill.findOrCreate({
                 where: { character_id: characterId, name: skillName },
                 defaults: { proficiency_level: 0 }
@@ -1031,6 +1231,15 @@ io.on('connection', async (socket) => {
 
             skill.proficiency_level = newLevel;
             await skill.save();
+
+            await CharacterAuditLog.create({
+                character_id: character.id,
+                actor_user_id: socket.user.id,
+                actor_username: socket.user.username || socket.user.email || 'Usuario',
+                actor_role: socket.user.role,
+                source: isDmUser(socket) ? 'dm-skill-toggle' : 'player-skill-toggle',
+                changes: { skills: { before: { [skillName]: newLevel ? 0 : 1 }, after: { [skillName]: newLevel } } },
+            });
 
             const updatedStats = await getCalculatedPartyStats();
             io.emit('stats-updated', updatedStats);
@@ -1198,21 +1407,10 @@ io.on('connection', async (socket) => {
 
     socket.on('update-hp', async ({ characterId, newHp }) => {
         try {
-            const char = await Character.findByPk(characterId);
-            if (char) {
-                char.hp_current = newHp;
-                await char.save();
-
-                if (char.is_npc) {
-                    const npcs = await getNpcsForClient();
-                    io.emit('all-npcs', npcs);
-                } else {
-                    const updatedStats = await getCalculatedPartyStats();
-                    io.emit('stats-updated', updatedStats);
-                }
-            }
+            await updateCharacterSecure(io, socket, characterId, { hp_current: newHp }, isDmUser(socket) ? 'dm-hp-control' : 'player-hp-control');
         } catch (err) {
             console.error('Update-hp error:', err);
+            fail(socket, err.message);
         }
     });
 
@@ -1220,82 +1418,38 @@ io.on('connection', async (socket) => {
         try {
             console.log(`Setting archetype ${archetypeSlug} for char ${characterId}`);
             const char = await Character.findByPk(characterId);
-            if (char) {
+            if (char && canEditCharacter(socket, char)) {
+                const before = char.archetype_slug;
                 char.archetype_slug = archetypeSlug;
                 await char.save();
+                await CharacterAuditLog.create({
+                    character_id: char.id,
+                    actor_user_id: socket.user.id,
+                    actor_username: socket.user.username || socket.user.email || 'Usuario',
+                    actor_role: socket.user.role,
+                    source: 'character-archetype',
+                    changes: { archetype_slug: { before, after: archetypeSlug } },
+                });
 
                 const updatedStats = await getCalculatedPartyStats();
                 io.emit('players-data', updatedStats);
                 io.emit('stats-updated', updatedStats);
+            } else if (char) {
+                fail(socket, 'No tienes permiso para cambiar el arquetipo.');
             }
         } catch (err) {
             console.error('Error updating archetype:', err);
         }
     });
 
-    socket.on('update-character-full', async (data) => {
-        console.log('Received full character update:', data);
+    // Compatibility for existing character-sheet controls. It now uses the same
+    // permission checks and audit trail as the new editor.
+    socket.on('update-character-full', async ({ characterId, diff } = {}, reply = () => {}) => {
         try {
-            const { characterId, diff } = data;
-            const char = await Character.findByPk(characterId);
-            if (!char) return;
-
-            // Update core stats
-            if (diff.name) char.name = diff.name;
-            if (diff.race) char.race = diff.race;
-            if (diff.class) char.class = diff.class;
-            if (diff.race_slug) char.race_slug = diff.race_slug;
-            if (diff.class_slug) char.class_slug = diff.class_slug;
-            if (diff.level) char.level = parseInt(diff.level);
-            if (diff.hp_max) char.hp_max = parseInt(diff.hp_max);
-            if (diff.hp_current) char.hp_current = parseInt(diff.hp_current);
-            if (diff.ac_base) char.ac_base = parseInt(diff.ac_base);
-            if (diff.ac_base) char.ac_base = parseInt(diff.ac_base);
-            if (diff.speed) char.speed = parseInt(diff.speed);
-
-            // Magic Updates
-            if (diff.spell_slots) char.spell_slots = diff.spell_slots;
-            if (diff.spells_known) char.spells_known = diff.spells_known;
-            if (diff.spells_prepared) char.spells_prepared = diff.spells_prepared;
-
-            await char.save();
-
-            // Update Ability Scores if provided
-            if (diff.abilityScores) {
-                const existingScores = await AbilityScore.findAll({ where: { character_id: characterId } });
-
-                for (const [ability, val] of Object.entries(diff.abilityScores)) {
-                    const cleanAbility = ability.toUpperCase();
-                    const existing = existingScores.find(s => s.ability === cleanAbility);
-
-                    if (existing) {
-                        existing.base_value = parseInt(val);
-                        await existing.save();
-                    } else {
-                        await AbilityScore.create({
-                            character_id: characterId,
-                            ability: cleanAbility,
-                            base_value: parseInt(val)
-                        });
-                    }
-                }
-            }
-
-            console.log(`Character ${char.name} updated successfully.`);
-
-            // Broadcast updates
-            if (char.is_npc) {
-                const npcs = await getNpcsForClient();
-                io.emit('all-npcs', npcs);
-            }
-
-            // Determine if we need to update party stats (Players OR Active NPCs)
-            if (!char.is_npc || char.is_active) {
-                const updatedStats = await getCalculatedPartyStats();
-                io.emit('stats-updated', updatedStats);
-            }
-        } catch (err) {
-            console.error('Update full character error:', err);
+            const result = await updateCharacterSecure(io, socket, characterId, diff, isDmUser(socket) ? 'dm-legacy-control' : 'player-sheet-control');
+            reply({ ok: true, ...result });
+        } catch (error) {
+            reply({ ok: false, message: error.message || 'No se pudo actualizar el personaje.' });
         }
     });
 
@@ -1322,12 +1476,13 @@ io.on('connection', async (socket) => {
     socket.on('unequip-item', async ({ characterId, slot }) => {
         try {
             const char = await Character.findByPk(characterId);
-            if (!char) return;
+            if (!char || !canEditCharacter(socket, char)) return fail(socket, 'No tienes permiso para cambiar el equipo.');
 
             const equipment = await EquipmentSlots.findOne({ where: { character_id: characterId } });
             if (equipment) {
                 equipment.set(`${slot}_id`, null);
                 await equipment.save();
+                await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: 'unequip-item', changes: { equipment: { slot, after: null } } });
 
                 const updatedStats = await getCalculatedPartyStats();
                 io.emit('stats-updated', updatedStats);
@@ -1342,7 +1497,7 @@ io.on('connection', async (socket) => {
         try {
             const char = await Character.findByPk(characterId);
             const item = await Item.findByPk(itemId);
-            if (!char || !item) return;
+            if (!char || !item || !canEditCharacter(socket, char)) return fail(socket, 'No tienes permiso para cambiar el equipo.');
 
             const [equipment] = await EquipmentSlots.findOrCreate({ where: { character_id: characterId } });
 
@@ -1357,6 +1512,7 @@ io.on('connection', async (socket) => {
 
             equipment.set(`${slot}_id`, item.id);
             await equipment.save();
+            await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: 'equip-item', changes: { equipment: { slot, after: { item_id: item.id, name: item.name } } } });
 
             const updatedStats = await getCalculatedPartyStats();
             io.emit('stats-updated', updatedStats);

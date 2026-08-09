@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Swords, Loader } from 'lucide-react';
+import { Swords, Loader, Edit3, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import CharacterSheet from '../components/Hero/CharacterSheet';
+import CharacterEditorModal from '../components/Hero/CharacterEditorModal';
 import API_URL from '../config';
 
 export default function HeroTab() {
@@ -12,6 +13,8 @@ export default function HeroTab() {
   const [available, setAvailable] = useState([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [permissionMessage, setPermissionMessage] = useState('');
 
   const fetchAvailable = async () => {
     try {
@@ -46,6 +49,16 @@ export default function HeroTab() {
     };
   }, [socket, user]);
 
+  useEffect(() => {
+    if (!socket) return;
+    const handleError = ({ message } = {}) => {
+      setPermissionMessage(message || 'No tenés permiso para realizar ese cambio.');
+      window.setTimeout(() => setPermissionMessage(''), 4500);
+    };
+    socket.on('character:error', handleError);
+    return () => socket.off('character:error', handleError);
+  }, [socket]);
+
   const handleAssign = async (characterId) => {
     setAssigning(true);
     try {
@@ -59,7 +72,7 @@ export default function HeroTab() {
         alert(err.message || 'No se pudo asignar el personaje');
       }
       // Socket will push updated players list
-    } catch (e) {
+    } catch {
       alert('Error de conexión');
     } finally {
       setAssigning(false);
@@ -77,7 +90,13 @@ export default function HeroTab() {
   if (myCharacter) {
     return (
       <div style={{ height: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="min-h-11 px-3 flex items-center justify-between gap-3 border-b border-[#30362f] bg-[#09100e]">
+          {myCharacter.self_edit_enabled ? <span className="text-[9px] text-[#75917a]">El DM habilitó la edición de tu ficha. Los cambios quedan registrados.</span> : <span className="flex items-center gap-2 text-[9px] text-[#887f70]"><Lock size={12} />Edición bloqueada por el DM</span>}
+          {myCharacter.self_edit_enabled && <button type="button" onClick={() => setEditing(true)} className="h-8 px-3 flex items-center gap-2 border border-[#755e35] bg-[#24190e] text-[8px] font-black uppercase tracking-widest text-[#d5b66d]"><Edit3 size={12} />Editar mi ficha</button>}
+        </div>
+        {permissionMessage && <div className="px-3 py-2 text-xs text-[#d18a78] bg-[#21120f] border-b border-[#5a3f38]">{permissionMessage}</div>}
         <CharacterSheet character={myCharacter} socket={socket} />
+        {editing && <CharacterEditorModal character={myCharacter} socket={socket} onClose={() => setEditing(false)} />}
       </div>
     );
   }
