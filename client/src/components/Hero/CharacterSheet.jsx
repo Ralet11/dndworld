@@ -3,7 +3,7 @@ import {
   Shield, Zap, Eye, Target, Footprints, Heart, HeartCrack,
   Scroll, Sparkles, Backpack, User, Wind, Coins,
   CheckCircle, Circle, Dices, Dna, ChevronRight, ChevronDown,
-  BookOpen, Swords, VenetianMask, Shirt, Hand, Layers, Gem, Sword,
+  BookOpen, Swords, VenetianMask, Shirt, Hand, Layers, Gem, Sword, Wrench,
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import ActionCheatSheet from './ActionCheatSheet';
@@ -747,8 +747,9 @@ function RasgosTab({ character }) {
 
   const customFeatures = useMemo(() => getCharacterCustomFeatures(character), [character]);
   const notesText = useMemo(() => getCharacterNotesText(character.abilities_text), [character.abilities_text]);
+  const blueprints = useMemo(() => character.blueprints || [], [character.blueprints]);
 
-  const hasContent = raceData || classList.length > 0 || customFeatures.length > 0 || notesText;
+  const hasContent = raceData || classList.length > 0 || customFeatures.length > 0 || blueprints.length > 0 || notesText;
   if (!hasContent) {
     return <p className="text-center py-12 italic" style={{ color: '#6B6557' }}>Sin información disponible</p>;
   }
@@ -849,6 +850,30 @@ function RasgosTab({ character }) {
                 ) : null}
               </div>
             ))}
+          </div>
+        </Accordion>
+      )}
+
+      {/* PLANOS DE ARTIFICIERO */}
+      {blueprints.length > 0 && (
+        <Accordion title={`Planos conocidos · ${blueprints.length}/4`} icon={<Wrench size={15} style={{ color: '#3E84D6' }} />} defaultOpen>
+          <div className="space-y-2">
+            {blueprints.map((blueprint, index) => (
+              <div key={blueprint.slug || index} className="p-3 rounded-xl" style={{ background: '#1E2A28', border: '1px solid #2A332F' }}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold" style={{ color: '#EDE6D8' }}>{blueprint.name}</p>
+                  {blueprint.category ? <span className="label-caps" style={{ color: '#3E84D6' }}>{blueprint.category}</span> : null}
+                </div>
+                {blueprint.description ? <p className="text-xs mt-1 leading-relaxed" style={{ color: '#A89F8E', whiteSpace: 'pre-line' }}>{blueprint.description}</p> : null}
+                {blueprint.crafting_notes ? <p className="text-[10px] mt-2 leading-relaxed" style={{ color: '#C8A36A' }}>{blueprint.crafting_notes}</p> : null}
+              </div>
+            ))}
+            {blueprints.length < 4 ? (
+              <div className="p-3 rounded-xl" style={{ border: '1px dashed #354039', color: '#6B6557' }}>
+                <p className="text-xs font-bold">Espacio de plano disponible</p>
+                <p className="text-[10px] mt-1">Rakion puede aprender {4 - blueprints.length} plano adicional.</p>
+              </div>
+            ) : null}
           </div>
         </Accordion>
       )}

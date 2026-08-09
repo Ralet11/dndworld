@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
-const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction, CharacterAuditLog, CharacterInventory, AudioTrack, GameSession } = require('./models');
+const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, Blueprint, NpcAction, CharacterAuditLog, CharacterInventory, AudioTrack, GameSession } = require('./models');
 const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
@@ -402,6 +402,10 @@ const getCalculatedPartyStats = async () => {
     const classMap = {};
     allClasses.forEach(c => { classMap[c.slug] = c; });
 
+    const allBlueprints = await Blueprint.findAll();
+    const blueprintMap = {};
+    allBlueprints.forEach(blueprint => { blueprintMap[blueprint.slug] = blueprint; });
+
     // Definiciones de elección de rasgos (Estilo de Combate, etc.) — viven en el
     // compendio local (la tabla Class no las guarda).
     const compendium = require('./data/compendium2024');
@@ -471,6 +475,10 @@ const getCalculatedPartyStats = async () => {
             spell_slots: char.spell_slots,
             spells_known: char.spells_known,
             spells_prepared: char.spells_prepared,
+            blueprints_known: char.blueprints_known,
+            blueprints: (Array.isArray(char.blueprints_known) ? char.blueprints_known : [])
+                .map(slug => blueprintMap[slug])
+                .filter(Boolean),
             talent_choices: char.talent_choices,
             feature_choices: char.feature_choices,
             UserId: char.UserId, // Critical for frontend identity
@@ -483,7 +491,7 @@ const EDITABLE_CHARACTER_FIELDS = {
     name: 'string', race: 'string', subrace: 'string', class: 'string', background: 'string', alignment: 'string', notes: 'string',
     level: 'number', xp: 'number', gold: 'number', hp_current: 'number', hp_max: 'number', hp_temp: 'number',
     ac_base: 'number', initiative_bonus: 'number', speed: 'number', inspiration: 'boolean',
-    abilities_text: 'string', spell_slots: 'json', spells_known: 'json', spells_prepared: 'json',
+    abilities_text: 'string', spell_slots: 'json', spells_known: 'json', spells_prepared: 'json', blueprints_known: 'json',
     custom_features: 'json', talent_choices: 'json', feature_choices: 'json',
     image_url: 'string', base_body_url: 'string', image_scale: 'float', image_offset_x: 'float', image_offset_y: 'float',
 };
