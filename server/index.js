@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
-const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction, CharacterAuditLog } = require('./models');
+const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, NpcAction, CharacterAuditLog, CharacterInventory } = require('./models');
 const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
@@ -987,22 +987,86 @@ io.on('connection', async (socket) => {
         socket.emit('all-players', players.filter(character => !character.is_npc));
     });
 
-    socket.on('assign-item', async ({ characterId, itemId }) => {
+    socket.on('assign-item', async ({ characterId, itemId, quantity = 1 } = {}, reply = () => {}) => {
         try {
-            if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede asignar objetos.');
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede asignar objetos.');
             const char = await Character.findByPk(characterId);
             const item = await Item.findByPk(itemId);
-            if (char && item) {
-                // Check if already has it? Allow duplicates for consumables/others? Yes.
-                await char.addItem(item, { through: { quantity: 1 } });
-
-                // Notify DM and Players
-                const updatedStats = await getCalculatedPartyStats();
-                io.emit('stats-updated', updatedStats);
-                io.emit('notification', { text: `${char.name} recibió ${item.name} del DM.` });
-            }
+            if (!char || !item || char.is_npc) throw new Error('Jugador u objeto no encontrado.');
+            const added = Math.max(1, Math.min(999, Math.trunc(Number(quantity) || 1)));
+            const [inventoryRow, created] = await CharacterInventory.findOrCreate({
+                where: { character_id: char.id, item_id: item.id },
+                defaults: { quantity: added },
+            });
+            const before = created ? 0 : Number(inventoryRow.quantity || 1);
+            const after = created ? added : Math.min(999, before + added);
+            if (!created) await inventoryRow.update({ quantity: after });
+            await CharacterAuditLog.create({
+                character_id: char.id,
+                actor_user_id: socket.user.id,
+                actor_username: socket.user.username || socket.user.email || 'DM',
+                actor_role: socket.user.role,
+                source: 'dm-inventory-add',
+                changes: { inventory: { before: { item_id: item.id, name: item.name, quantity: before }, after: { item_id: item.id, name: item.name, quantity: after } } },
+            });
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+            io.emit('notification', { text: `${char.name} recibió ${added} × ${item.name} del DM.` });
+            reply({ ok: true, quantity: after });
         } catch (e) {
             console.error('Assign item error:', e);
+            fail(socket, e.message || 'No se pudo asignar el objeto.');
+            reply({ ok: false, message: e.message || 'No se pudo asignar el objeto.' });
+        }
+    });
+
+    socket.on('character:item:set-quantity', async ({ characterId, itemId, quantity } = {}, reply = () => {}) => {
+        try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede administrar inventarios.');
+            const [char, item, inventoryRow] = await Promise.all([
+                Character.findByPk(characterId),
+                Item.findByPk(itemId),
+                CharacterInventory.findOne({ where: { character_id: characterId, item_id: itemId } }),
+            ]);
+            if (!char || !item || !inventoryRow || char.is_npc) throw new Error('El objeto no está en el inventario del jugador.');
+            const before = Number(inventoryRow.quantity || 1);
+            const after = Math.max(0, Math.min(999, Math.trunc(Number(quantity) || 0)));
+            const clearedSlots = [];
+            await sequelize.transaction(async transaction => {
+                if (after === 0) {
+                    const equipment = await EquipmentSlots.findOne({ where: { character_id: char.id }, transaction });
+                    if (equipment) {
+                        for (const slot of ['helmet', 'chest', 'shoulders', 'boots', 'pants', 'gloves', 'ring_1', 'ring_2', 'primary_weapon', 'secondary_weapon']) {
+                            if (Number(equipment.get(`${slot}_id`)) === Number(item.id)) {
+                                equipment.set(`${slot}_id`, null);
+                                clearedSlots.push(slot);
+                            }
+                        }
+                        if (clearedSlots.length) await equipment.save({ transaction });
+                    }
+                    await inventoryRow.destroy({ transaction });
+                } else if (after !== before) {
+                    await inventoryRow.update({ quantity: after }, { transaction });
+                }
+                if (after !== before) await CharacterAuditLog.create({
+                    character_id: char.id,
+                    actor_user_id: socket.user.id,
+                    actor_username: socket.user.username || socket.user.email || 'DM',
+                    actor_role: socket.user.role,
+                    source: after === 0 ? 'dm-inventory-remove' : 'dm-inventory-quantity',
+                    changes: {
+                        inventory: { before: { item_id: item.id, name: item.name, quantity: before }, after: after ? { item_id: item.id, name: item.name, quantity: after } : null },
+                        ...(clearedSlots.length ? { equipment: { before: clearedSlots, after: [] } } : {}),
+                    },
+                }, { transaction });
+            });
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+            io.emit('notification', { text: after === 0 ? `${item.name} fue retirado de ${char.name}.` : `${item.name}: cantidad actualizada a ${after}.` });
+            reply({ ok: true, quantity: after });
+        } catch (error) {
+            fail(socket, error.message || 'No se pudo modificar el inventario.');
+            reply({ ok: false, message: error.message || 'No se pudo modificar el inventario.' });
         }
     });
 
@@ -1473,31 +1537,39 @@ io.on('connection', async (socket) => {
         await consumeItemLogic(characterId, itemId);
     });
 
-    socket.on('unequip-item', async ({ characterId, slot }) => {
+    socket.on('unequip-item', async ({ characterId, slot } = {}, reply = () => {}) => {
         try {
             const char = await Character.findByPk(characterId);
-            if (!char || !canEditCharacter(socket, char)) return fail(socket, 'No tienes permiso para cambiar el equipo.');
+            if (!char || !canEditCharacter(socket, char)) throw new Error('No tienes permiso para cambiar el equipo.');
+            const validSlots = ['helmet', 'chest', 'shoulders', 'boots', 'pants', 'gloves', 'ring_1', 'ring_2', 'primary_weapon', 'secondary_weapon'];
+            if (!validSlots.includes(slot)) throw new Error('La ranura de equipo no es válida.');
 
             const equipment = await EquipmentSlots.findOne({ where: { character_id: characterId } });
             if (equipment) {
+                const previousItemId = equipment.get(`${slot}_id`);
                 equipment.set(`${slot}_id`, null);
                 await equipment.save();
-                await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: 'unequip-item', changes: { equipment: { slot, after: null } } });
+                await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: isDmUser(socket) ? 'dm-unequip-item' : 'player-unequip-item', changes: { equipment: { slot, before: previousItemId, after: null } } });
 
                 const updatedStats = await getCalculatedPartyStats();
                 io.emit('stats-updated', updatedStats);
                 io.emit('notification', { text: `${char.name} se desequipó un objeto.` });
             }
+            reply({ ok: true });
         } catch (err) {
             console.error('Unequip-item error:', err);
+            fail(socket, err.message || 'No se pudo desequipar el objeto.');
+            reply({ ok: false, message: err.message || 'No se pudo desequipar el objeto.' });
         }
     });
 
-    socket.on('equip-item', async ({ characterId, itemId, slot: explicitSlot }) => {
+    socket.on('equip-item', async ({ characterId, itemId, slot: explicitSlot } = {}, reply = () => {}) => {
         try {
             const char = await Character.findByPk(characterId);
             const item = await Item.findByPk(itemId);
-            if (!char || !item || !canEditCharacter(socket, char)) return fail(socket, 'No tienes permiso para cambiar el equipo.');
+            if (!char || !item || !canEditCharacter(socket, char)) throw new Error('No tienes permiso para cambiar el equipo.');
+            const inventoryRow = await CharacterInventory.findOne({ where: { character_id: characterId, item_id: itemId } });
+            if (!inventoryRow) throw new Error('El objeto no está en el inventario del personaje.');
 
             const [equipment] = await EquipmentSlots.findOrCreate({ where: { character_id: characterId } });
 
@@ -1506,19 +1578,22 @@ io.on('connection', async (socket) => {
             const slot = resolveSlotColumn(logical, equipment);
 
             if (!slot) {
-                io.emit('notification', { text: `${item.name} no se puede equipar.` });
-                return;
+                throw new Error(`${item.name} no se puede equipar.`);
             }
 
+            const previousItemId = equipment.get(`${slot}_id`);
             equipment.set(`${slot}_id`, item.id);
             await equipment.save();
-            await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: 'equip-item', changes: { equipment: { slot, after: { item_id: item.id, name: item.name } } } });
+            await CharacterAuditLog.create({ character_id: char.id, actor_user_id: socket.user.id, actor_username: socket.user.username || 'Usuario', actor_role: socket.user.role, source: isDmUser(socket) ? 'dm-equip-item' : 'player-equip-item', changes: { equipment: { slot, before: previousItemId, after: { item_id: item.id, name: item.name } } } });
 
             const updatedStats = await getCalculatedPartyStats();
             io.emit('stats-updated', updatedStats);
             io.emit('notification', { text: `${char.name} se equipó ${item.name}.` });
+            reply({ ok: true, slot });
         } catch (err) {
             console.error('Equip-item error:', err);
+            fail(socket, err.message || 'No se pudo equipar el objeto.');
+            reply({ ok: false, message: err.message || 'No se pudo equipar el objeto.' });
         }
     });
 

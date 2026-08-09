@@ -26,6 +26,7 @@ const GameAsset = require('./GameAsset');
 const GameRoll = require('./GameRoll');
 const NpcAction = require('./NpcAction');
 const CharacterAuditLog = require('./CharacterAuditLog');
+const CharacterInventory = require('./CharacterInventory');
 
 // Character Relationships
 Character.belongsTo(Class, { foreignKey: 'class_slug', targetKey: 'slug', as: 'classData' });
@@ -44,8 +45,8 @@ Character.hasMany(Quest, { foreignKey: 'character_id', as: 'quests' });
 Quest.belongsTo(Character, { foreignKey: 'character_id' });
 
 // Inventory relationship
-Character.belongsToMany(Item, { through: 'CharacterInventory', as: 'items', foreignKey: 'character_id' });
-Item.belongsToMany(Character, { through: 'CharacterInventory', foreignKey: 'item_id' });
+Character.belongsToMany(Item, { through: CharacterInventory, as: 'items', foreignKey: 'character_id' });
+Item.belongsToMany(Character, { through: CharacterInventory, foreignKey: 'item_id' });
 
 // Equipment relationship
 Character.hasOne(EquipmentSlots, { foreignKey: 'character_id', as: 'equipment' });
@@ -139,5 +140,6 @@ module.exports = {
     GameAsset,
     GameRoll,
     NpcAction,
-    CharacterAuditLog
+    CharacterAuditLog,
+    CharacterInventory
 };
