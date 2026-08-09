@@ -4685,7 +4685,9 @@ a:focus-visible {
 .game-dice-tray > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .game-dice-tray > header > div { display: flex; align-items: center; gap: 7px; color: #d2aa59; }
 .game-dice-tray > header span { font-family: var(--font-display); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
-.game-dice-tray > header small { color: #68736c; font-size: 6px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.game-dice-tray > header small { display: flex; align-items: center; gap: 5px; color: #68736c; font-size: 6px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.game-dice-tray > header small b { padding: 3px 5px; color: #879087; border: 1px solid #303a35; background: #09100d; font-weight: 900; }
+.game-dice-tray > header small b.has-modifier { color: #d2aa59; border-color: #5f4b2d; }
 .game-dice-set { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .game-dice-set > button {
   min-width: 0;
@@ -4704,21 +4706,24 @@ a:focus-visible {
 .game-dice-set > button:hover:not(:disabled) { color: #ffe4a5; border-color: #a67d32; box-shadow: 0 0 16px rgba(183, 133, 42, .18); transform: translateY(-1px); }
 .game-dice-set > button:active:not(:disabled) { transform: translateY(1px) scale(.97); }
 .game-dice-set > button:disabled { opacity: .45; }
-.game-dice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+.game-dice-options { display: grid; grid-template-columns: 1fr 1fr auto; gap: 7px; margin-top: 8px; }
 .game-dice-options > label { display: grid; grid-template-columns: 1fr auto; align-items: center; min-height: 29px; padding-left: 8px; color: #6f786f; border: 1px solid #29332e; background: #09100d; font-size: 6px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .game-dice-options > label > div { height: 27px; display: flex; align-items: center; border-left: 1px solid #29332e; }
 .game-dice-options button { width: 24px; height: 27px; display: grid; place-items: center; color: #a68c5b; background: transparent; border: 0; }
+.game-dice-options button:hover:not(:disabled) { color: #f1d696; background: rgba(184, 139, 54, .09); }
 .game-dice-options output { min-width: 23px; color: #e4d6bb; text-align: center; font-family: var(--font-display); font-size: 11px; }
-.game-dice-options input { width: 58px; height: 27px; padding: 0 6px; color: #e4d6bb; border: 0; border-left: 1px solid #29332e; outline: 0; background: #0d1511; font-family: var(--font-display); text-align: center; }
-.game-dice-tray.is-compact { width: min(420px, 55%); margin: 0 0 0 auto; padding: 6px 7px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px; }
+.game-dice-options input { width: 42px; height: 27px; padding: 0 3px; color: #e4d6bb; border: 0; border-right: 1px solid #29332e; border-left: 1px solid #29332e; outline: 0; background: #0d1511; font-family: var(--font-display); text-align: center; }
+.game-dice-options .game-dice-reset { width: 29px; height: 29px; color: #776f61; border: 1px solid #29332e; background: #09100d; }
+.game-dice-options .game-dice-reset:disabled { opacity: .28; }
+.game-dice-tray.is-compact { width: min(540px, 72%); margin: 0 0 0 auto; padding: 6px 7px; display: grid; grid-template-columns: auto minmax(210px, 1fr) auto; align-items: center; gap: 7px; }
 .game-dice-tray.is-compact > header { margin: 0; }
 .game-dice-tray.is-compact > header small { display: none; }
 .game-dice-tray.is-compact .game-dice-set { min-width: 210px; }
 .game-dice-tray.is-compact .game-dice-set > button { height: 28px; }
 .game-dice-tray.is-compact .game-dice-options { display: flex; margin: 0; }
-.game-dice-tray.is-compact .game-dice-options > label:first-child { display: none; }
 .game-dice-tray.is-compact .game-dice-options > label { padding: 0; }
 .game-dice-tray.is-compact .game-dice-options > label > span { display: none; }
+.game-dice-tray.is-compact .game-dice-options > label:first-child output { min-width: 20px; }
 
 .game-dice-animation { position: absolute; inset: 0; z-index: 90; overflow: hidden; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms ease, visibility 220ms ease; }
 .game-dice-animation.is-active { opacity: 1; visibility: visible; }
@@ -4748,8 +4753,8 @@ a:focus-visible {
 @media (max-width: 900px) {
   .game-roll-stack { right: 8px; left: 8px; max-width: none; }
   .game-roll-card { width: 170px; min-width: 170px; }
-  .game-dice-tray.is-compact { width: 100%; margin-top: 6px; grid-template-columns: auto 1fr; }
-  .game-dice-tray.is-compact .game-dice-options { display: none; }
+  .game-dice-tray.is-compact { width: 100%; margin-top: 6px; grid-template-columns: auto minmax(0, 1fr); }
+  .game-dice-tray.is-compact .game-dice-options { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) {
   .game-roll-card { animation-duration: 1ms; }
@@ -4905,7 +4910,7 @@ a:focus-visible {
   .game-player-stage-wrap { height: 100%; padding: 10px; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   .game-player-stage-wrap .game-stage { width: 100%; height: 100%; min-height: 0; }
   .game-player-stage-note { min-height: 36px; padding: 4px 7px; gap: 9px; }
-  .game-player-stage-note .game-dice-tray.is-compact { width: min(390px, 57%); }
+  .game-player-stage-note .game-dice-tray.is-compact { width: min(540px, 72%); }
   .game-player-stage-note span { font-size: 6px; white-space: nowrap; }
   .game-player-stage-note p { overflow: hidden; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 
