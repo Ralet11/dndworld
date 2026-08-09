@@ -134,9 +134,6 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
             return (
               <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}`}>
-                <div className="game-roll-card-effects" aria-hidden="true">
-                  {Array.from({ length: 8 }, (_, index) => <i key={index} />)}
-                </div>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>
