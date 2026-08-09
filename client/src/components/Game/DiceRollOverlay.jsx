@@ -25,6 +25,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
   const initializedRef = useRef(false);
   const seededRef = useRef(false);
   const processedRollsRef = useRef(new Set());
+  const authoritativeRollsRef = useRef(new Map());
   const queueRef = useRef(Promise.resolve());
   const hideTimerRef = useRef(null);
   const [activeRoll, setActiveRoll] = useState(null);
@@ -59,6 +60,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
   }, []);
 
   useEffect(() => {
+    rolls.filter(roll => roll.resolved).forEach(roll => authoritativeRollsRef.current.set(String(roll.id), roll));
     if (!seededRef.current) {
       rolls.filter(roll => roll.resolved).forEach(roll => processedRollsRef.current.add(`${roll.id}:resolved`));
       seededRef.current = true;
@@ -103,14 +105,24 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
         if (!physicalResults?.every(value => Number.isInteger(value) && value >= 1 && value <= roll.sides)) {
           physicalResults = fallbackResults(roll.quantity, roll.sides);
         }
-        const resolvedRoll = {
+        const locallyResolvedRoll = {
           ...roll,
           resolved: true,
           results: physicalResults,
           total: physicalResults.reduce((sum, value) => sum + value, 0) + (Number(roll.modifier) || 0),
         };
-        setActiveRoll(resolvedRoll);
-        if (ownsRoll) onResolveRoll?.(roll.id, physicalResults);
+        if (ownsRoll) {
+          setActiveRoll(locallyResolvedRoll);
+          onResolveRoll?.(roll.id, physicalResults);
+        } else {
+          let authoritativeRoll = authoritativeRollsRef.current.get(String(roll.id));
+          const deadline = Date.now() + 6000;
+          while (!authoritativeRoll && Date.now() < deadline) {
+            await new Promise(resolve => window.setTimeout(resolve, 50));
+            authoritativeRoll = authoritativeRollsRef.current.get(String(roll.id));
+          }
+          setActiveRoll(authoritativeRoll || roll);
+        }
         await new Promise(resolve => {
           hideTimerRef.current = window.setTimeout(resolve, 2100);
         });
@@ -125,8 +137,16 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
 
   return (
     <>
-      <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
+      <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${activeRoll?.resolved ? ' has-official-result' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
         <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
+        {activeRoll?.resolved && Array.isArray(activeRoll.results) && (
+          <div className="game-dice-official" aria-live="assertive">
+            <span>{activeRoll.character_name || activeRoll.roller_name}</span>
+            <small>Resultado oficial · {formula(activeRoll)}</small>
+            <div>{activeRoll.results.map((result, index) => <b key={`${activeRoll.id}-${index}`} className={`is-d${activeRoll.sides}`}>{result}</b>)}</div>
+            <strong>Total {activeRoll.total}</strong>
+          </div>
+        )}
       </div>
       {!!orderedRolls.length && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">
