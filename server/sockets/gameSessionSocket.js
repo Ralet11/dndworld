@@ -671,6 +671,73 @@ function registerGameSessionSocket(io, socket) {
             round: session.round,
             turnIndex: session.turn_index,
             activeCharacterId: session.turn_order[session.turn_index] || null,
+            turnOrder: session.turn_order,
+        });
+    });
+
+    socket.on('game:previous-turn', async ({ sessionId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || !session.turn_order?.length) return;
+        if (session.turn_index <= 0) {
+            session.turn_index = session.turn_order.length - 1;
+            session.round = Math.max(1, session.round - 1);
+        } else {
+            session.turn_index -= 1;
+        }
+        await session.save();
+        io.to(roomName(session.id)).emit('game:turn-updated', {
+            round: session.round,
+            turnIndex: session.turn_index,
+            activeCharacterId: session.turn_order[session.turn_index] || null,
+            turnOrder: session.turn_order,
+        });
+    });
+
+    socket.on('game:set-turn', async ({ sessionId, characterId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session) return;
+        const normalizedId = Number(characterId);
+        let turnIndex = session.turn_order.map(Number).indexOf(normalizedId);
+        if (turnIndex < 0) {
+            const [participant, token] = await Promise.all([
+                GameParticipant.findOne({ where: { session_id: session.id, character_id: normalizedId }, attributes: ['id'] }),
+                GameToken.findOne({ where: { session_id: session.id, character_id: normalizedId, visible: true }, attributes: ['id'] }),
+            ]);
+            if (!participant && !token) return fail(socket, 'Ese personaje no está en la iniciativa.');
+            session.turn_order = [...session.turn_order, normalizedId];
+            turnIndex = session.turn_order.length - 1;
+        }
+        session.turn_index = turnIndex;
+        await session.save();
+        io.to(roomName(session.id)).emit('game:turn-updated', {
+            round: session.round,
+            turnIndex: session.turn_index,
+            activeCharacterId: session.turn_order[session.turn_index] || null,
+            turnOrder: session.turn_order,
+        });
+    });
+
+    socket.on('game:update-turn-order', async ({ sessionId, turnOrder } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || !Array.isArray(turnOrder)) return;
+        const participants = await GameParticipant.findAll({ where: { session_id: session.id }, attributes: ['character_id'] });
+        const tokens = await GameToken.findAll({ where: { session_id: session.id, visible: true }, attributes: ['character_id'] });
+        const availableIds = [...new Set([
+            ...participants.map(item => Number(item.character_id)),
+            ...tokens.map(item => Number(item.character_id)),
+        ].filter(Number.isInteger))];
+        const allowedIds = new Set(availableIds);
+        const requestedIds = [...new Set(turnOrder.map(Number).filter(id => Number.isInteger(id) && allowedIds.has(id)))];
+        const nextOrder = [...requestedIds, ...availableIds.filter(id => !requestedIds.includes(id))];
+        const activeCharacterId = session.turn_order?.[session.turn_index] ?? null;
+        session.turn_order = nextOrder;
+        session.turn_index = Math.max(0, nextOrder.indexOf(Number(activeCharacterId)));
+        await session.save();
+        io.to(roomName(session.id)).emit('game:turn-updated', {
+            round: session.round,
+            turnIndex: session.turn_index,
+            activeCharacterId: session.turn_order[session.turn_index] || null,
+            turnOrder: session.turn_order,
         });
     });
 
@@ -700,6 +767,10 @@ function registerGameSessionSocket(io, socket) {
         if (!token.image_url) {
             token.image_url = resolveCharacterImage(character);
             await token.save();
+        }
+        if (session.status !== 'WAITING' && !session.turn_order.map(Number).includes(Number(character.id))) {
+            session.turn_order = [...session.turn_order, character.id];
+            await session.save();
         }
         await broadcastSession(io, session.id);
     });
@@ -735,6 +806,10 @@ function registerGameSessionSocket(io, socket) {
                 x: 50,
                 y: 50,
             });
+            if (session.status !== 'WAITING' && !session.turn_order.map(Number).includes(Number(character.id))) {
+                session.turn_order = [...session.turn_order, character.id];
+                await session.save();
+            }
             await broadcastSession(io, session.id);
             reply({ ok: true, character: character.toJSON(), token: token.toJSON() });
         } catch (error) {
@@ -867,7 +942,20 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:delete-token', async ({ sessionId, tokenId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
+        const token = await GameToken.findOne({ where: { id: tokenId, session_id: sessionId }, attributes: ['character_id'] });
         await GameToken.destroy({ where: { id: tokenId, session_id: sessionId } });
+        if (token?.character_id && session.turn_order.map(Number).includes(Number(token.character_id))) {
+            const [remainingToken, participant] = await Promise.all([
+                GameToken.findOne({ where: { session_id: sessionId, character_id: token.character_id, visible: true }, attributes: ['id'] }),
+                GameParticipant.findOne({ where: { session_id: sessionId, character_id: token.character_id }, attributes: ['id'] }),
+            ]);
+            if (!remainingToken && !participant) {
+                const activeCharacterId = session.turn_order[session.turn_index] ?? null;
+                session.turn_order = session.turn_order.filter(id => Number(id) !== Number(token.character_id));
+                session.turn_index = Math.max(0, session.turn_order.map(Number).indexOf(Number(activeCharacterId)));
+                await session.save();
+            }
+        }
         await broadcastSession(io, session.id);
     });
 

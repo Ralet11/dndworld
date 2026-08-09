@@ -53,8 +53,9 @@ export default function GamePlayerPanel() {
       ...current,
       tokens: (current.tokens || []).map(token => token.id === tokenId ? { ...token, conditions } : token),
     }) : current);
-    const onTurnUpdated = ({ round, turnIndex, activeCharacterId }) => setSession(current => current ? ({
+    const onTurnUpdated = ({ round, turnIndex, activeCharacterId, turnOrder }) => setSession(current => current ? ({
       ...current, round, turn_index: turnIndex, active_character_id: activeCharacterId,
+      ...(Array.isArray(turnOrder) ? { turn_order: turnOrder } : {}),
     }) : current);
     const onAnnotationAdded = ({ annotation }) => setSession(current => current && annotation ? ({
       ...current,

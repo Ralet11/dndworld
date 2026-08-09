@@ -3743,6 +3743,35 @@ a:focus-visible {
 .game-turn-card button { width: 100%; min-height: 31px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #baa170; border: 1px solid #594425; background: #15130d; font-size: 8px; font-weight: 900; text-transform: uppercase; }
 .game-turn-card button:disabled { opacity: 0.35; }
 
+.game-initiative-card { padding: 10px !important; }
+.game-initiative-card > header { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.game-initiative-card > header > div { min-width: 0; }
+.game-initiative-card > header span { display: block; color: #8a7049; font-size: 6px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.game-initiative-card > header strong { display: block; margin-top: 3px; overflow: hidden; color: #e5dbc9; font-family: var(--font-display); font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.game-initiative-card > header > small { flex: 0 0 auto; padding: 4px 6px; color: #c5a45f; border: 1px solid #57462b; background: #11140e; font-size: 6px; font-weight: 900; text-transform: uppercase; }
+.game-initiative-order { max-height: 238px; margin-top: 7px; display: grid; gap: 3px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #66512e #09100d; }
+.game-initiative-order > article { min-width: 0; min-height: 42px; display: grid; grid-template-columns: 13px minmax(0, 1fr) 22px; align-items: center; gap: 5px; padding: 3px 4px; border: 1px solid #2d3832; background: #09110e; transition: opacity 120ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease; }
+.game-initiative-order > article.is-active { border-color: #9b793c; background: linear-gradient(90deg, rgba(190, 145, 62, .17), #0b1310 58%); box-shadow: inset 3px 0 #d2aa59, 0 0 14px rgba(184, 139, 54, .09); }
+.game-initiative-order > article.is-dragging { opacity: .38; transform: scale(.985); }
+.game-initiative-grip { color: #59635c; cursor: grab; }
+.game-initiative-order > article:active .game-initiative-grip { cursor: grabbing; }
+.game-turn-card .game-initiative-person { width: auto; min-width: 0; min-height: 34px; padding: 0; display: grid; grid-template-columns: 32px minmax(0, 1fr); justify-content: stretch; gap: 7px; color: inherit; border: 0; background: transparent; text-align: left; text-transform: none; }
+.game-turn-card .game-initiative-person:hover { background: rgba(199, 163, 92, .05); }
+.game-initiative-avatar { width: 32px; height: 32px; display: grid; place-items: center; overflow: hidden; color: #c8a660; border: 1px solid #55472f; border-radius: 50%; background: radial-gradient(circle, #263329, #0b110e 72%); font-family: var(--font-display); font-size: 12px; }
+.game-initiative-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center 18%; }
+.game-initiative-person > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.game-initiative-person strong { overflow: hidden; color: #d8d0c2; font-family: var(--font-display); font-size: 9px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.game-initiative-person small { overflow: hidden; color: #68736c; font-size: 6px; font-weight: 700; letter-spacing: .02em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.game-initiative-order article.is-active .game-initiative-person strong,
+.game-initiative-order article.is-active .game-initiative-person small { color: #e7c878; }
+.game-initiative-move { display: grid; gap: 2px; }
+.game-turn-card .game-initiative-move button { width: 20px; min-height: 16px; height: 16px; padding: 0; color: #756c5b; border: 1px solid #313b35; background: #0c1411; }
+.game-turn-card .game-initiative-move button:hover:not(:disabled) { color: #e1c477; border-color: #715832; }
+.game-initiative-order > p { margin: 0; padding: 18px 8px; color: #626b64; border: 1px dashed #303a35; font-size: 7px; text-align: center; }
+.game-initiative-navigation { margin-top: 7px; display: grid; grid-template-columns: 1fr 1.35fr; gap: 5px; }
+.game-turn-card .game-initiative-navigation button { min-height: 29px; }
+.game-turn-card .game-initiative-navigation button:last-child { color: #e0c37c; border-color: #775c2e; background: linear-gradient(180deg, #211a0e, #12130d); }
+
 .game-stage {
   width: 100%;
   min-height: 420px;

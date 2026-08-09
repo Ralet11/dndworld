@@ -1,6 +1,8 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Clipboard,
   Eye,
@@ -20,6 +22,7 @@ import {
   Search,
   Settings2,
   Shield,
+  SkipBack,
   SkipForward,
   Sparkles,
   Skull,
@@ -78,6 +81,7 @@ export default function GameMasterPanel() {
   const [npcsLoading, setNpcsLoading] = useState(false);
   const [npcsError, setNpcsError] = useState('');
   const [quickNpcOpen, setQuickNpcOpen] = useState(false);
+  const [draggedTurnId, setDraggedTurnId] = useState(null);
   const [creatingNpcToken, setCreatingNpcToken] = useState(false);
   const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
   const [stageToolbarHost, setStageToolbarHost] = useState(null);
@@ -119,8 +123,9 @@ export default function GameMasterPanel() {
       ...current,
       tokens: (current.tokens || []).map(token => token.id === tokenId ? { ...token, conditions } : token),
     }) : current);
-    const onTurnUpdated = ({ round, turnIndex, activeCharacterId }) => setSession(current => current ? ({
+    const onTurnUpdated = ({ round, turnIndex, activeCharacterId, turnOrder }) => setSession(current => current ? ({
       ...current, round, turn_index: turnIndex, active_character_id: activeCharacterId,
+      ...(Array.isArray(turnOrder) ? { turn_order: turnOrder } : {}),
     }) : current);
     const onAnnotationAdded = ({ annotation }) => setSession(current => current && annotation ? ({
       ...current,
@@ -454,6 +459,24 @@ export default function GameMasterPanel() {
   const allReady = session.participants.length > 0 && session.participants.every(participant => participant.is_ready);
   const activeCharacter = players.find(character => character.id === session.active_character_id)
     || session.tokens.find(token => token.character_id === session.active_character_id)?.character;
+  const initiativeOrder = [...new Set([
+    ...(session.turn_order || []),
+    ...session.participants.map(item => item.character_id),
+    ...session.tokens.filter(item => item.visible !== false).map(item => item.character_id),
+  ].map(Number).filter(Number.isInteger))];
+  const initiativeEntries = initiativeOrder.map((characterId, index) => {
+    const normalizedId = Number(characterId);
+    const token = session.tokens.find(item => Number(item.character_id) === normalizedId);
+    const participant = session.participants.find(item => Number(item.character_id) === normalizedId);
+    const character = token?.character || participant?.character || players.find(item => Number(item.id) === normalizedId);
+    return character ? {
+      id: normalizedId,
+      index,
+      name: character.name || token?.label || 'Personaje',
+      image: token?.image_url || character.rendered_url || character.image_url || character.base_body_url,
+      initiative: Number(character.initiative_bonus) || 0,
+    } : null;
+  }).filter(Boolean);
   const connectedPlayers = session.participants.filter(item => item.connected).length;
   const visibleScenes = scenes.filter(scene => scene.imageUrl).slice(0, 8);
   const normalizedAssetSearch = deferredAssetSearch.trim().toLocaleLowerCase('es');
@@ -475,6 +498,16 @@ export default function GameMasterPanel() {
       return sceneNpcOrder.get(first.id) - sceneNpcOrder.get(second.id);
     });
   const statusLabel = session.status === 'WAITING' ? 'Sala de espera' : session.status === 'LIVE' ? 'En vivo' : session.status === 'PAUSED' ? 'Pausada' : 'Finalizada';
+
+  const reorderInitiative = (characterId, targetIndex) => {
+    const order = initiativeEntries.map(entry => entry.id);
+    const sourceIndex = order.indexOf(Number(characterId));
+    const boundedTarget = Math.max(0, Math.min(order.length - 1, targetIndex));
+    if (sourceIndex < 0 || sourceIndex === boundedTarget) return;
+    const [moved] = order.splice(sourceIndex, 1);
+    order.splice(boundedTarget, 0, moved);
+    emit('game:update-turn-order', { sessionId: session.id, turnOrder: order });
+  };
   const WorldPeriodIcon = worldState.day_period === 'Día' ? Sun : worldState.day_period === 'Tarde' ? Sunset : Moon;
 
   return (
@@ -740,10 +773,39 @@ export default function GameMasterPanel() {
                   <div><span>Tokens</span><strong>{session.tokens.length}</strong></div>
                 </div>
                 <DiceTray onRoll={rollDice} />
-                <div className="game-turn-card">
-                  <span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong>
-                  <small>{session.status === 'WAITING' ? 'La iniciativa comienza al iniciar la partida.' : `Ronda ${session.round}`}</small>
-                  <button disabled={session.status === 'WAITING' || !session.turn_order.length} onClick={() => emit('game:next-turn', { sessionId: session.id })}>Siguiente turno <SkipForward size={14} /></button>
+                <div className="game-turn-card game-initiative-card">
+                  <header><div><span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong></div><small>Ronda {session.round}</small></header>
+                  <div className="game-initiative-order" aria-label="Orden de iniciativa">
+                    {initiativeEntries.map((entry, index) => {
+                      const active = entry.id === Number(session.active_character_id);
+                      return (
+                        <article
+                          key={entry.id}
+                          className={`${active ? 'is-active' : ''}${draggedTurnId === entry.id ? ' is-dragging' : ''}`}
+                          draggable
+                          onDragStart={event => { setDraggedTurnId(entry.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(entry.id)); }}
+                          onDragEnd={() => setDraggedTurnId(null)}
+                          onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
+                          onDrop={event => { event.preventDefault(); const sourceId = Number(event.dataTransfer.getData('text/plain') || draggedTurnId); setDraggedTurnId(null); reorderInitiative(sourceId, index); }}
+                        >
+                          <GripVertical size={12} className="game-initiative-grip" />
+                          <button type="button" className="game-initiative-person" onClick={() => emit('game:set-turn', { sessionId: session.id, characterId: entry.id })} title={`Dar el turno a ${entry.name}`}>
+                            <span className="game-initiative-avatar">{entry.image ? <img src={resolveMediaUrl(entry.image)} alt="" /> : entry.name.slice(0, 1).toUpperCase()}</span>
+                            <span><strong>{entry.name}</strong><small>{active ? 'Turno actual' : `Posición ${index + 1}`} · Inic. {entry.initiative >= 0 ? '+' : ''}{entry.initiative}</small></span>
+                          </button>
+                          <div className="game-initiative-move">
+                            <button type="button" disabled={index === 0} onClick={() => reorderInitiative(entry.id, index - 1)} aria-label={`Subir a ${entry.name}`}><ChevronUp size={11} /></button>
+                            <button type="button" disabled={index === initiativeEntries.length - 1} onClick={() => reorderInitiative(entry.id, index + 1)} aria-label={`Bajar a ${entry.name}`}><ChevronDown size={11} /></button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                    {!initiativeEntries.length && <p>{session.status === 'WAITING' ? 'La iniciativa se genera al iniciar la partida.' : 'No hay personajes en la iniciativa.'}</p>}
+                  </div>
+                  <div className="game-initiative-navigation">
+                    <button disabled={session.status === 'WAITING' || !initiativeEntries.length} onClick={() => emit('game:previous-turn', { sessionId: session.id })}><SkipBack size={13} /> Anterior</button>
+                    <button disabled={session.status === 'WAITING' || !initiativeEntries.length} onClick={() => emit('game:next-turn', { sessionId: session.id })}>Siguiente <SkipForward size={13} /></button>
+                  </div>
                 </div>
                 <div className="game-token-list">
                   <div className="game-token-list-title"><span>Tokens en tablero</span><strong>{session.tokens.length}</strong></div>
