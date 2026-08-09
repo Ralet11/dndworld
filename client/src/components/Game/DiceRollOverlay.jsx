@@ -12,58 +12,120 @@ function formula(roll) {
   return `${roll.quantity}d${roll.sides}${modifier > 0 ? ` + ${modifier}` : modifier < 0 ? ` - ${Math.abs(modifier)}` : ''}`;
 }
 
-export default function DiceRollOverlay({ rolls = [], isDm = false, onDismiss }) {
+function fallbackResults(quantity, sides) {
+  const values = new Uint32Array(quantity);
+  window.crypto.getRandomValues(values);
+  return Array.from(values, value => (value % sides) + 1);
+}
+
+export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDismiss, onResolveRoll }) {
+  const boxRef = useRef(null);
+  const diceReadyRef = useRef(Promise.resolve(null));
+  const initializedRef = useRef(false);
   const seededRef = useRef(false);
   const processedRollsRef = useRef(new Set());
   const queueRef = useRef(Promise.resolve());
   const hideTimerRef = useRef(null);
   const [activeRoll, setActiveRoll] = useState(null);
+  const [fallback, setFallback] = useState(false);
 
   useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
 
   useEffect(() => {
+    if (!boxRef.current || initializedRef.current) return;
+    initializedRef.current = true;
+    diceReadyRef.current = import('@3d-dice/dice-box').then(({ default: DiceBox }) => {
+      const box = new DiceBox('#game-dice-box', {
+        assetPath: '/assets/dice-box/',
+        theme: 'default',
+        themeColor: '#c89b43',
+        scale: 6,
+        gravity: 1.8,
+        throwForce: 6,
+        spinForce: 5,
+        lightIntensity: 1.2,
+        enableShadows: true,
+      });
+      return box.init().then(() => box);
+    }).catch(error => {
+      console.error('No se pudo iniciar la animacion 3D de dados:', error);
+      setFallback(true);
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
     if (!seededRef.current) {
-      rolls.forEach(roll => processedRollsRef.current.add(String(roll.id)));
+      rolls.filter(roll => roll.resolved).forEach(roll => processedRollsRef.current.add(`${roll.id}:resolved`));
       seededRef.current = true;
-      return;
     }
 
     const unseen = [...rolls]
-      .filter(roll => roll.resolved && Array.isArray(roll.results) && roll.results.length)
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-      .filter(roll => !processedRollsRef.current.has(String(roll.id)));
+      .filter(roll => !processedRollsRef.current.has(`${roll.id}:${roll.resolved ? 'resolved' : 'pending'}`));
 
     unseen.forEach(roll => {
-      processedRollsRef.current.add(String(roll.id));
+      const phaseKey = `${roll.id}:${roll.resolved ? 'resolved' : 'pending'}`;
+      processedRollsRef.current.add(phaseKey);
+
+      if (roll.resolved || String(roll.user_id) !== String(userId)) return;
+
       queueRef.current = queueRef.current.then(async () => {
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const diceBox = reducedMotion ? null : await Promise.race([
+          diceReadyRef.current,
+          new Promise(resolve => window.setTimeout(() => resolve(null), 8000)),
+        ]);
+
         setActiveRoll(roll);
-        await new Promise(resolve => {
-          hideTimerRef.current = window.setTimeout(resolve, 2800 + Math.min(1200, roll.results.length * 70));
+        window.clearTimeout(hideTimerRef.current);
+        let physicalResults = null;
+
+        if (diceBox) {
+          diceBox.show();
+          try {
+            const rolledDice = await Promise.race([
+              diceBox.roll(`${roll.quantity}d${roll.sides}`, { themeColor: roll.theme_color || '#c89b43' }),
+              new Promise(resolve => window.setTimeout(() => resolve(null), 7000)),
+            ]);
+            if (Array.isArray(rolledDice) && rolledDice.length === roll.quantity) {
+              physicalResults = rolledDice.map(die => Number(die.value));
+            }
+          } catch (error) {
+            console.error('La animacion de dados fallo:', error);
+            setFallback(true);
+          }
+        } else {
+          await new Promise(resolve => window.setTimeout(resolve, 900));
+        }
+
+        if (!physicalResults?.every(value => Number.isInteger(value) && value >= 1 && value <= roll.sides)) {
+          physicalResults = fallbackResults(roll.quantity, roll.sides);
+        }
+
+        setActiveRoll({
+          ...roll,
+          resolved: true,
+          results: physicalResults,
+          total: physicalResults.reduce((sum, value) => sum + value, 0) + (Number(roll.modifier) || 0),
         });
+        onResolveRoll?.(roll.id, physicalResults);
+        await new Promise(resolve => {
+          hideTimerRef.current = window.setTimeout(resolve, 2100);
+        });
+        diceBox?.clear();
+        diceBox?.hide();
         setActiveRoll(null);
       });
     });
-  }, [rolls]);
+  }, [onResolveRoll, rolls, userId]);
 
   const orderedRolls = rolls.filter(roll => roll.resolved).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   return (
     <>
-      <div className={`game-dice-animation game-dice-synced${activeRoll ? ' is-active' : ''}`} aria-hidden={!activeRoll}>
-        {activeRoll && (
-          <div className="game-dice-synced-roll" aria-live="assertive">
-            <span>{activeRoll.character_name || activeRoll.roller_name}</span>
-            <small>{formula(activeRoll)}</small>
-            <div className="game-dice-synced-set">
-              {activeRoll.results.map((result, index) => (
-                <b key={`${activeRoll.id}-${index}`} className={`is-d${activeRoll.sides}`} style={{ '--die-index': index }}>
-                  <i>{result}</i>
-                </b>
-              ))}
-            </div>
-            <strong>Total {activeRoll.total}</strong>
-          </div>
-        )}
+      <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
+        <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
       </div>
       {!!orderedRolls.length && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">

@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { randomInt, randomUUID } = require('crypto');
+const { randomUUID } = require('crypto');
 const {
     AbilityScore,
     AudioTrack,
@@ -986,7 +986,6 @@ function registerGameSessionSocket(io, socket) {
             }
 
             const character = participant?.character || null;
-            const results = Array.from({ length: parsedQuantity }, () => randomInt(1, parsedSides + 1));
             const roll = await GameRoll.create({
                 session_id: session.id,
                 user_id: socket.user.id,
@@ -999,9 +998,9 @@ function registerGameSessionSocket(io, socket) {
                 quantity: parsedQuantity,
                 modifier: parsedModifier,
                 theme_color: themeColor,
-                results,
-                total: results.reduce((sum, value) => sum + value, 0) + parsedModifier,
-                resolved: true,
+                results: [],
+                total: parsedModifier,
+                resolved: false,
             });
 
             const staleRolls = await GameRoll.findAll({
