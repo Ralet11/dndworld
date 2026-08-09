@@ -70,8 +70,8 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
       const phaseKey = `${roll.id}:${roll.resolved ? 'resolved' : 'pending'}`;
       processedRollsRef.current.add(phaseKey);
 
-      if (!roll.resolved && roll.user_id !== userId) return;
       if (roll.resolved) return;
+      const ownsRoll = String(roll.user_id) === String(userId);
 
       queueRef.current = queueRef.current.then(async () => {
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -110,7 +110,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
           total: physicalResults.reduce((sum, value) => sum + value, 0) + (Number(roll.modifier) || 0),
         };
         setActiveRoll(resolvedRoll);
-        onResolveRoll?.(roll.id, physicalResults);
+        if (ownsRoll) onResolveRoll?.(roll.id, physicalResults);
         await new Promise(resolve => {
           hideTimerRef.current = window.setTimeout(resolve, 2100);
         });
