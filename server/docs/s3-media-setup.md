@@ -25,12 +25,12 @@ En producción:
 AWS_REGION=us-east-2
 S3_BUCKET=prismadevs-dndworld-media-us-east-2
 S3_PREFIX=production
-S3_PUBLIC_BASE_URL=https://prismadevs-dndworld-media-us-east-2.s3.us-east-2.amazonaws.com
+S3_PUBLIC_BASE_URL=https://dndworld.prismadevs.com/api/media
 ```
 
 El EC2 debe usar un IAM Instance Profile; no deben copiarse access keys al servidor. El role necesita `s3:PutObject`, `s3:GetObject` y `s3:DeleteObject` sobre `arn:aws:s3:::prismadevs-dndworld-media-us-east-2/production/*`.
 
-Los objetos deben poder leerse mediante la URL configurada. Esto puede hacerse con CloudFront (recomendado) o con una policy de lectura pública restringida a `GetObject`. Si se usa CloudFront, `S3_PUBLIC_BASE_URL` debe ser el dominio de la distribución.
+El bucket permanece privado. DnD World entrega los objetos mediante `/api/media/*`, usando el IAM Role del EC2 y soportando solicitudes HTTP Range para audio. No es necesario desactivar Block Public Access ni agregar una bucket policy pública. CloudFront puede incorporarse más adelante cambiando únicamente `S3_PUBLIC_BASE_URL`.
 
 Para desarrollo local puede usarse un perfil de AWS o credenciales de un usuario limitado al prefijo `development/*`.
 

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
-const { DeleteObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
+const { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 
 let client;
 
@@ -87,4 +87,14 @@ async function deleteObject(key) {
     await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
-module.exports = { deleteObject, getConfig, publicUrlFor, uploadBuffer, uploadDataUri, uploadFile };
+async function getObject(key, range) {
+    const { bucket } = getConfig();
+    return getClient().send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: range || undefined }));
+}
+
+async function headObject(key) {
+    const { bucket } = getConfig();
+    return getClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+module.exports = { deleteObject, getConfig, getObject, headObject, publicUrlFor, uploadBuffer, uploadDataUri, uploadFile };

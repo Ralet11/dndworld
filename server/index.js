@@ -38,7 +38,7 @@ app.use(express.json());
 
 const multer = require('multer');
 const path = require('path');
-const { deleteObject, uploadBuffer } = require('./utils/s3Storage');
+const { deleteObject, getObject, headObject, uploadBuffer } = require('./utils/s3Storage');
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 20 * 1024 * 1024 },
@@ -128,6 +128,37 @@ app.post('/api/upload', verifyToken, (req, res) => {
             res.status(uploadError.code === 'S3_NOT_CONFIGURED' ? 503 : 500).json({ message: uploadError.message || 'Fallo al guardar la imagen.' });
         });
     });
+});
+
+// Public delivery endpoint backed by the private S3 bucket. Keys are generated
+// with UUIDs and cannot be listed. Range support keeps audio seeking efficient.
+app.all(/^\/api\/media\/(.+)$/, async (req, res) => {
+    if (!['GET', 'HEAD'].includes(req.method)) return res.sendStatus(405);
+    try {
+        const key = decodeURIComponent(req.params[0]);
+        if (!key || key.includes('..') || !key.startsWith(`${process.env.S3_PREFIX || 'production'}/`)) return res.sendStatus(404);
+        if (req.method === 'HEAD') {
+            const metadata = await headObject(key);
+            if (metadata.ContentType) res.type(metadata.ContentType);
+            if (metadata.ContentLength != null) res.set('Content-Length', String(metadata.ContentLength));
+            res.set('Accept-Ranges', 'bytes');
+            res.set('Cache-Control', metadata.CacheControl || 'public, max-age=31536000, immutable');
+            return res.sendStatus(200);
+        }
+        const object = await getObject(key, req.headers.range);
+        if (object.ContentType) res.type(object.ContentType);
+        if (object.ContentLength != null) res.set('Content-Length', String(object.ContentLength));
+        if (object.ContentRange) res.set('Content-Range', object.ContentRange);
+        res.set('Accept-Ranges', object.AcceptRanges || 'bytes');
+        res.set('Cache-Control', object.CacheControl || 'public, max-age=31536000, immutable');
+        res.status(object.ContentRange ? 206 : 200);
+        object.Body.on('error', streamError => res.destroy(streamError));
+        object.Body.pipe(res);
+    } catch (error) {
+        if (error?.$metadata?.httpStatusCode === 404 || error?.name === 'NoSuchKey') return res.sendStatus(404);
+        console.error('S3 media delivery error:', error);
+        if (!res.headersSent) res.status(500).json({ message: 'No se pudo entregar el archivo.' });
+    }
 });
 
 app.get('/api/audio/tracks', verifyToken, async (_req, res) => {
