@@ -31,6 +31,19 @@ function clamp(value) {
     return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
+function compactPathPoints(points, maxPoints = 160) {
+    const normalized = (Array.isArray(points) ? points : [])
+        .slice(0, 600)
+        .map(point => ({ x: clamp(point.x), y: clamp(point.y) }));
+    if (normalized.length <= maxPoints) return normalized;
+    const compacted = [];
+    const lastIndex = normalized.length - 1;
+    for (let index = 0; index < maxPoints; index += 1) {
+        compacted.push(normalized[Math.round((index * lastIndex) / (maxPoints - 1))]);
+    }
+    return compacted;
+}
+
 function annotationViewKey(session) {
     return `${session.shared_type}:${session.shared_url || ''}`;
 }
@@ -78,6 +91,8 @@ async function loadSession(sessionId) {
             {
                 model: GameParticipant,
                 as: 'participants',
+                separate: true,
+                order: [['createdAt', 'ASC']],
                 include: [
                     { model: User, as: 'user', attributes: ['id', 'username'] },
                     {
@@ -90,6 +105,8 @@ async function loadSession(sessionId) {
             {
                 model: GameToken,
                 as: 'tokens',
+                separate: true,
+                order: [['createdAt', 'ASC']],
                 include: [{
                     model: Character,
                     as: 'character',
@@ -103,15 +120,17 @@ async function loadSession(sessionId) {
                         'custom_features', 'spell_slots', 'spells_known', 'spells_prepared', 'notes',
                     ],
                     include: [
-                        { model: AbilityScore, as: 'abilityScores' },
-                        { model: Skill, as: 'skills' },
-                        { model: NpcAction, as: 'npcActions' },
+                        { model: AbilityScore, as: 'abilityScores', separate: true },
+                        { model: Skill, as: 'skills', separate: true },
+                        { model: NpcAction, as: 'npcActions', separate: true },
                     ],
                 }],
             },
             {
                 model: GameAsset,
                 as: 'assets',
+                separate: true,
+                order: [['sort_order', 'ASC']],
             },
             {
                 model: AudioTrack,
@@ -126,10 +145,6 @@ async function loadSession(sessionId) {
                 limit: 12,
                 order: [['createdAt', 'DESC']],
             },
-        ],
-        order: [
-            [{ model: GameParticipant, as: 'participants' }, 'createdAt', 'ASC'],
-            [{ model: GameAsset, as: 'assets' }, 'sort_order', 'ASC'],
         ],
     });
     if (!session) return null;
@@ -501,9 +516,9 @@ function registerGameSessionSocket(io, socket) {
             color: validAnnotationColor(annotation.color),
         };
         if (type === 'path') {
-            const points = Array.isArray(annotation.points) ? annotation.points.slice(0, 600) : [];
+            const points = compactPathPoints(annotation.points);
             if (points.length < 2) return;
-            item.points = points.map(point => ({ x: clamp(point.x), y: clamp(point.y) }));
+            item.points = points;
             item.width = Math.max(1, Math.min(18, Number(annotation.width) || 3));
         } else {
             const text = String(annotation.text || '').trim().slice(0, 500);
@@ -518,7 +533,7 @@ function registerGameSessionSocket(io, socket) {
         const annotations = Array.isArray(session.stage_annotations) ? [...session.stage_annotations] : [];
         session.stage_annotations = [...annotations.slice(-299), item];
         await session.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:annotation-added', { annotation: item });
     });
 
     socket.on('game:update-annotation', async ({ sessionId, annotationId, x, y, text, color, size, background } = {}) => {
@@ -542,16 +557,17 @@ function registerGameSessionSocket(io, socket) {
         annotations[index] = next;
         session.stage_annotations = annotations;
         await session.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:annotation-updated', { annotation: next });
     });
 
     socket.on('game:delete-annotation', async ({ sessionId, annotationId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !annotationId) return;
         const annotations = Array.isArray(session.stage_annotations) ? session.stage_annotations : [];
-        session.stage_annotations = annotations.filter(item => item.id !== annotationId || item.view_key !== annotationViewKey(session));
+        const viewKey = annotationViewKey(session);
+        session.stage_annotations = annotations.filter(item => item.id !== annotationId || item.view_key !== viewKey);
         await session.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:annotation-deleted', { annotationId, viewKey });
     });
 
     socket.on('game:clear-annotations', async ({ sessionId } = {}) => {
@@ -561,7 +577,7 @@ function registerGameSessionSocket(io, socket) {
         const annotations = Array.isArray(session.stage_annotations) ? session.stage_annotations : [];
         session.stage_annotations = annotations.filter(item => item.view_key !== viewKey);
         await session.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:annotations-cleared', { viewKey });
     });
 
     socket.on('game:toggle-scene-npc', async ({ sessionId, characterId } = {}) => {
@@ -651,7 +667,11 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index = nextIndex;
         }
         await session.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:turn-updated', {
+            round: session.round,
+            turnIndex: session.turn_index,
+            activeCharacterId: session.turn_order[session.turn_index] || null,
+        });
     });
 
     socket.on('game:create-token', async ({ sessionId, characterId, x = 50, y = 50 } = {}) => {
@@ -752,7 +772,9 @@ function registerGameSessionSocket(io, socket) {
             token.y = clamp(position.y);
             return token.save();
         }));
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:tokens-moved', {
+            moves: tokens.map(token => ({ tokenId: token.id, x: token.x, y: token.y })),
+        });
     });
 
     socket.on('game:adjust-token-hp', async ({ sessionId, tokenId, delta } = {}) => {
@@ -763,7 +785,13 @@ function registerGameSessionSocket(io, socket) {
         if (!token || !character) return;
         character.hp_current = Math.max(0, Math.min(character.hp_max || 1, (character.hp_current || 0) + Number(delta || 0)));
         await character.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:token-hp-updated', {
+            tokenId: token.id,
+            characterId: character.id,
+            hpCurrent: character.hp_current,
+            hpMax: character.hp_max,
+            hpTemp: character.hp_temp,
+        });
     });
 
     socket.on('game:set-token-hp', async ({ sessionId, tokenId, hp } = {}) => {
@@ -776,7 +804,13 @@ function registerGameSessionSocket(io, socket) {
         if (!Number.isFinite(requestedHp)) return;
         character.hp_current = Math.max(0, Math.min(character.hp_max || 1, requestedHp));
         await character.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:token-hp-updated', {
+            tokenId: token.id,
+            characterId: character.id,
+            hpCurrent: character.hp_current,
+            hpMax: character.hp_max,
+            hpTemp: character.hp_temp,
+        });
     });
 
     socket.on('game:toggle-token-condition', async ({ sessionId, tokenId, condition } = {}) => {
@@ -790,7 +824,10 @@ function registerGameSessionSocket(io, socket) {
             ? conditions.filter(item => item !== normalized)
             : [...conditions, normalized];
         await token.save();
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:token-condition-updated', {
+            tokenId: token.id,
+            conditions: token.conditions,
+        });
     });
 
     socket.on('game:duplicate-token', async ({ sessionId, tokenId } = {}) => {
@@ -884,10 +921,12 @@ function registerGameSessionSocket(io, socket) {
                 offset: 12,
             });
             if (staleRolls.length) {
-                await GameRoll.update({ dismissed: true }, { where: { id: staleRolls.map(item => item.id) } });
+                const staleIds = staleRolls.map(item => item.id);
+                await GameRoll.update({ dismissed: true }, { where: { id: staleIds } });
+                io.to(roomName(session.id)).emit('game:roll-dismissed', { rollIds: staleIds });
             }
 
-            await broadcastSession(io, session.id);
+            io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
             reply({ ok: true, roll: roll.toJSON() });
         } catch (error) {
             console.error('game:roll-dice error:', error);
@@ -911,7 +950,7 @@ function registerGameSessionSocket(io, socket) {
             roll.total = values.reduce((sum, value) => sum + value, 0) + roll.modifier;
             roll.resolved = true;
             await roll.save();
-            await broadcastSession(io, roll.session_id);
+            io.to(roomName(roll.session_id)).emit('game:roll-upsert', roll.toJSON());
             reply({ ok: true, roll: roll.toJSON() });
         } catch (error) {
             console.error('game:resolve-roll error:', error);
@@ -923,7 +962,7 @@ function registerGameSessionSocket(io, socket) {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
         await GameRoll.update({ dismissed: true }, { where: { id: rollId, session_id: session.id } });
-        await broadcastSession(io, session.id);
+        io.to(roomName(session.id)).emit('game:roll-dismissed', { rollIds: [rollId] });
     });
 
     socket.on('disconnect', () => {
@@ -934,4 +973,4 @@ function registerGameSessionSocket(io, socket) {
     });
 }
 
-module.exports = { registerGameSessionSocket };
+module.exports = { loadSession, registerGameSessionSocket };

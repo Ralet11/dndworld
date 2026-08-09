@@ -37,12 +37,65 @@ export default function GamePlayerPanel() {
       ...current,
       tokens: current.tokens.map(token => token.id === tokenId ? { ...token, x, y } : token),
     }) : current);
+    const onTokensMoved = ({ moves = [] } = {}) => setSession(current => {
+      if (!current) return current;
+      const positions = new Map(moves.map(move => [move.tokenId, move]));
+      return { ...current, tokens: (current.tokens || []).map(token => positions.has(token.id) ? { ...token, ...positions.get(token.id) } : token) };
+    });
+    const onTokenHpUpdated = ({ tokenId, hpCurrent, hpMax, hpTemp }) => setSession(current => current ? ({
+      ...current,
+      tokens: (current.tokens || []).map(token => token.id === tokenId ? ({
+        ...token,
+        character: token.character ? { ...token.character, hp_current: hpCurrent, hp_max: hpMax, hp_temp: hpTemp } : token.character,
+      }) : token),
+    }) : current);
+    const onTokenConditionUpdated = ({ tokenId, conditions = [] }) => setSession(current => current ? ({
+      ...current,
+      tokens: (current.tokens || []).map(token => token.id === tokenId ? { ...token, conditions } : token),
+    }) : current);
+    const onTurnUpdated = ({ round, turnIndex, activeCharacterId }) => setSession(current => current ? ({
+      ...current, round, turn_index: turnIndex, active_character_id: activeCharacterId,
+    }) : current);
+    const onAnnotationAdded = ({ annotation }) => setSession(current => current && annotation ? ({
+      ...current,
+      stage_annotations: [...(current.stage_annotations || []).filter(item => item.id !== annotation.id), annotation],
+    }) : current);
+    const onAnnotationUpdated = ({ annotation }) => setSession(current => current && annotation ? ({
+      ...current,
+      stage_annotations: (current.stage_annotations || []).map(item => item.id === annotation.id ? annotation : item),
+    }) : current);
+    const onAnnotationDeleted = ({ annotationId, viewKey }) => setSession(current => current ? ({
+      ...current,
+      stage_annotations: (current.stage_annotations || []).filter(item => item.id !== annotationId || item.view_key !== viewKey),
+    }) : current);
+    const onAnnotationsCleared = ({ viewKey }) => setSession(current => current ? ({
+      ...current,
+      stage_annotations: (current.stage_annotations || []).filter(item => item.view_key !== viewKey),
+    }) : current);
+    const onRollUpsert = roll => setSession(current => current ? ({
+      ...current,
+      rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)].slice(0, 12),
+    }) : current);
+    const onRollDismissed = ({ rollIds = [] } = {}) => setSession(current => current ? ({
+      ...current,
+      rolls: (current.rolls || []).filter(roll => !rollIds.includes(roll.id)),
+    }) : current);
 
     socket.on('game:state', onState);
     socket.on('game:error', onError);
     socket.on('players-data', onPlayers);
     socket.on('stats-updated', onPlayers);
     socket.on('game:token-moved', onTokenMoved);
+    socket.on('game:tokens-moved', onTokensMoved);
+    socket.on('game:token-hp-updated', onTokenHpUpdated);
+    socket.on('game:token-condition-updated', onTokenConditionUpdated);
+    socket.on('game:turn-updated', onTurnUpdated);
+    socket.on('game:annotation-added', onAnnotationAdded);
+    socket.on('game:annotation-updated', onAnnotationUpdated);
+    socket.on('game:annotation-deleted', onAnnotationDeleted);
+    socket.on('game:annotations-cleared', onAnnotationsCleared);
+    socket.on('game:roll-upsert', onRollUpsert);
+    socket.on('game:roll-dismissed', onRollDismissed);
     socket.emit('game:get-current');
     socket.emit('get-players');
     return () => {
@@ -51,6 +104,16 @@ export default function GamePlayerPanel() {
       socket.off('players-data', onPlayers);
       socket.off('stats-updated', onPlayers);
       socket.off('game:token-moved', onTokenMoved);
+      socket.off('game:tokens-moved', onTokensMoved);
+      socket.off('game:token-hp-updated', onTokenHpUpdated);
+      socket.off('game:token-condition-updated', onTokenConditionUpdated);
+      socket.off('game:turn-updated', onTurnUpdated);
+      socket.off('game:annotation-added', onAnnotationAdded);
+      socket.off('game:annotation-updated', onAnnotationUpdated);
+      socket.off('game:annotation-deleted', onAnnotationDeleted);
+      socket.off('game:annotations-cleared', onAnnotationsCleared);
+      socket.off('game:roll-upsert', onRollUpsert);
+      socket.off('game:roll-dismissed', onRollDismissed);
     };
   }, [socket, user.id]);
 

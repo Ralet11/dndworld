@@ -182,7 +182,9 @@ async function upsertCharacter(definition, transaction) {
     const fields = {
         ...definition.fields,
         is_npc: true,
-        is_active: true,
+        // Encounter NPCs stay available to the DM without being included in
+        // every global party payload sent to connected players.
+        is_active: false,
         image_url: preserved.image_url || null,
         base_body_url: preserved.base_body_url || null,
         rendered_url: preserved.rendered_url || null,

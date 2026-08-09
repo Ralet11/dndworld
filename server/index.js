@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const { pipeline } = require('stream');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -39,6 +40,8 @@ app.use(express.json());
 const multer = require('multer');
 const path = require('path');
 const { deleteObject, getObject, headObject, uploadBuffer } = require('./utils/s3Storage');
+const MAX_CONCURRENT_MEDIA_STREAMS = 8;
+let activeMediaStreams = 0;
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 20 * 1024 * 1024 },
@@ -134,6 +137,7 @@ app.post('/api/upload', verifyToken, (req, res) => {
 // with UUIDs and cannot be listed. Range support keeps audio seeking efficient.
 app.all(/^\/api\/media\/(.+)$/, async (req, res) => {
     if (!['GET', 'HEAD'].includes(req.method)) return res.sendStatus(405);
+    let streamSlotAcquired = false;
     try {
         const key = decodeURIComponent(req.params[0]);
         if (!key || key.includes('..') || !key.startsWith(`${process.env.S3_PREFIX || 'production'}/`)) return res.sendStatus(404);
@@ -145,6 +149,12 @@ app.all(/^\/api\/media\/(.+)$/, async (req, res) => {
             res.set('Cache-Control', metadata.CacheControl || 'public, max-age=31536000, immutable');
             return res.status(200).end();
         }
+        if (activeMediaStreams >= MAX_CONCURRENT_MEDIA_STREAMS) {
+            res.set('Retry-After', '2');
+            return res.status(503).end();
+        }
+        activeMediaStreams += 1;
+        streamSlotAcquired = true;
         const object = await getObject(key, req.headers.range);
         if (object.ContentType) res.type(object.ContentType);
         if (object.ContentLength != null) res.set('Content-Length', String(object.ContentLength));
@@ -152,9 +162,13 @@ app.all(/^\/api\/media\/(.+)$/, async (req, res) => {
         res.set('Accept-Ranges', object.AcceptRanges || 'bytes');
         res.set('Cache-Control', object.CacheControl || 'public, max-age=31536000, immutable');
         res.status(object.ContentRange ? 206 : 200);
-        object.Body.on('error', streamError => res.destroy(streamError));
-        object.Body.pipe(res);
+        pipeline(object.Body, res, streamError => {
+            activeMediaStreams = Math.max(0, activeMediaStreams - 1);
+            streamSlotAcquired = false;
+            if (streamError && !res.destroyed) res.destroy(streamError);
+        });
     } catch (error) {
+        if (streamSlotAcquired) activeMediaStreams = Math.max(0, activeMediaStreams - 1);
         if (error?.$metadata?.httpStatusCode === 404 || error?.name === 'NoSuchKey') return res.sendStatus(404);
         console.error('S3 media delivery error:', error);
         if (!res.headersSent) res.status(500).json({ message: 'No se pudo entregar el archivo.' });
@@ -363,7 +377,7 @@ app.post('/api/characters/:id/render', verifyToken, async (req, res) => {
 });
 
 // Helper to get full calculated stats for all characters (Players only by default)
-const getCalculatedPartyStats = async () => {
+const buildCalculatedPartyStats = async () => {
     const characters = await Character.findAll({
         where: {
             [Op.or]: [
@@ -372,9 +386,12 @@ const getCalculatedPartyStats = async () => {
             ]
         },
         include: [
-            { model: AbilityScore, as: 'abilityScores' },
-            { model: Skill, as: 'skills' },
-            { model: Quest, as: 'quests' },
+            // Fetch has-many collections independently. Joining abilities,
+            // skills and quests in one query multiplies rows per character and
+            // can exhaust the Node heap as the roster grows.
+            { model: AbilityScore, as: 'abilityScores', separate: true },
+            { model: Skill, as: 'skills', separate: true },
+            { model: Quest, as: 'quests', separate: true },
             { model: Item, as: 'items' },
             { model: Class, as: 'classData' }, // Include Class Data
             { model: Race, as: 'raceData' },   // Include Race Data
@@ -484,6 +501,23 @@ const getCalculatedPartyStats = async () => {
             UserId: char.UserId, // Critical for frontend identity
         };
     });
+};
+
+let partyStatsSnapshot = null;
+let partyStatsSnapshotAt = 0;
+let partyStatsInFlight = null;
+const getCalculatedPartyStats = async () => {
+    const now = Date.now();
+    if (partyStatsSnapshot && now - partyStatsSnapshotAt < 1500) return partyStatsSnapshot;
+    if (partyStatsInFlight) return partyStatsInFlight;
+    partyStatsInFlight = buildCalculatedPartyStats();
+    try {
+        partyStatsSnapshot = await partyStatsInFlight;
+        partyStatsSnapshotAt = Date.now();
+        return partyStatsSnapshot;
+    } finally {
+        partyStatsInFlight = null;
+    }
 };
 
 const DM_ROLES = new Set(['DM', 'ADMIN']);
@@ -636,14 +670,14 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
     return { character: updatedStats.find(item => item.id === Number(characterId)), changes };
 }
 
-const getNpcsForClient = async () => {
+const buildNpcsForClient = async () => {
     const npcs = await Character.findAll({
         where: { is_npc: true },
         include: [
-            { model: AbilityScore, as: 'abilityScores' },
-            { model: Skill, as: 'skills' },
+            { model: AbilityScore, as: 'abilityScores', separate: true },
+            { model: Skill, as: 'skills', separate: true },
             { model: Item, as: 'items' },
-            { model: NpcAction, as: 'npcActions' },
+            { model: NpcAction, as: 'npcActions', separate: true },
         ],
     });
 
@@ -651,6 +685,23 @@ const getNpcsForClient = async () => {
         const payload = npc.toJSON();
         return { ...payload, image_url: resolveCharacterImage(payload) };
     });
+};
+
+let npcSnapshot = null;
+let npcSnapshotAt = 0;
+let npcsInFlight = null;
+const getNpcsForClient = async () => {
+    const now = Date.now();
+    if (npcSnapshot && now - npcSnapshotAt < 1500) return npcSnapshot;
+    if (npcsInFlight) return npcsInFlight;
+    npcsInFlight = buildNpcsForClient();
+    try {
+        npcSnapshot = await npcsInFlight;
+        npcSnapshotAt = Date.now();
+        return npcSnapshot;
+    } finally {
+        npcsInFlight = null;
+    }
 };
 
 io.on('connection', async (socket) => {
@@ -1017,13 +1068,11 @@ io.on('connection', async (socket) => {
     // --- END TIMELINE ---
 
     try {
-        const partyStats = await getCalculatedPartyStats();
         const sharedMedia = await Media.findAll({ limit: 20, order: [['timestamp', 'DESC']] });
         const mapState = await MapState.findByPk(1);
 
         socket.emit('init', {
             sharedMedia,
-            partyStats,
             partyPosition: { x: mapState?.party_x || 50, y: mapState?.party_y || 50 }
         });
     } catch (err) {
