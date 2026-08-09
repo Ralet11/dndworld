@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, Equal, Eraser, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Trash2, Type, X } from 'lucide-react';
+import { Check, Circle, Copy, Equal, Eraser, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Square, Trash2, Type, X } from 'lucide-react';
 import API_URL from '../../config';
 import DiceRollOverlay from './DiceRollOverlay';
 
@@ -15,6 +15,31 @@ function resolveUrl(value) {
 
 function clamp(value) {
   return Math.max(0, Math.min(100, value));
+}
+
+const PATH_TOOLS = new Set(['pen', 'line', 'circle', 'rectangle']);
+
+function shapePathPoints(tool, start, end) {
+  if (tool === 'line') return [start, end];
+  if (tool === 'rectangle') return [
+    start,
+    { x: end.x, y: start.y },
+    end,
+    { x: start.x, y: end.y },
+    start,
+  ];
+  if (tool === 'circle') {
+    const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    const radius = { x: Math.abs(end.x - start.x) / 2, y: Math.abs(end.y - start.y) / 2 };
+    return Array.from({ length: 49 }, (_, index) => {
+      const angle = (index / 48) * Math.PI * 2;
+      return {
+        x: clamp(center.x + Math.cos(angle) * radius.x),
+        y: clamp(center.y + Math.sin(angle) * radius.y),
+      };
+    });
+  }
+  return [start, end];
 }
 
 function signed(value) {
@@ -234,6 +259,17 @@ export default function GameStage({
         return;
       }
 
+      if (interaction.type === 'annotation-shape') {
+        const end = {
+          x: clamp(((event.clientX - rect.left) / rect.width) * 100),
+          y: clamp(((event.clientY - rect.top) / rect.height) * 100),
+        };
+        interaction.end = end;
+        interaction.points = shapePathPoints(interaction.tool, interaction.start, end);
+        setDraftPath({ ...interaction, points: interaction.points });
+        return;
+      }
+
       if (interaction.type === 'annotation-drag') {
         const x = clamp(interaction.x + ((event.clientX - interaction.startClientX) / rect.width) * 100);
         const y = clamp(interaction.y + ((event.clientY - interaction.startClientY) / rect.height) * 100);
@@ -278,6 +314,19 @@ export default function GameStage({
         if (interaction.points.length > 1) runtime.onAddAnnotation?.({
           type: 'path',
           points: interaction.points,
+          color: interaction.color,
+          width: interaction.width,
+        });
+        setDraftPath(null);
+        interactionRef.current = null;
+        return;
+      }
+
+      if (interaction.type === 'annotation-shape') {
+        const points = interaction.points || [];
+        if (interaction.end && Math.hypot(interaction.end.x - interaction.start.x, interaction.end.y - interaction.start.y) > 0.15) runtime.onAddAnnotation?.({
+          type: 'path',
+          points,
           color: interaction.color,
           width: interaction.width,
         });
@@ -444,6 +493,23 @@ export default function GameStage({
           const start = positionFromEvent(event);
           if (!start) return;
           const interaction = { type: 'annotation-path', points: [start], color: annotationColor, width: annotationWidth };
+          interactionRef.current = interaction;
+          setDraftPath(interaction);
+          return;
+        }
+        if (['line', 'circle', 'rectangle'].includes(annotationTool) && session?.shared_type === 'MAP') {
+          event.preventDefault();
+          setContextMenu(null);
+          const start = positionFromEvent(event);
+          if (!start) return;
+          const interaction = {
+            type: 'annotation-shape',
+            tool: annotationTool,
+            start,
+            points: [start],
+            color: annotationColor,
+            width: annotationWidth,
+          };
           interactionRef.current = interaction;
           setDraftPath(interaction);
           return;
@@ -753,16 +819,19 @@ export default function GameStage({
                 <div className="game-annotation-tool-buttons">
                   <button className={annotationTool === 'cursor' ? 'is-active' : ''} onClick={() => setAnnotationTool('cursor')} title="Seleccionar y mover"><MousePointer2 size={13} /><span>Cursor</span></button>
                   {session.shared_type === 'MAP' && <button className={annotationTool === 'pen' ? 'is-active' : ''} onClick={() => setAnnotationTool('pen')} title="Dibujar"><Pencil size={13} /><span>Pincel</span></button>}
+                  {session.shared_type === 'MAP' && <button className={annotationTool === 'line' ? 'is-active' : ''} onClick={() => setAnnotationTool('line')} title="Dibujar línea recta"><Minus size={13} /><span>Línea</span></button>}
+                  {session.shared_type === 'MAP' && <button className={annotationTool === 'circle' ? 'is-active' : ''} onClick={() => setAnnotationTool('circle')} title="Dibujar círculo"><Circle size={13} /><span>Círculo</span></button>}
+                  {session.shared_type === 'MAP' && <button className={annotationTool === 'rectangle' ? 'is-active' : ''} onClick={() => setAnnotationTool('rectangle')} title="Dibujar rectángulo"><Square size={13} /><span>Rectángulo</span></button>}
                   <button className={annotationTool === 'text' ? 'is-active' : ''} onClick={() => setAnnotationTool('text')} title="Agregar texto"><Type size={13} /><span>Texto</span></button>
                   <button className={annotationTool === 'eraser' ? 'is-active' : ''} onClick={() => setAnnotationTool('eraser')} title="Borrar anotación"><Eraser size={13} /><span>Borrar</span></button>
                 </div>
-                {annotationTool === 'pen' && (
+                {PATH_TOOLS.has(annotationTool) && (
                   <label className="game-annotation-color">
                     <span>Color</span>
                     <div><input type="color" value={annotationColor} onChange={event => setAnnotationColor(event.target.value)} /><output>{annotationColor}</output></div>
                   </label>
                 )}
-                {annotationTool === 'pen' && session.shared_type === 'MAP' && (
+                {PATH_TOOLS.has(annotationTool) && session.shared_type === 'MAP' && (
                   <label className="game-annotation-range">
                     <span>Grosor <output>{annotationWidth}px</output></span>
                     <input type="range" min="1" max="18" step="1" value={annotationWidth} onChange={event => setAnnotationWidth(Number(event.target.value))} />
