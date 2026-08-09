@@ -22,7 +22,15 @@ export default function GamePlayerPanel() {
   useEffect(() => {
     if (!socket) return undefined;
     const onState = next => {
-      setSession(next);
+      setSession(current => {
+        if (!next || !current) return next;
+        const dismissingIds = new Set((current.rolls || []).filter(roll => roll.dismissing).map(roll => String(roll.id)));
+        if (!dismissingIds.size) return next;
+        return {
+          ...next,
+          rolls: (next.rolls || []).map(roll => dismissingIds.has(String(roll.id)) ? { ...roll, dismissing: true } : roll),
+        };
+      });
       setLoading(false);
     };
     const onError = payload => {
