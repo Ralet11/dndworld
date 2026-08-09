@@ -465,7 +465,7 @@ export default function GameStage({
   };
 
   const menuToken = tokens.find(token => token.id === contextMenu?.tokenId);
-  const menuImage = menuToken && (menuToken.image_url || menuToken.character?.rendered_url || menuToken.character?.image_url);
+  const menuImage = menuToken && (menuToken.image_url || menuToken.character?.rendered_url || menuToken.character?.image_url || menuToken.character?.base_body_url);
   const menuCharacter = menuToken?.character;
   const canSeeFullSheet = Boolean(menuToken && (isDm || menuToken.owner_user_id === userId));
   const menuActions = menuCharacter?.npcActions || [];
@@ -850,7 +850,7 @@ export default function GameStage({
       {!!renderedSceneNpcs.length && (
         <div className="game-scene-cast" aria-live="polite" aria-label="Personajes presentes en la escena">
           {renderedSceneNpcs.map(npc => {
-            const image = npc.rendered_url || npc.image_url;
+            const image = npc.rendered_url || npc.image_url || npc.base_body_url;
             const speaking = npc.id === speakingNpcId;
             const leaving = leavingSceneNpcIds.includes(npc.id);
             return (
@@ -933,8 +933,8 @@ export default function GameStage({
               : `${token.label}: clic izquierdo para ver ficha pública`}
           >
             <span className="game-token-image">
-              {token.image_url || token.character?.rendered_url || token.character?.image_url
-                ? <img src={resolveUrl(token.image_url || token.character?.rendered_url || token.character?.image_url)} alt="" />
+              {token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url
+                ? <img src={resolveUrl(token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url)} alt="" />
                 : token.label.slice(0, 1).toUpperCase()}
             </span>
             <small className="game-token-name">{token.label}</small>

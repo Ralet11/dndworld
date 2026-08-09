@@ -98,7 +98,7 @@ async function loadSession(sessionId) {
                     {
                         model: Character,
                         as: 'character',
-                        attributes: ['id', 'name', 'race', 'class', 'level', 'image_url', 'rendered_url', 'hp_current', 'hp_max', 'ac_base'],
+                        attributes: ['id', 'name', 'race', 'class', 'level', 'image_url', 'rendered_url', 'base_body_url', 'hp_current', 'hp_max', 'ac_base'],
                     },
                 ],
             },
@@ -112,7 +112,7 @@ async function loadSession(sessionId) {
                     as: 'character',
                     attributes: [
                         'id', 'name', 'race', 'class', 'level', 'npc_type', 'owner_id', 'origin',
-                        'image_url', 'rendered_url', 'hp_current', 'hp_max', 'hp_temp', 'ac_base',
+                        'image_url', 'rendered_url', 'base_body_url', 'hp_current', 'hp_max', 'hp_temp', 'ac_base',
                         'initiative_bonus', 'speed', 'size', 'creature_type', 'challenge_rating',
                         'proficiency_bonus', 'passive_perception', 'saving_throws',
                         'damage_resistances', 'damage_vulnerabilities', 'damage_immunities',
@@ -157,7 +157,7 @@ async function loadSession(sessionId) {
             where: { id: sceneNpcIds, is_npc: true },
             attributes: [
                 'id', 'name', 'race', 'class', 'level', 'npc_type', 'origin', 'creature_type',
-                'image_url', 'rendered_url', 'hp_current', 'hp_max', 'ac_base', 'speed',
+                'image_url', 'rendered_url', 'base_body_url', 'hp_current', 'hp_max', 'ac_base', 'speed',
             ],
         })
         : [];

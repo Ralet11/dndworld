@@ -262,7 +262,7 @@ function PlayerCombatSheet({ character, onRoll, onOpenSheet }) {
   const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 20 ? '#d0a348' : '#c94f43';
   const modifier = value => Math.floor(((Number(value) || 10) - 10) / 2);
   const signed = value => value >= 0 ? `+${value}` : String(value);
-  const portrait = character.rendered_url || character.image_url;
+  const portrait = character.rendered_url || character.image_url || character.base_body_url;
   const proficiency = Number(character.proficiencyBonus) || 2;
   const skills = [
     ['Acrobacias', 'dex'], ['Trato con Animales', 'wis'], ['Arcana', 'int'],
