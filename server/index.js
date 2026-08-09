@@ -413,6 +413,20 @@ function canEditCharacter(socket, character) {
     );
 }
 
+function playerRoom(userId) {
+    return `player:${userId}`;
+}
+
+function emitPlayerToast(io, character, payload) {
+    if (!character?.UserId) return;
+    io.to(playerRoom(character.UserId)).emit('player:toast', {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: new Date().toISOString(),
+        characterId: character.id,
+        ...payload,
+    });
+}
+
 function normalizedFieldValue(type, value) {
     if (type === 'number') return Number.isFinite(Number(value)) ? Math.trunc(Number(value)) : null;
     if (type === 'float') return Number.isFinite(Number(value)) ? Number(value) : null;
@@ -505,6 +519,20 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
 
     const updatedStats = await getCalculatedPartyStats();
     io.emit('stats-updated', updatedStats);
+    if (isDmUser(socket) && changes.gold) {
+        const before = Number(changes.gold.before || 0);
+        const after = Number(changes.gold.after || 0);
+        const amount = after - before;
+        if (amount) emitPlayerToast(io, character, {
+            type: amount > 0 ? 'gold_received' : 'gold_lost',
+            eyebrow: 'Recompensa del Dungeon Master',
+            title: amount > 0 ? 'Recibiste oro' : 'Se retiró oro',
+            text: amount > 0 ? `El DM agregó ${amount} de oro a tu bolsa.` : `El DM retiró ${Math.abs(amount)} de oro de tu bolsa.`,
+            amount: Math.abs(amount),
+            total: after,
+            actor: { name: 'Dungeon Master', role: 'DM' },
+        });
+    }
     return { character: updatedStats.find(item => item.id === Number(characterId)), changes };
 }
 
@@ -527,6 +555,7 @@ const getNpcsForClient = async () => {
 
 io.on('connection', async (socket) => {
     console.log('User connected:', socket.id);
+    socket.join(playerRoom(socket.user.id));
     // Live-table state, annotations, and media tools share this socket contract.
     registerGameSessionSocket(io, socket);
 
@@ -1011,7 +1040,14 @@ io.on('connection', async (socket) => {
             });
             const updatedStats = await getCalculatedPartyStats();
             io.emit('stats-updated', updatedStats);
-            io.emit('notification', { text: `${char.name} recibió ${added} × ${item.name} del DM.` });
+            emitPlayerToast(io, char, {
+                type: 'item_received',
+                eyebrow: 'Obsequio del Dungeon Master',
+                title: 'Nuevo objeto recibido',
+                text: `El DM agregó ${added} × ${item.name} a tu inventario.`,
+                actor: { name: 'Dungeon Master', role: 'DM' },
+                item: { id: item.id, name: item.name, imageUrl: item.image_url, rarity: item.rarity, type: item.type, quantity: added },
+            });
             reply({ ok: true, quantity: after });
         } catch (e) {
             console.error('Assign item error:', e);
@@ -1067,6 +1103,95 @@ io.on('connection', async (socket) => {
         } catch (error) {
             fail(socket, error.message || 'No se pudo modificar el inventario.');
             reply({ ok: false, message: error.message || 'No se pudo modificar el inventario.' });
+        }
+    });
+
+    socket.on('character:share-targets', async (reply = () => {}) => {
+        try {
+            const ownCharacters = await Character.findAll({ where: { UserId: socket.user.id, is_npc: false }, attributes: ['id'] });
+            const ownIds = ownCharacters.map(character => character.id);
+            const targets = await Character.findAll({
+                where: { is_npc: false, UserId: { [Op.ne]: null }, ...(ownIds.length ? { id: { [Op.notIn]: ownIds } } : {}) },
+                attributes: ['id', 'name', 'image_url', 'rendered_url'],
+                order: [['name', 'ASC']],
+            });
+            reply({ ok: true, targets: targets.map(target => ({ id: target.id, name: target.name, imageUrl: resolveCharacterImage(target) })) });
+        } catch (error) {
+            reply({ ok: false, message: 'No se pudieron cargar los compañeros.' });
+        }
+    });
+
+    socket.on('character:item:share', async ({ fromCharacterId, toCharacterId, itemId } = {}, reply = () => {}) => {
+        try {
+            if (socket.user.role !== 'PLAYER') throw new Error('Sólo los jugadores pueden compartir objetos entre sí.');
+            const [source, target, item, sourceRow] = await Promise.all([
+                Character.findByPk(fromCharacterId),
+                Character.findByPk(toCharacterId),
+                Item.findByPk(itemId),
+                CharacterInventory.findOne({ where: { character_id: fromCharacterId, item_id: itemId } }),
+            ]);
+            if (!source || source.UserId !== socket.user.id || !source.self_edit_enabled) throw new Error('El DM no habilitó la edición de tu inventario.');
+            if (!target || target.is_npc || !target.UserId || target.id === source.id) throw new Error('El destinatario no es válido.');
+            if (!item || !sourceRow || Number(sourceRow.quantity || 0) < 1) throw new Error('Ya no tenés ese objeto disponible.');
+            const sourceBefore = Number(sourceRow.quantity || 1);
+            let targetAfter = 1;
+            const clearedSlots = [];
+            await sequelize.transaction(async transaction => {
+                if (sourceBefore === 1) {
+                    const equipment = await EquipmentSlots.findOne({ where: { character_id: source.id }, transaction });
+                    if (equipment) {
+                        for (const slot of ['helmet', 'chest', 'shoulders', 'boots', 'pants', 'gloves', 'ring_1', 'ring_2', 'primary_weapon', 'secondary_weapon']) {
+                            if (Number(equipment.get(`${slot}_id`)) === Number(item.id)) {
+                                equipment.set(`${slot}_id`, null);
+                                clearedSlots.push(slot);
+                            }
+                        }
+                        if (clearedSlots.length) await equipment.save({ transaction });
+                    }
+                    await sourceRow.destroy({ transaction });
+                } else {
+                    await sourceRow.update({ quantity: sourceBefore - 1 }, { transaction });
+                }
+                const [targetRow, created] = await CharacterInventory.findOrCreate({
+                    where: { character_id: target.id, item_id: item.id },
+                    defaults: { quantity: 1 },
+                    transaction,
+                });
+                if (!created) {
+                    targetAfter = Math.min(999, Number(targetRow.quantity || 1) + 1);
+                    await targetRow.update({ quantity: targetAfter }, { transaction });
+                }
+                const auditBase = {
+                    actor_user_id: socket.user.id,
+                    actor_username: source.name,
+                    actor_role: socket.user.role,
+                    source: 'player-item-share',
+                };
+                await CharacterAuditLog.create({ ...auditBase, character_id: source.id, changes: { inventory: { before: { item_id: item.id, name: item.name, quantity: sourceBefore }, after: sourceBefore > 1 ? { item_id: item.id, name: item.name, quantity: sourceBefore - 1 } : null }, recipient: { before: null, after: { character_id: target.id, name: target.name } }, ...(clearedSlots.length ? { equipment: { before: clearedSlots, after: [] } } : {}) } }, { transaction });
+                await CharacterAuditLog.create({ ...auditBase, character_id: target.id, changes: { inventory: { before: { item_id: item.id, name: item.name, quantity: targetAfter - 1 }, after: { item_id: item.id, name: item.name, quantity: targetAfter } }, sender: { before: null, after: { character_id: source.id, name: source.name } } } }, { transaction });
+            });
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('stats-updated', updatedStats);
+            emitPlayerToast(io, target, {
+                type: 'item_shared',
+                eyebrow: 'Regalo de un compañero',
+                title: `${source.name} compartió un objeto`,
+                text: `${item.name} fue añadido a tu inventario.`,
+                actor: { name: source.name, role: 'Jugador', imageUrl: resolveCharacterImage(source) },
+                item: { id: item.id, name: item.name, imageUrl: item.image_url, rarity: item.rarity, type: item.type, quantity: 1 },
+            });
+            emitPlayerToast(io, source, {
+                type: 'item_sent',
+                eyebrow: 'Intercambio completado',
+                title: `Objeto enviado a ${target.name}`,
+                text: `Compartiste 1 × ${item.name}.`,
+                actor: { name: target.name, role: 'Jugador', imageUrl: resolveCharacterImage(target) },
+                item: { id: item.id, name: item.name, imageUrl: item.image_url, rarity: item.rarity, type: item.type, quantity: 1 },
+            });
+            reply({ ok: true });
+        } catch (error) {
+            fail(socket, error.message || 'No se pudo compartir el objeto.');
+            reply({ ok: false, message: error.message || 'No se pudo compartir el objeto.' });
         }
     });
 

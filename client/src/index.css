@@ -4725,6 +4725,35 @@ a:focus-visible {
 .game-combat-sheet-tip { margin-top: 14px; color: #737a72; font-size: 8px; line-height: 1.55; }
 @media (max-width: 767px) { .game-player-workspace { display: block; } .game-player-character { margin-top: 12px; border-top: 1px solid rgba(128, 102, 54, .35); } }
 
+/* Directed player rewards and inventory transfers. */
+.player-toast-stack { width: min(420px, calc(100vw - 24px)); position: fixed; top: 14px; right: 14px; z-index: 2600; display: grid; gap: 10px; pointer-events: none; }
+.player-toast { --toast-accent: #c8a36a; min-height: 126px; position: relative; display: grid; grid-template-columns: 86px minmax(0, 1fr); overflow: hidden; pointer-events: auto; border: 1px solid color-mix(in srgb, var(--toast-accent) 62%, #26322c); background: linear-gradient(135deg, rgba(15, 25, 21, .985), rgba(5, 10, 8, .99)); box-shadow: 0 20px 55px rgba(0, 0, 0, .58), inset 0 1px rgba(255, 239, 194, .07); animation: player-toast-enter 420ms cubic-bezier(.16, .82, .24, 1) both; }
+.player-toast::before { content: ""; width: 3px; position: absolute; inset: 0 auto 0 0; z-index: 3; background: var(--toast-accent); box-shadow: 0 0 18px color-mix(in srgb, var(--toast-accent) 65%, transparent); }
+.player-toast-shine { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 10% 20%, color-mix(in srgb, var(--toast-accent) 14%, transparent), transparent 38%), linear-gradient(115deg, rgba(255,255,255,.035), transparent 35%); }
+.player-toast-visual { width: 70px; height: 92px; position: relative; align-self: center; justify-self: center; display: grid; place-items: center; overflow: visible; color: var(--toast-accent); border: 1px solid color-mix(in srgb, var(--toast-accent) 45%, #27322d); background: radial-gradient(circle, color-mix(in srgb, var(--toast-accent) 18%, #172019), #080e0c 72%); }
+.player-toast-visual > img:first-child { width: 100%; height: 100%; display: block; object-fit: cover; }
+.player-toast-actor { width: 30px !important; height: 30px !important; position: absolute; right: -8px; bottom: -7px; z-index: 2; object-fit: cover; border: 2px solid #111a16; border-radius: 50%; box-shadow: 0 0 0 1px var(--toast-accent); }
+.player-toast-copy { min-width: 0; position: relative; padding: 15px 34px 14px 5px; }
+.player-toast-copy > span { display: block; color: var(--toast-accent); font-size: 6px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+.player-toast-copy > strong { display: block; margin-top: 4px; color: #eee2cd; font-family: var(--font-display); font-size: 16px; font-weight: 500; line-height: 1.1; }
+.player-toast-copy > p { margin-top: 5px; color: #8c968d; font-size: 9px; line-height: 1.4; }
+.player-toast-item { margin-top: 8px; display: flex; align-items: baseline; gap: 7px; }
+.player-toast-item b { color: #dfd2bc; font-size: 10px; }
+.player-toast-item small { color: var(--toast-accent); font-size: 6px; letter-spacing: .06em; text-transform: uppercase; }
+.player-toast-gold { margin-top: 7px; display: flex; align-items: baseline; gap: 5px; color: var(--toast-accent); }
+.player-toast-gold b { font-family: var(--font-display); font-size: 25px; font-weight: 500; line-height: 1; }
+.player-toast-gold span { font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.player-toast-gold small { margin-left: auto; color: #747d75; font-size: 7px; }
+.player-toast-source { display: block; margin-top: 7px; color: #677168; font-size: 7px; }
+.player-toast-source b { color: #aaa18e; font-weight: 700; }
+.player-toast > button { width: 25px; height: 25px; position: absolute; top: 7px; right: 7px; z-index: 4; display: grid; place-items: center; color: #737c74; border: 1px solid #303a34; background: rgba(5, 10, 8, .72); }
+.player-toast > button:hover { color: #ead7b3; border-color: #725c35; }
+.player-toast-progress { height: 2px; position: absolute; right: 0; bottom: 0; left: 0; background: var(--toast-accent); transform-origin: left center; animation: player-toast-progress 7s linear forwards; }
+@keyframes player-toast-enter { from { opacity: 0; filter: blur(5px); transform: translate3d(22px, -8px, 0) scale(.96); } to { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes player-toast-progress { to { transform: scaleX(0); } }
+@media (max-width: 600px) { .player-toast-stack { top: 8px; right: 8px; left: 8px; width: auto; } .player-toast { min-height: 112px; grid-template-columns: 72px minmax(0, 1fr); } .player-toast-visual { width: 58px; height: 76px; } }
+@media (prefers-reduced-motion: reduce) { .player-toast, .player-toast-progress { animation-duration: 1ms; } }
+
 /* Compact desktop table: remove duplicated chrome and keep the whole play surface above the fold. */
 @media (min-width: 768px) {
   .app-frame.is-game-mode .app-topbar { display: none; }

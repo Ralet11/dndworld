@@ -8,6 +8,7 @@ import {
   Package,
   RefreshCw,
   Scale,
+  Share2,
   Shield,
   Shirt,
   Sparkles,
@@ -161,7 +162,7 @@ function EquipmentDoll({ equipment, inventory, figureUrl, characterName, onSlotP
   );
 }
 
-function ItemCard({ item, equipped, onEquip, onUse }) {
+function ItemCard({ item, equipped, onEquip, onUse, onShare, shareTargets = [] }) {
   const [open, setOpen] = useState(false);
   const color = rc(item.rarity);
   const qty = item.CharacterInventory?.quantity;
@@ -218,6 +219,15 @@ function ItemCard({ item, equipped, onEquip, onUse }) {
               <button onClick={() => onEquip(item)} style={equipped ? styles.unequipButton : styles.equipButton}>
                 {equipped ? 'Desequipar' : 'Equipar'}
               </button>
+            )}
+            {shareTargets.length > 0 && (
+              <label className="min-w-0 flex-1 flex items-center gap-2 border border-[#3a493f] bg-[#0a1210] px-2">
+                <Share2 size={12} className="shrink-0 text-[#75a781]" />
+                <select defaultValue="" onChange={event => { if (event.target.value) onShare(item, Number(event.target.value)); event.target.value = ''; }} className="min-w-0 flex-1 h-8 bg-transparent text-[8px] uppercase tracking-wider text-[#9eb3a3] outline-none">
+                  <option value="">Compartir con…</option>
+                  {shareTargets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
+                </select>
+              </label>
             )}
           </div>
         </div>
@@ -337,6 +347,7 @@ export default function InventorySection({ character }) {
   const [uploadingBody, setUploadingBody] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState('Iniciando...');
+  const [shareTargets, setShareTargets] = useState([]);
   const fileInputRef = useRef(null);
   const creepRef = useRef(null);
 
@@ -363,6 +374,13 @@ export default function InventorySection({ character }) {
     socket.on('render-progress', onProgress);
     return () => socket.off('render-progress', onProgress);
   }, [socket, character.id]);
+
+  useEffect(() => {
+    if (!socket || !character.self_edit_enabled) return;
+    socket.emit('character:share-targets', response => {
+      if (response?.ok) setShareTargets(response.targets || []);
+    });
+  }, [socket, character.id, character.self_edit_enabled]);
 
   useEffect(() => () => {
     if (creepRef.current) window.clearInterval(creepRef.current);
@@ -458,6 +476,14 @@ export default function InventorySection({ character }) {
     socket.emit('use-item', { characterId: character.id, itemId: item.id });
   };
 
+  const handleShare = (item, targetCharacterId) => {
+    const target = shareTargets.find(candidate => candidate.id === targetCharacterId);
+    if (!socket || !target || !window.confirm(`¿Compartir 1 × ${item.name} con ${target.name}?`)) return;
+    socket.emit('character:item:share', { fromCharacterId: character.id, toCharacterId: target.id, itemId: item.id }, response => {
+      if (!response?.ok) window.alert(response?.message || 'No se pudo compartir el objeto.');
+    });
+  };
+
   const filteredItems = useMemo(() => inventory.filter((item) => {
     if (activeTab === 'COMBAT') return item.type === 'Arma' || item.type === 'Armadura';
     if (activeTab === 'MAGIC') return item.type === 'Objeto Mágico' || item.rarity === 'Raro' || item.rarity === 'Muy Raro' || item.rarity === 'Legendario';
@@ -491,7 +517,7 @@ export default function InventorySection({ character }) {
         setStage('Listo');
         setProgress(100);
       }
-    } catch (error) {
+    } catch {
       window.alert('Fallo de conexión al sincronizar el retrato.');
     } finally {
       stopCreeper();
@@ -522,7 +548,7 @@ export default function InventorySection({ character }) {
       } else {
         socket.emit('update-character-base-body', { characterId: character.id, imageUrl: data.url });
       }
-    } catch (error) {
+    } catch {
       window.alert('Fallo de conexión al subir la imagen.');
     } finally {
       setUploadingBody(false);
@@ -626,6 +652,8 @@ export default function InventorySection({ character }) {
                 equipped={isEquipped(item.id)}
                 onEquip={handleEquip}
                 onUse={handleUse}
+                onShare={handleShare}
+                shareTargets={character.self_edit_enabled ? shareTargets : []}
               />
             ))}
           </div>

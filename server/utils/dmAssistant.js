@@ -503,7 +503,23 @@ async function updateCharacterField({
     const summaryText = summaryBuilder(character, previousValue, appliedValue);
     const notificationText = notificationBuilder ? notificationBuilder(character, previousValue, appliedValue) : null;
     if (notificationText) {
-        io.emit('notification', { text: notificationText, type: 'dm_assistant' });
+        if (field === 'gold' && character.UserId) {
+            const amount = Number(appliedValue) - Number(previousValue || 0);
+            io.to(`player:${character.UserId}`).emit('player:toast', {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                createdAt: new Date().toISOString(),
+                characterId: character.id,
+                type: amount >= 0 ? 'gold_received' : 'gold_lost',
+                eyebrow: 'Recompensa del Dungeon Master',
+                title: amount >= 0 ? 'Recibiste oro' : 'Se retiró oro',
+                text: notificationText,
+                amount: Math.abs(amount),
+                total: Number(appliedValue),
+                actor: { name: 'Dungeon Master', role: 'DM' },
+            });
+        } else {
+            io.emit('notification', { text: notificationText, type: 'dm_assistant' });
+        }
     }
 
     rememberUndo(userId, {

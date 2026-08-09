@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { BookMarked, Compass, Flame, Map, Menu, Scroll, Shield, Swords, X } from 'lucide-react';
 import Chronicles from '../tabs/Chronicles';
@@ -51,23 +51,43 @@ export default function PlayerLayout() {
   const { socket, connected } = useSocket();
   const { user } = useAuth();
   const location = useLocation();
-  const [notification, setNotification] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const toastTimers = useRef(new Map());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [section, subtitle] = currentSection(location.pathname);
 
   useEffect(() => {
     if (!socket) return undefined;
+    const timers = toastTimers.current;
     const handler = data => {
-      setNotification(data);
-      setTimeout(() => setNotification(null), 5000);
+      const toast = { ...data, id: data.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+      setNotifications(current => [...current, toast].slice(-3));
+      const timer = window.setTimeout(() => {
+        setNotifications(current => current.filter(item => item.id !== toast.id));
+        timers.delete(toast.id);
+      }, 7000);
+      timers.set(toast.id, timer);
     };
     socket.on('notification', handler);
-    return () => socket.off('notification', handler);
+    socket.on('player:toast', handler);
+    return () => {
+      socket.off('notification', handler);
+      socket.off('player:toast', handler);
+      timers.forEach(timer => window.clearTimeout(timer));
+      timers.clear();
+    };
   }, [socket]);
+
+  const closeToast = id => {
+    const timer = toastTimers.current.get(id);
+    if (timer) window.clearTimeout(timer);
+    toastTimers.current.delete(id);
+    setNotifications(current => current.filter(item => item.id !== id));
+  };
 
   return (
     <div className={`app-frame${location.pathname.startsWith('/game') ? ' is-game-mode' : ''}`}>
-      {notification && <NotificationBanner data={notification} onClose={() => setNotification(null)} />}
+      {notifications.length > 0 && <div className="player-toast-stack">{notifications.map(notification => <NotificationBanner key={notification.id} data={notification} onClose={() => closeToast(notification.id)} />)}</div>}
 
       <aside className="app-rail hidden md:flex">
         <div className="app-brand" title="DnD World">
