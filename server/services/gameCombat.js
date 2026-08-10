@@ -263,8 +263,8 @@ function customFeatureProfiles(character) {
         const damage = damageParsed ? formatDice({ ...damageParsed, modifier: damageParsed.modifier + abilityBonus }) : rawDamage;
         const attackAbility = ability || 'DEX';
         const attack = override.attack_bonus != null || override.attackBonus != null || /(ataque|disparo)/.test(normalizedDescription);
-        const range = Number(override.range) || Number(normalizedDescription.match(/(?:alcance|dentro de)\s*(\d+)\s*(?:pies|pie|feet|foot)/)?.[1]) || 5;
         const areaFeet = Number(normalizedDescription.match(/(?:circulo|radio|cono|linea|cuadrado).*?(\d+)\s*(?:pies|pie|feet|foot)/)?.[1]) || null;
+        const range = Number(override.range) || Number(normalizedDescription.match(/(?:alcance|dentro de)\s*(\d+)\s*(?:pies|pie|feet|foot)/)?.[1]) || (areaFeet ? 60 : 5);
         const areaShape = /cono/.test(normalizedDescription) ? 'cone' : /linea/.test(normalizedDescription) ? 'line' : /cuadrado/.test(normalizedDescription) ? 'square' : 'circle';
         const resourceMatch = String(feature.resource || '').match(/(\d+)\s*\/\s*Descanso\s*(Corto|Largo)/i);
         const formulaResource = /MOD\s*CAR/i.test(String(feature.resource || ''))
@@ -383,7 +383,7 @@ function areaContains(shape, origin, center, point, size) {
         const delta = Math.abs(Math.atan2(Math.sin(angle - direction), Math.cos(angle - direction)));
         return pointDistance(origin, point) <= radius && delta <= Math.PI / 6;
     }
-    return pointDistance(center, point) <= radius / 2;
+    return pointDistance(center, point) <= (radius / 2) + 3;
 }
 
 function resolveTargetTokens(action, actorToken, allTokens, requestedIds = [], area = null) {

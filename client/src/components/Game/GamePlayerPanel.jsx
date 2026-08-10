@@ -22,6 +22,7 @@ export default function GamePlayerPanel() {
   const [combatTargeting, setCombatTargeting] = useState(null);
   const [playerSessions, setPlayerSessions] = useState([]);
   const [switchingSession, setSwitchingSession] = useState(false);
+  const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
   const sessionDashboardRef = useRef(false);
 
   useEffect(() => {
@@ -222,6 +223,17 @@ export default function GamePlayerPanel() {
     });
   };
 
+  const pendingCombatNotice = (session?.combat_actions || []).find(action => {
+    if (Number(action.actor_user_id) !== Number(user.id) || dismissedCombatNotices.includes(String(action.id))) return false;
+    return action.status === 'DAMAGE_READY' || (action.status === 'COMPLETED' && action.attack && action.attack.hit === false);
+  });
+
+  const rollPendingDamage = action => {
+    socket?.emit('game:roll-action-damage', { sessionId: session.id, combatActionId: action.id }, response => {
+      if (!response?.ok) setError(response?.message || 'No se pudo iniciar la tirada de daño.');
+    });
+  };
+
   const rollDice = (request, done) => {
     setError('');
     socket?.emit('game:roll-dice', { sessionId: session.id, ...request }, response => {
@@ -320,6 +332,21 @@ export default function GamePlayerPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+
+      {pendingCombatNotice && (
+        <div className={`game-combat-result-prompt${pendingCombatNotice.status === 'DAMAGE_READY' ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">
+          <div>
+            <span>{pendingCombatNotice.status === 'DAMAGE_READY' ? 'Impacto confirmado' : 'El ataque no impacta'}</span>
+            <h2>{pendingCombatNotice.status === 'DAMAGE_READY' ? '¡Éxito!' : 'Fallo'}</h2>
+            <p>{pendingCombatNotice.action_name}{pendingCombatNotice.attack ? ` · ${pendingCombatNotice.attack.total} contra CA ${pendingCombatNotice.attack.targetAc}` : ''}</p>
+            {pendingCombatNotice.status === 'DAMAGE_READY' ? (
+              <button onClick={() => rollPendingDamage(pendingCombatNotice)}>Tirar daño ({pendingCombatNotice.damage_formula || 'daño'})</button>
+            ) : (
+              <button onClick={() => setDismissedCombatNotices(current => [...current, String(pendingCombatNotice.id)])}>Continuar</button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="game-player-workspace">
         <section className="game-player-stage-wrap">

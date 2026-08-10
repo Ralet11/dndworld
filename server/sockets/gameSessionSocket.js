@@ -237,11 +237,14 @@ function serializeSession(session, viewer) {
     payload.active_character_id = payload.turn_order?.[payload.turn_index] ?? null;
     payload.combat_actions = (payload.combatActions || []).map(action => ({
         id: action.id,
+        actor_user_id: action.actor_user_id,
         actor_character_id: action.actor_character_id,
         actor_name: action.actorCharacter?.name || action.actor?.username || 'Combatiente',
         actor_image: resolveCharacterImage(action.actorCharacter),
         action_name: action.action_name,
         status: action.status,
+        attack: action.result?.attack || null,
+        damage_formula: action.action_snapshot?.damage || action.action_snapshot?.healing || null,
         targets: action.result?.targets || [],
         summary: action.result?.summary || null,
         undone_at: action.undone_at,
@@ -299,7 +302,7 @@ async function requireHostedSession(socket, sessionId) {
 
 async function hasPendingCombatAction(sessionId) {
     return Boolean(await GameCombatAction.findOne({
-        where: { session_id: sessionId, status: { [Op.in]: ['PENDING', 'ATTACK_ROLL', 'EFFECT_ROLL'] } },
+        where: { session_id: sessionId, status: { [Op.in]: ['PENDING', 'ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL'] } },
         attributes: ['id'],
     }));
 }
@@ -422,15 +425,11 @@ async function finalizeCombatAction(io, combatAction, roll) {
             await combatAction.save();
             return broadcastSession(io, session.id);
         }
-        const effectRoll = await createCombatRoll(io, session, combatAction.actor_user_id, actorToken.character, {
-            ...expression,
-            quantity: combatAction.result.attack.critical && action.damage ? expression.quantity * 2 : expression.quantity,
-            label: `${combatAction.action_name} · ${action.healing ? 'curación' : 'daño'}`,
-        });
-        combatAction.effect_roll_id = effectRoll.id;
-        combatAction.status = 'EFFECT_ROLL';
+        combatAction.status = 'DAMAGE_READY';
+        combatAction.result = { ...combatAction.result, summary: `${combatAction.action_name}: impacto confirmado. Esperando tirada de daño.` };
         await combatAction.save();
         return broadcastSession(io, session.id);
+
     }
 
     if (String(combatAction.effect_roll_id) !== String(roll.id)) return;
@@ -1442,7 +1441,7 @@ function registerGameSessionSocket(io, socket) {
             if (actorCharacterId !== activeCharacterId) return reply({ ok: false, message: 'Todavía no es tu turno.' });
 
             const pending = await GameCombatAction.findOne({
-                where: { session_id: session.id, actor_character_id: actorCharacterId, status: { [Op.in]: ['ATTACK_ROLL', 'EFFECT_ROLL'] } },
+                where: { session_id: session.id, actor_character_id: actorCharacterId, status: { [Op.in]: ['ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL'] } },
             });
             if (pending) return reply({ ok: false, message: 'Ya hay una acción esperando el resultado de los dados.' });
 
@@ -1560,6 +1559,32 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
+    socket.on('game:roll-action-damage', async ({ sessionId, combatActionId } = {}, reply = () => {}) => {
+        try {
+            const combatAction = await GameCombatAction.findOne({ where: { id: combatActionId, session_id: sessionId, status: 'DAMAGE_READY' } });
+            if (!combatAction) return reply({ ok: false, message: 'La tirada de daño ya no está disponible.' });
+            const session = await loadSession(sessionId);
+            const authorizedDm = isDm(socket) && session?.dm_user_id === socket.user.id;
+            if (!session || (!authorizedDm && Number(combatAction.actor_user_id) !== Number(socket.user.id))) return reply({ ok: false, message: 'No puedes tirar el daño de esta acción.' });
+            const actorToken = session.tokens.find(token => Number(token.character_id) === Number(combatAction.actor_character_id));
+            const expression = parseDiceExpression(combatAction.action_snapshot?.damage || combatAction.action_snapshot?.healing);
+            if (!actorToken?.character || !expression) return reply({ ok: false, message: 'No se pudo preparar el daño de esta acción.' });
+            const effectRoll = await createCombatRoll(io, session, combatAction.actor_user_id, actorToken.character, {
+                ...expression,
+                quantity: combatAction.result?.attack?.critical && combatAction.action_snapshot?.damage ? expression.quantity * 2 : expression.quantity,
+                label: `${combatAction.action_name} · ${combatAction.action_snapshot?.healing ? 'curación' : 'daño'}`,
+            });
+            combatAction.effect_roll_id = effectRoll.id;
+            combatAction.status = 'EFFECT_ROLL';
+            await combatAction.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true, rollId: effectRoll.id });
+        } catch (error) {
+            console.error('game:roll-action-damage error:', error);
+            reply({ ok: false, message: 'No se pudo iniciar la tirada de daño.' });
+        }
+    });
+
     socket.on('game:undo-action', async ({ sessionId, combatActionId } = {}, reply = () => {}) => {
         try {
             const session = await requireHostedSession(socket, sessionId);
@@ -1598,7 +1623,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:cancel-action', async ({ sessionId, combatActionId } = {}, reply = () => {}) => {
         try {
             const action = await GameCombatAction.findOne({
-                where: { id: combatActionId, session_id: sessionId, status: { [Op.in]: ['ATTACK_ROLL', 'EFFECT_ROLL', 'PENDING'] } },
+                where: { id: combatActionId, session_id: sessionId, status: { [Op.in]: ['ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL', 'PENDING'] } },
             });
             if (!action) return reply({ ok: false, message: 'La acción ya no está pendiente.' });
             const session = await GameSession.findByPk(sessionId);

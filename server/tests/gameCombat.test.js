@@ -69,6 +69,7 @@ test('homebrew text becomes structured attacks and areas', () => {
     assert.equal(actions[0].range, 30);
     assert.equal(actions[1].economy, 'bonus');
     assert.equal(actions[1].target, 'area-enemy');
+    assert.equal(actions[1].range, 60);
     assert.equal(actions[1].damage, '2d8');
     assert.equal(actions[1].damageType, 'fuego');
     assert.equal(actions[1].resource.type, 'session-use');
