@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, CircleDot, Crosshair, HeartPulse, LoaderCircle, MousePointer2, Sparkles, Swords, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, CircleDot, Crosshair, HeartPulse, LoaderCircle, Minus, MousePointer2, Plus, Sparkles, Swords, X } from 'lucide-react';
 
 const ECONOMY_LABELS = { action: 'Acciones', bonus: 'Bonus', reaction: 'Reacciones' };
 
@@ -17,24 +17,21 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   const [submitting, setSubmitting] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [activeEconomy, setActiveEconomy] = useState('action');
+  const [resourceSummary, setResourceSummary] = useState({ spellSlots: {}, trackers: [] });
 
   const refresh = () => {
-    if (!socket || !session?.id || !isMyTurn) return;
+    if (!socket || !session?.id || session.status !== 'LIVE') return;
     setLoading(true);
     socket.emit('game:get-actions', { sessionId: session.id }, response => {
       setLoading(false);
       if (!response?.ok) return onError?.(response?.message || 'No se pudieron cargar las acciones.');
       setActions(response.actions || []);
+      setResourceSummary(response.resourceSummary || { spellSlots: {}, trackers: [] });
     });
   };
 
   useEffect(() => {
-    if (!isMyTurn) {
-      setActions([]);
-      onTargetingChange?.(null);
-      return;
-    }
-    setCollapsed(false);
+    if (isMyTurn) setCollapsed(false);
     refresh();
     // The serialized combat state and history change after every resolved action.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -44,8 +41,6 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   useEffect(() => {
     if (economies.length && !economies.includes(activeEconomy)) setActiveEconomy(economies[0]);
   }, [activeEconomy, economies]);
-
-  if (!isMyTurn || session.status !== 'LIVE') return null;
 
   const execute = (action, targetTokenIds = [], area = null) => {
     setSubmitting(action.key);
@@ -79,6 +74,23 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   };
 
   const visibleActions = actions.filter(action => (action.economy || 'action') === activeEconomy);
+  const reactions = actions.filter(action => action.economy === 'reaction');
+  const adjustTracker = (trackerKey, delta) => socket?.emit('game:adjust-tracker', { sessionId: session.id, trackerKey, delta }, response => {
+    if (!response?.ok) onError?.(response?.message || 'No se pudo actualizar el rastreador.');
+    else refresh();
+  });
+
+  if (session.status !== 'LIVE') return null;
+
+  if (!isMyTurn) {
+    if (!reactions.length) return null;
+    return (
+      <section className="turn-reaction-panel" aria-label="Reacciones disponibles">
+        <header><span>Siempre disponible</span><strong>Reacciones</strong></header>
+        <div>{reactions.map(action => <button key={action.key} disabled={!action.available || Boolean(submitting)} onClick={() => choose(action)}><i>{actionIcon(action)}</i><span><strong>{action.name}</strong><small>{action.available ? action.summary || 'Usar reacción' : action.unavailableReason}</small></span></button>)}</div>
+      </section>
+    );
+  }
 
   return (
     <section className={`turn-action-panel${targeting ? ' is-targeting' : ''}${collapsed ? ' is-collapsed' : ''}`} aria-label="Acciones del turno">
@@ -109,6 +121,10 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
                   </button>
                 ))}
                 {!loading && !visibleActions.length && <p className="turn-action-empty">No hay acciones configuradas en esta categoría.</p>}
+              </div>
+              <div className="turn-resource-panel">
+                {!!Object.keys(resourceSummary.spellSlots || {}).length && <section><span>Espacios de hechizo</span><div>{Object.entries(resourceSummary.spellSlots).map(([level, slot]) => <small key={level}>Nv. {level}<strong>{Math.max(0, Number(slot.max || 0) - Number(slot.used || 0))} / {slot.max}</strong></small>)}</div></section>}
+                {!!resourceSummary.trackers?.length && <section><span>Recursos custom</span><div>{resourceSummary.trackers.map(tracker => <small key={tracker.key}><em>{tracker.label}</em><button onClick={() => adjustTracker(tracker.key, -1)} aria-label={`Restar ${tracker.label}`}><Minus size={10} /></button><strong>{tracker.value} / {tracker.max}</strong><button onClick={() => adjustTracker(tracker.key, 1)} aria-label={`Sumar ${tracker.label}`}><Plus size={10} /></button>{tracker.unit && <i>{tracker.unit}</i>}</small>)}</div></section>}
               </div>
             </>
           )}

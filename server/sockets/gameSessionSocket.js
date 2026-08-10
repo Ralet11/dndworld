@@ -310,12 +310,13 @@ async function hasPendingCombatAction(sessionId) {
 function currentCombatState(session, actorCharacterId) {
     const current = session.combat_state && typeof session.combat_state === 'object' ? session.combat_state : {};
     const resources = { ...(current.resources || {}) };
+    const reactions = { ...(current.reactions || {}) };
     if (Number(current.round) !== Number(session.round)
         || Number(current.turnIndex) !== Number(session.turn_index)
         || Number(current.actorCharacterId) !== Number(actorCharacterId)) {
-        return { round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources };
+        return { round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions };
     }
-    return { ...current, used: { ...(current.used || {}) }, resources };
+    return { ...current, used: { ...(current.used || {}) }, resources, reactions };
 }
 
 function resourceAvailability(action, character, session) {
@@ -344,7 +345,9 @@ function decorateActions(actions, character, session) {
     const state = currentCombatState(session, character.id);
     return actions.map(action => {
         const resource = resourceAvailability(action, character, session);
-        const economyUsed = Boolean(state.used?.[action.economy]);
+        const economyUsed = action.economy === 'reaction'
+            ? Boolean(state.reactions?.[character.id])
+            : Boolean(state.used?.[action.economy]);
         return {
             ...action,
             available: resource.available && !economyUsed && session.status === 'LIVE',
@@ -356,6 +359,24 @@ function decorateActions(actions, character, session) {
             selectedSlotLevel: resource.slotLevel || null,
         };
     });
+}
+
+function customTrackers(character, session) {
+    const features = Array.isArray(character.custom_features)
+        ? character.custom_features
+        : Array.isArray(character.custom_features?.trackers)
+            ? character.custom_features.trackers
+            : [];
+    const state = currentCombatState(session, character.id);
+    return features
+        .filter(feature => feature?.tracker?.key && Number.isFinite(Number(feature.tracker.max)))
+        .map(feature => {
+            const tracker = feature.tracker;
+            const key = `${character.id}:tracker:${tracker.key}`;
+            const max = Math.max(0, Number(tracker.max));
+            const value = Math.max(0, Math.min(max, Number(state.resources?.[key] ?? tracker.value ?? max)));
+            return { key: tracker.key, label: tracker.label || feature.name, value, max, unit: tracker.unit || '' };
+        });
 }
 
 async function createCombatRoll(io, session, actorUserId, character, request) {
@@ -1109,7 +1130,7 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index = nextIndex;
         }
-        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) } };
+        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, reactions: nextIndex >= session.turn_order.length ? {} : { ...(session.combat_state?.reactions || {}) } };
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1130,7 +1151,7 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index -= 1;
         }
-        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) } };
+        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1157,7 +1178,7 @@ function registerGameSessionSocket(io, socket) {
             turnIndex = session.turn_order.length - 1;
         }
         session.turn_index = turnIndex;
-        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) } };
+        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1422,11 +1443,35 @@ function registerGameSessionSocket(io, socket) {
             const catalog = await buildActionCatalog(actorCharacterId);
             if (!catalog) return reply({ ok: false, message: 'No se encontró el combatiente activo.' });
             const active = Number(session.turn_order?.[session.turn_index]) === actorCharacterId;
-            const actions = decorateActions(catalog.actions, catalog.character, session).map(action => active ? action : ({ ...action, available: false, unavailableReason: 'Todavía no es tu turno.' }));
-            reply({ ok: true, characterId: actorCharacterId, actions, combatState: currentCombatState(session, actorCharacterId) });
+            const actions = decorateActions(catalog.actions, catalog.character, session).map(action => (active || action.economy === 'reaction') ? action : ({ ...action, available: false, unavailableReason: 'Todavía no es tu turno.' }));
+            reply({ ok: true, characterId: actorCharacterId, actions, combatState: currentCombatState(session, actorCharacterId), resourceSummary: { spellSlots: catalog.character.spell_slots || {}, trackers: customTrackers(catalog.character, session) } });
         } catch (error) {
             console.error('game:get-actions error:', error);
             reply({ ok: false, message: 'No se pudieron preparar tus acciones.' });
+        }
+    });
+
+    socket.on('game:adjust-tracker', async ({ sessionId, trackerKey, delta } = {}, reply = () => {}) => {
+        try {
+            const session = await GameSession.findByPk(sessionId);
+            if (!session) return reply({ ok: false, message: 'La mesa ya no está disponible.' });
+            const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
+            if (!participant) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            const catalog = await buildActionCatalog(participant.character_id);
+            const tracker = customTrackers(catalog.character, session).find(item => item.key === trackerKey);
+            if (!tracker) return reply({ ok: false, message: 'Ese rastreador no está configurado.' });
+            const adjustment = Math.max(-99, Math.min(99, Number(delta) || 0));
+            const resourceKey = `${participant.character_id}:tracker:${tracker.key}`;
+            const resources = { ...(session.combat_state?.resources || {}) };
+            resources[resourceKey] = Math.max(0, Math.min(tracker.max, tracker.value + adjustment));
+            session.combat_state = { ...(session.combat_state || {}), resources };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true, value: resources[resourceKey] });
+        } catch (error) {
+            console.error('game:adjust-tracker error:', error);
+            reply({ ok: false, message: 'No se pudo actualizar el rastreador.' });
         }
     });
 
@@ -1438,8 +1483,6 @@ function registerGameSessionSocket(io, socket) {
             const activeCharacterId = Number(session.turn_order?.[session.turn_index]);
             const actorCharacterId = isDm(socket) ? activeCharacterId : Number(participant?.character_id);
             if (!actorCharacterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
-            if (actorCharacterId !== activeCharacterId) return reply({ ok: false, message: 'Todavía no es tu turno.' });
-
             const pending = await GameCombatAction.findOne({
                 where: { session_id: session.id, actor_character_id: actorCharacterId, status: { [Op.in]: ['ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL'] } },
             });
@@ -1450,6 +1493,7 @@ function registerGameSessionSocket(io, socket) {
             const decorated = decorateActions(catalog.actions, catalog.character, session);
             const action = decorated.find(item => item.key === actionKey);
             if (!action) return reply({ ok: false, message: 'Esa acción ya no está disponible.' });
+            if (actorCharacterId !== activeCharacterId && action.economy !== 'reaction') return reply({ ok: false, message: 'Todavía no es tu turno.' });
             if (!action.available) return reply({ ok: false, message: action.unavailableReason || 'No puedes usar esa acción ahora.' });
 
             const actorToken = session.tokens.find(token => token.visible && Number(token.character_id) === actorCharacterId);
@@ -1499,7 +1543,8 @@ function registerGameSessionSocket(io, socket) {
                 combatState.resources[resourceKey] = used + 1;
             }
 
-            combatState.used[action.economy] = true;
+            if (action.economy === 'reaction') combatState.reactions[actorCharacterId] = true;
+            else combatState.used[action.economy] = true;
             session.combat_state = combatState;
             session.changed('combat_state', true);
             await session.save();

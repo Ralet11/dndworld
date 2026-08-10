@@ -113,6 +113,21 @@ const FEATURES = [
         name: 'Capacidad de planos', kind: 'Pasivo', resource: '3/4 planos',
         description: 'Rakion conoce actualmente tres planos: Escupefuego, Escudo retráctil y Granada explosiva. Conserva un espacio disponible para aprender un cuarto plano más adelante.',
     },
+    {
+        name: 'Cargador del Escupefuego', kind: 'Rastreador',
+        description: 'Control manual del cargador equipado del Escupefuego.',
+        tracker: { key: 'escupefuego-cargador', label: 'Cargador Escupefuego', value: 6, max: 6, unit: 'balas' },
+    },
+    {
+        name: 'Granadas construidas', kind: 'Rastreador',
+        description: 'Granadas explosivas disponibles antes de construir más.',
+        tracker: { key: 'granadas-construidas', label: 'Granadas', value: 2, max: 2, unit: 'granadas' },
+    },
+    {
+        name: 'Rastreador de planos', kind: 'Rastreador',
+        description: 'Espacios de planos conocidos del artificiero custom.',
+        tracker: { key: 'planos-conocidos', label: 'Planos', value: 3, max: 4, unit: 'planos' },
+    },
 ];
 
 const FEATURE_NAMES = new Set(FEATURES.map(feature => feature.name.toLocaleLowerCase('es')));
