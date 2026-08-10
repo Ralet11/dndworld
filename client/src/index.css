@@ -3626,6 +3626,16 @@ a:focus-visible {
 .game-join-character span { display: flex; flex-direction: column; }
 .game-join-character small { color: #6f766f; font-size: 8px; text-transform: uppercase; }
 .game-join-character strong { color: #ded7ca; font-family: var(--font-display); font-weight: 500; }
+.game-player-session-list { width: 100%; max-height: 230px; overflow-y: auto; border-top: 1px solid #2c3731; }
+.game-player-session-list article { min-height: 56px; padding: 9px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #2c3731; text-align: left; }
+.game-player-session-list article > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.game-player-session-list article span { color: #78a97a; font-size: 7px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.game-player-session-list article strong { overflow: hidden; color: #ddd1ba; font-family: var(--font-display); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.game-player-session-list article small { color: #777d75; font-size: 7px; letter-spacing: .06em; text-transform: uppercase; }
+.game-player-session-list article button { min-width: 62px; min-height: 28px; padding: 0 8px; color: #d5b36d; border: 1px solid #70582e; background: rgba(159, 116, 37, .1); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.game-player-session-divider { margin: 10px 0 0; color: #777d75; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.game-player-dashboard-button { min-height: 31px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: #c7b38a; border: 1px solid #3b463d; background: #0a110e; font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.game-waiting-shell > .game-player-dashboard-button { display: flex; margin: 0 auto 16px; }
 
 .game-dm-shell {
   height: 100%;

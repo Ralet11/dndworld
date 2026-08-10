@@ -511,12 +511,21 @@ function registerGameSessionSocket(io, socket) {
                     });
                 }
             } else {
-                const participant = await GameParticipant.findOne({
-                    where: { user_id: socket.user.id },
-                    include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
-                    order: [['updatedAt', 'DESC']],
-                });
-                session = participant?.session || null;
+                if (socket.gameSessionId) {
+                    const activeParticipant = await GameParticipant.findOne({
+                        where: { session_id: socket.gameSessionId, user_id: socket.user.id },
+                        include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
+                    });
+                    session = activeParticipant?.session || null;
+                }
+                if (!session) {
+                    const participant = await GameParticipant.findOne({
+                        where: { user_id: socket.user.id },
+                        include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
+                        order: [['updatedAt', 'DESC']],
+                    });
+                    session = participant?.session || null;
+                }
             }
 
             if (!session) {
@@ -573,6 +582,57 @@ function registerGameSessionSocket(io, socket) {
             reply({ ok: true });
         } catch (error) {
             console.error('game:leave-hosted error:', error);
+            reply({ ok: false, message: 'No se pudo salir de la mesa.' });
+        }
+    });
+
+    socket.on('game:list-player-sessions', async (reply = () => {}) => {
+        try {
+            if (isDm(socket)) return reply({ ok: false, message: 'Este listado es para jugadores.' });
+            const participants = await GameParticipant.findAll({
+                where: { user_id: socket.user.id },
+                attributes: ['id', 'session_id', 'character_id', 'is_ready', 'updatedAt'],
+                include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } }, attributes: ['id', 'title', 'code', 'status', 'round', 'updatedAt'] }],
+                order: [['updatedAt', 'DESC']],
+            });
+            reply({ ok: true, sessions: participants.map(item => ({ ...item.session.toJSON(), characterId: item.character_id, isReady: item.is_ready, isCurrent: Number(item.session_id) === Number(socket.gameSessionId) })) });
+        } catch (error) {
+            console.error('game:list-player-sessions error:', error);
+            reply({ ok: false, message: 'No se pudieron cargar tus mesas.' });
+        }
+    });
+
+    socket.on('game:open-player-session', async ({ sessionId } = {}, reply = () => {}) => {
+        try {
+            if (isDm(socket)) return reply({ ok: false, message: 'El DM abre sus mesas desde su panel.' });
+            const participant = await GameParticipant.findOne({
+                where: { session_id: sessionId, user_id: socket.user.id },
+                include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
+            });
+            if (!participant?.session) return reply({ ok: false, message: 'No perteneces a esa mesa o ya fue finalizada.' });
+            await enterRoom(io, socket, participant.session.id);
+            reply({ ok: true, sessionId: participant.session.id });
+        } catch (error) {
+            console.error('game:open-player-session error:', error);
+            reply({ ok: false, message: 'No se pudo abrir la mesa elegida.' });
+        }
+    });
+
+    socket.on('game:leave-player-session', async (reply = () => {}) => {
+        try {
+            if (isDm(socket)) return reply({ ok: false, message: 'El DM sale desde su panel.' });
+            const sessionId = socket.gameSessionId;
+            if (sessionId) {
+                const participant = await GameParticipant.findOne({ where: { session_id: sessionId, user_id: socket.user.id } });
+                if (!participant) return reply({ ok: false, message: 'No perteneces a esta mesa.' });
+                removePresence(sessionId, socket.user.id, socket.id);
+                socket.leave(roomName(sessionId));
+                socket.gameSessionId = null;
+                await broadcastSession(io, sessionId);
+            }
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:leave-player-session error:', error);
             reply({ ok: false, message: 'No se pudo salir de la mesa.' });
         }
     });

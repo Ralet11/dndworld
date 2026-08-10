@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Backpack, Check, CheckCircle, Circle, Clock, DoorOpen, Edit3, Heart, Pause, Scroll, Shield, Sparkles, Swords, Target, UserRound, Users, X, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -20,6 +20,9 @@ export default function GamePlayerPanel() {
   const [sheetSection, setSheetSection] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [combatTargeting, setCombatTargeting] = useState(null);
+  const [playerSessions, setPlayerSessions] = useState([]);
+  const [switchingSession, setSwitchingSession] = useState(false);
+  const sessionDashboardRef = useRef(false);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -137,8 +140,16 @@ export default function GamePlayerPanel() {
     socket.on('game:roll-upsert', onRollUpsert);
     socket.on('game:roll-dismissing', onRollDismissing);
     socket.on('game:roll-dismissed', onRollDismissed);
-    socket.emit('game:get-current');
-    socket.emit('get-players');
+    const syncGame = () => {
+      if (!sessionDashboardRef.current) socket.emit('game:get-current');
+      else setLoading(false);
+      socket.timeout(5000).emit('game:list-player-sessions', (timeoutError, response) => {
+        if (!timeoutError && response?.ok) setPlayerSessions(Array.isArray(response.sessions) ? response.sessions : []);
+      });
+      socket.emit('get-players');
+    };
+    socket.on('connect', syncGame);
+    syncGame();
     return () => {
       socket.off('game:state', onState);
       socket.off('game:error', onError);
@@ -157,9 +168,10 @@ export default function GamePlayerPanel() {
       socket.off('game:vfx-updated', onVfxUpdated);
       socket.off('game:vfx-deleted', onVfxDeleted);
       socket.off('game:vfx-cleared', onVfxCleared);
-      socket.off('game:roll-upsert', onRollUpsert);
-      socket.off('game:roll-dismissing', onRollDismissing);
-      socket.off('game:roll-dismissed', onRollDismissed);
+    socket.off('game:roll-upsert', onRollUpsert);
+    socket.off('game:roll-dismissing', onRollDismissing);
+    socket.off('game:roll-dismissed', onRollDismissed);
+      socket.off('connect', syncGame);
     };
   }, [socket, user.id]);
 
@@ -176,6 +188,38 @@ export default function GamePlayerPanel() {
     setError('');
     setLoading(true);
     socket?.emit('game:join', { code: code.trim().toUpperCase(), characterId: character?.id });
+  };
+
+  const refreshPlayerSessions = () => {
+    socket?.timeout(5000).emit('game:list-player-sessions', (timeoutError, response) => {
+      if (!timeoutError && response?.ok) setPlayerSessions(Array.isArray(response.sessions) ? response.sessions : []);
+    });
+  };
+
+  const openPlayerSession = sessionId => {
+    if (!sessionId || Number(sessionId) === Number(session?.id) || switchingSession) return;
+    setError('');
+    setSwitchingSession(true);
+    sessionDashboardRef.current = false;
+    socket?.timeout(7000).emit('game:open-player-session', { sessionId }, (timeoutError, response) => {
+      setSwitchingSession(false);
+      if (timeoutError) return setError('El servidor no confirmo el cambio de mesa.');
+      if (!response?.ok) return setError(response?.message || 'No se pudo abrir la mesa elegida.');
+      refreshPlayerSessions();
+    });
+  };
+
+  const leaveSessionToDashboard = () => {
+    setError('');
+    setSwitchingSession(true);
+    socket?.timeout(7000).emit('game:leave-player-session', (timeoutError, response) => {
+      setSwitchingSession(false);
+      if (timeoutError || !response?.ok) return setError(response?.message || 'No se pudo salir de la mesa.');
+      sessionDashboardRef.current = true;
+      setSession(null);
+      setLoading(false);
+      refreshPlayerSessions();
+    });
   };
 
   const rollDice = (request, done) => {
@@ -209,10 +253,19 @@ export default function GamePlayerPanel() {
         <form className="game-join-card" onSubmit={join}>
           <span className="game-kicker">Sesión compartida</span>
           <DoorOpen size={36} />
-          <h1>Entra a la mesa</h1>
+          <h1>Mis mesas</h1>
           <p>Escribe el código que te dio tu Dungeon Master. Tu personaje asignado se conectará automáticamente.</p>
           <label><span>Código de invitación</span><input value={code} onChange={event => setCode(event.target.value.toUpperCase())} maxLength={8} placeholder="ABC123" autoFocus /></label>
           <div className="game-join-character"><Shield size={17} /><span><small>Entrarás como</small><strong>{character?.name || 'Personaje no asignado'}</strong></span></div>
+          <div className="game-player-session-list">
+            {playerSessions.map(item => (
+              <article key={item.id}>
+                <div><span>{item.status === 'LIVE' ? 'En vivo' : item.status === 'PAUSED' ? 'Pausada' : 'Sala de espera'}</span><strong>{item.title || 'Mesa sin nombre'}</strong><small>Codigo {item.code}</small></div>
+                <button type="button" disabled={switchingSession} onClick={() => openPlayerSession(item.id)}>{switchingSession ? 'Abriendo...' : 'Entrar'}</button>
+              </article>
+            ))}
+            {!!playerSessions.length && <p className="game-player-session-divider">o unete a otra mesa</p>}
+          </div>
           <button disabled={!code.trim() || !character}>Unirme a la partida</button>
           {error && <small className="game-error">{error}</small>}
         </form>
@@ -228,6 +281,7 @@ export default function GamePlayerPanel() {
     return (
       <div className="game-waiting-shell">
         <header><span className="game-kicker">Sala de espera</span><h1>{session.title}</h1><p>Código {session.code}</p></header>
+        <button className="game-player-dashboard-button" disabled={switchingSession} onClick={leaveSessionToDashboard}><DoorOpen size={14} /> Mis mesas</button>
         <div className="game-waiting-card">
           <div className="game-waiting-emblem"><Swords size={30} /></div>
           <h2>La aventura está por comenzar</h2>
@@ -262,6 +316,7 @@ export default function GamePlayerPanel() {
         <div className={`game-player-turn${isMyTurn ? ' is-mine' : ''}`}><span>{isMyTurn ? 'Tu turno' : 'Turno actual'}</span><strong>{isMyTurn ? character?.name : activeParticipant?.character?.name || 'DM'}</strong></div>
         {session.status === 'PAUSED' && <div className="game-paused-badge"><Pause size={13} /> Partida pausada</div>}
         <div className="game-player-presence"><Users size={14} />{session.participants.filter(item => item.connected).length} conectados</div>
+        <button className="game-player-dashboard-button" disabled={switchingSession} onClick={leaveSessionToDashboard}><DoorOpen size={14} /> Mis mesas</button>
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
