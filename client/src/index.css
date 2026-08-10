@@ -3813,7 +3813,8 @@ a:focus-visible {
 }
 .game-board-vfx { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .game-vfx-fallback-layer { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
-.game-vfx-fallback { width: var(--fallback-size, 38px); height: var(--fallback-size, 38px); position: absolute; display: grid; place-items: center; opacity: var(--fallback-opacity, .72); border: 1px dashed currentColor; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, currentColor 22%, #07100c), rgba(4, 8, 6, .78) 68%); box-shadow: 0 4px 11px rgba(0, 0, 0, .62), inset 0 0 12px color-mix(in srgb, currentColor 18%, transparent); transform: translate(-50%, -50%); }
+.game-vfx-fallback { width: var(--fallback-size, 153px); height: var(--fallback-size, 153px); position: absolute; display: grid; place-items: center; opacity: var(--fallback-opacity, .68); border: 1px dashed currentColor; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, currentColor 18%, transparent) 0%, color-mix(in srgb, currentColor 8%, transparent) 48%, transparent 72%); box-shadow: inset 0 0 24px color-mix(in srgb, currentColor 8%, transparent); transform: translate(-50%, -50%); transition: width 120ms ease, height 120ms ease, opacity 120ms ease; }
+.game-vfx-fallback > svg { box-sizing: content-box; padding: 6px; border: 1px solid currentColor; border-radius: 50%; background: rgba(5, 10, 8, .88); box-shadow: 0 4px 11px rgba(0, 0, 0, .62); }
 .game-vfx-fallback.is-fire { color: #df7040; }
 .game-vfx-fallback.is-ice { color: #7ccce4; }
 .game-vfx-fallback.is-acid { color: #9ac94d; }

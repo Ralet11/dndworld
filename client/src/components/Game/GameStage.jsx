@@ -771,7 +771,7 @@ export default function GameStage({
               <span
                 key={effect.id}
                 className={`game-vfx-fallback is-${effect.type}`}
-                style={{ left: `${x}%`, top: `${y}%`, '--fallback-size': `${Math.max(30, Math.min(58, (Number(effect.size) || 170) * .25))}px`, '--fallback-opacity': Math.max(.55, Math.min(.9, Number(effect.intensity) || 1)) }}
+                style={{ left: `${x}%`, top: `${y}%`, '--fallback-size': `${Math.max(60, Math.min(360, (Number(effect.size) || 170) * .9))}px`, '--fallback-opacity': Math.max(.48, Math.min(.82, (Number(effect.intensity) || 1) * .72)) }}
                 title={`${effect.type} (FX desactivados)`}
               >
                 {effect.type === 'fire' ? <Flame size={15} /> : effect.type === 'ice' ? <Snowflake size={15} /> : <FlaskConical size={15} />}
