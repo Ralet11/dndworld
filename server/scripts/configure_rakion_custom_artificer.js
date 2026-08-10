@@ -79,22 +79,27 @@ const FEATURES = [
     },
     {
         name: 'Escupefuego · Munición normal', kind: 'Accion', resource: '1 bala',
+        consumes_tracker: { key: 'escupefuego-cargador', amount: 1 },
         description: 'Un disparo con DES + competencia a un objetivo dentro de 60 pies. Daño: 1d8 + DES.',
     },
     {
         name: 'Escupefuego · Munición rúnica', kind: 'Accion', resource: '1 bala rúnica',
+        consumes_tracker: { key: 'escupefuego-cargador', amount: 1 },
         description: 'Un disparo con DES + competencia. Daño: 1d8 + DES y el efecto definido de la runa utilizada.',
     },
     {
         name: 'Escupefuego · Munición rúnica II', kind: 'Accion', resource: '1 bala rúnica II',
+        consumes_tracker: { key: 'escupefuego-cargador', amount: 1 },
         description: 'Un disparo con DES + competencia. Daño: 1d8 + 1d4 + DES y el efecto definido de la runa utilizada.',
     },
     {
         name: 'Escupefuego · Munición de brumante', kind: 'Accion', resource: '1 bala de brumante',
+        consumes_tracker: { key: 'escupefuego-cargador', amount: 1 },
         description: 'Un disparo con DES + competencia. Daño: 2d8 + DES.',
     },
     {
         name: 'Recargar Escupefuego', kind: 'Accion', resource: 'Cargador de 6',
+        refills_tracker: { key: 'escupefuego-cargador' },
         description: 'Consumís una Acción completa para insertar un cartucho y dejar el cargador con 6 balas.',
     },
     {
@@ -107,6 +112,7 @@ const FEATURES = [
     },
     {
         name: 'Granada explosiva', kind: 'Bonus', resource: 'Máximo 2 construidas',
+        consumes_tracker: { key: 'granadas-construidas', amount: 1 },
         description: 'Lanzás una granada como Acción bonus. Explota en un círculo de 20 pies y causa 2d8 de daño. Rakion no puede tener más de 2 granadas construidas simultáneamente.',
     },
     {
@@ -123,14 +129,9 @@ const FEATURES = [
         description: 'Granadas explosivas disponibles antes de construir más.',
         tracker: { key: 'granadas-construidas', label: 'Granadas', value: 2, max: 2, unit: 'granadas' },
     },
-    {
-        name: 'Rastreador de planos', kind: 'Rastreador',
-        description: 'Espacios de planos conocidos del artificiero custom.',
-        tracker: { key: 'planos-conocidos', label: 'Planos', value: 3, max: 4, unit: 'planos' },
-    },
 ];
 
-const FEATURE_NAMES = new Set(FEATURES.map(feature => feature.name.toLocaleLowerCase('es')));
+const FEATURE_NAMES = new Set([...FEATURES.map(feature => feature.name.toLocaleLowerCase('es')), 'rastreador de planos']);
 
 function mergeFeatures(previous) {
     const preserved = (Array.isArray(previous) ? previous : [])

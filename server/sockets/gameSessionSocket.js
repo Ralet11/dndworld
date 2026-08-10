@@ -1543,6 +1543,18 @@ function registerGameSessionSocket(io, socket) {
                 combatState.resources[resourceKey] = used + 1;
             }
 
+            if (action.trackerCost?.key) {
+                const tracker = customTrackers(catalog.character, session).find(item => item.key === action.trackerCost.key);
+                const amount = Math.max(1, Number(action.trackerCost.amount) || 1);
+                if (!tracker || tracker.value < amount) return reply({ ok: false, message: `No quedan ${tracker?.label || 'recursos'} suficientes.` });
+                combatState.resources[`${actorCharacterId}:tracker:${tracker.key}`] = tracker.value - amount;
+            }
+            if (action.trackerRefill?.key) {
+                const tracker = customTrackers(catalog.character, session).find(item => item.key === action.trackerRefill.key);
+                if (!tracker) return reply({ ok: false, message: 'No se encontró el cargador a recargar.' });
+                combatState.resources[`${actorCharacterId}:tracker:${tracker.key}`] = tracker.max;
+            }
+
             if (action.economy === 'reaction') combatState.reactions[actorCharacterId] = true;
             else combatState.used[action.economy] = true;
             session.combat_state = combatState;

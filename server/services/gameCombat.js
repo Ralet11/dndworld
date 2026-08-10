@@ -294,6 +294,8 @@ function customFeatureProfiles(character) {
             secondaryHealing,
             healing: override.healing || null,
             damageType: override.damage_type || override.damageType || inferredDamageType,
+            trackerCost: override.consumes_tracker || override.consumesTracker || feature.consumes_tracker || null,
+            trackerRefill: override.refills_tracker || override.refillsTracker || feature.refills_tracker || null,
             resource: override.max_uses
                 ? { type: 'session-use', key: override.key || sharedResourceKey, max: override.max_uses, recovery: override.recovery || null }
                 : formulaResource ? { type: 'session-use', key: sharedResourceKey, ...formulaResource }
