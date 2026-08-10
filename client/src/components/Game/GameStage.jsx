@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Circle, Copy, Equal, Eraser, FlaskConical, Flame, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Snowflake, Sparkles, Square, Trash2, Type, X } from 'lucide-react';
+import { Check, Circle, Copy, Equal, Eraser, Eye, EyeOff, FlaskConical, Flame, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Snowflake, Sparkles, Square, Trash2, Type, X } from 'lucide-react';
 import API_URL from '../../config';
 import DiceRollOverlay from './DiceRollOverlay';
 import GameBoardVfx from './GameBoardVfx';
@@ -116,6 +116,13 @@ export default function GameStage({
   const [vfxShape, setVfxShape] = useState('point');
   const [vfxLoop, setVfxLoop] = useState(true);
   const [vfxDuration, setVfxDuration] = useState(8);
+  const [vfxEnabled, setVfxEnabled] = useState(() => {
+    try {
+      return window.localStorage.getItem(`dndworld:board-vfx:${userId || 'guest'}`) !== 'off';
+    } catch {
+      return true;
+    }
+  });
   const [draftVfxShape, setDraftVfxShape] = useState(null);
   const [selectedVfxId, setSelectedVfxId] = useState(null);
   const [selectedVfxDraft, setSelectedVfxDraft] = useState(null);
@@ -145,6 +152,14 @@ export default function GameStage({
   const renderedStageVfx = selectedVfx && selectedVfxDraft
     ? stageVfx.map(item => item.id === selectedVfx.id ? { ...item, ...selectedVfxDraft } : item)
     : stageVfx;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`dndworld:board-vfx:${userId || 'guest'}`, vfxEnabled ? 'on' : 'off');
+    } catch {
+      // Local storage can be unavailable in hardened/private browser modes.
+    }
+  }, [userId, vfxEnabled]);
   const latestSceneNpcsRef = useRef(sceneNpcs);
   const renderedSceneNpcsRef = useRef(sceneNpcs);
   const sceneNpcExitTimersRef = useRef(new Map());
@@ -745,7 +760,39 @@ export default function GameStage({
         </div>
       )}
 
-      <GameBoardVfx effects={renderedStageVfx} />
+      <GameBoardVfx effects={vfxEnabled ? renderedStageVfx : []} />
+      {!vfxEnabled && !!renderedStageVfx.length && (
+        <div className="game-vfx-fallback-layer" aria-label="Indicadores tácticos de efectos">
+          {renderedStageVfx.map(effect => {
+            const useMidpoint = effect.shape === 'line' || effect.shape === 'square';
+            const x = useMidpoint ? (Number(effect.x) + Number(effect.end_x ?? effect.x)) / 2 : Number(effect.x);
+            const y = useMidpoint ? (Number(effect.y) + Number(effect.end_y ?? effect.y)) / 2 : Number(effect.y);
+            return (
+              <span
+                key={effect.id}
+                className={`game-vfx-fallback is-${effect.type}`}
+                style={{ left: `${x}%`, top: `${y}%`, '--fallback-size': `${Math.max(30, Math.min(58, (Number(effect.size) || 170) * .25))}px`, '--fallback-opacity': Math.max(.55, Math.min(.9, Number(effect.intensity) || 1)) }}
+                title={`${effect.type} (FX desactivados)`}
+              >
+                {effect.type === 'fire' ? <Flame size={15} /> : effect.type === 'ice' ? <Snowflake size={15} /> : <FlaskConical size={15} />}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {!isDm && (
+        <button
+          type="button"
+          className={`game-vfx-visibility-toggle${vfxEnabled ? ' is-enabled' : ''}`}
+          title={vfxEnabled ? 'Desactivar efectos animados' : 'Activar efectos animados'}
+          aria-pressed={vfxEnabled}
+          onPointerDown={event => event.stopPropagation()}
+          onClick={event => { event.stopPropagation(); setVfxEnabled(current => !current); }}
+        >
+          {vfxEnabled ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>FX {vfxEnabled ? 'ON' : 'OFF'}</span>
+        </button>
+      )}
       {draftVfxShape && (
         <svg className={`game-vfx-shape-preview is-${draftVfxShape.effectType}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {draftVfxShape.shape === 'line' && <line x1={draftVfxShape.start.x} y1={draftVfxShape.start.y} x2={draftVfxShape.current.x} y2={draftVfxShape.current.y} />}
@@ -1036,6 +1083,7 @@ export default function GameStage({
                   <button className={annotationTool === 'vfx-ice' ? 'is-active is-ice' : ''} onClick={() => { setAnnotationTool('vfx-ice'); setSelectedVfxId(null); }} title="Colocar hielo"><Snowflake size={13} /><span>Hielo</span></button>
                   <button className={annotationTool === 'vfx-acid' ? 'is-active is-acid' : ''} onClick={() => { setAnnotationTool('vfx-acid'); setSelectedVfxId(null); }} title="Colocar ácido"><FlaskConical size={13} /><span>Ácido</span></button>
                   <button className={annotationTool === 'vfx-manage' ? 'is-active' : ''} onClick={() => setAnnotationTool('vfx-manage')} title="Mover o eliminar efectos"><Sparkles size={13} /><span>Editar</span></button>
+                  <button className={vfxEnabled ? 'is-active' : ''} onClick={() => setVfxEnabled(current => !current)} title={vfxEnabled ? 'Desactivar animaciones VFX' : 'Activar animaciones VFX'}>{vfxEnabled ? <Eye size={13} /> : <EyeOff size={13} />}<span>FX {vfxEnabled ? 'ON' : 'OFF'}</span></button>
                 </div>
                 {VFX_TOOLS.has(annotationTool) && (
                   <>

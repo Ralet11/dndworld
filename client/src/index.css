@@ -3812,6 +3812,14 @@ a:focus-visible {
   background-size: 48px 48px;
 }
 .game-board-vfx { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.game-vfx-fallback-layer { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+.game-vfx-fallback { width: var(--fallback-size, 38px); height: var(--fallback-size, 38px); position: absolute; display: grid; place-items: center; opacity: var(--fallback-opacity, .72); border: 1px dashed currentColor; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, currentColor 22%, #07100c), rgba(4, 8, 6, .78) 68%); box-shadow: 0 4px 11px rgba(0, 0, 0, .62), inset 0 0 12px color-mix(in srgb, currentColor 18%, transparent); transform: translate(-50%, -50%); }
+.game-vfx-fallback.is-fire { color: #df7040; }
+.game-vfx-fallback.is-ice { color: #7ccce4; }
+.game-vfx-fallback.is-acid { color: #9ac94d; }
+.game-vfx-visibility-toggle { min-width: 62px; height: 27px; position: absolute; top: 10px; left: 10px; z-index: 9; padding: 0 7px; display: flex; align-items: center; justify-content: center; gap: 5px; color: #8d9790; border: 1px solid #3a4740; background: rgba(5, 11, 8, .94); box-shadow: 0 5px 14px rgba(0, 0, 0, .55); font-size: 7px; font-weight: 900; letter-spacing: .06em; }
+.game-vfx-visibility-toggle:hover { color: #d7c38f; border-color: #776039; }
+.game-vfx-visibility-toggle.is-enabled { color: #d9be75; border-color: #6e5832; background: rgba(27, 23, 12, .94); }
 .game-vfx-shape-preview { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 6; overflow: visible; pointer-events: none; }
 .game-vfx-shape-preview line,
 .game-vfx-shape-preview rect,
