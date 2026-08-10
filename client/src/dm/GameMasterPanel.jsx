@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
@@ -57,6 +57,7 @@ export default function GameMasterPanel() {
   const [sessionResolved, setSessionResolved] = useState(false);
   const [hostedSessions, setHostedSessions] = useState([]);
   const [switchingSession, setSwitchingSession] = useState(false);
+  const sessionDashboardRef = useRef(false);
   const [players, setPlayers] = useState([]);
   const [scenes, setScenes] = useState([]);
   const [npcs, setNpcs] = useState([]);
@@ -187,7 +188,8 @@ export default function GameMasterPanel() {
 
     const syncGame = () => {
       setSessionResolved(false);
-      socket.emit('game:get-current');
+      if (!sessionDashboardRef.current) socket.emit('game:get-current');
+      else setSessionResolved(true);
       socket.timeout(5000).emit('game:list-hosted', (timeoutError, response) => {
         if (!timeoutError && response?.ok) setHostedSessions(Array.isArray(response.sessions) ? response.sessions : []);
       });
@@ -315,6 +317,7 @@ export default function GameMasterPanel() {
     }
     setError('');
     setCreatingSession(true);
+    sessionDashboardRef.current = false;
     socket.timeout(7000).emit('game:create', { title: forceNew ? `${title} - prueba` : title, forceNew }, (timeoutError, response) => {
       setCreatingSession(false);
       if (timeoutError) {
@@ -330,10 +333,24 @@ export default function GameMasterPanel() {
     if (!sessionId || Number(sessionId) === Number(session?.id) || switchingSession) return;
     setError('');
     setSwitchingSession(true);
+    sessionDashboardRef.current = false;
     socket?.timeout(7000).emit('game:open-hosted', { sessionId }, (timeoutError, response) => {
       setSwitchingSession(false);
       if (timeoutError) return setError('El servidor no confirmo el cambio de mesa.');
       if (!response?.ok) return setError(response?.message || 'No se pudo abrir la mesa elegida.');
+      refreshHostedSessions();
+    });
+  };
+
+  const leaveSessionToDashboard = () => {
+    setError('');
+    setSwitchingSession(true);
+    socket?.timeout(7000).emit('game:leave-hosted', (timeoutError, response) => {
+      setSwitchingSession(false);
+      if (timeoutError || !response?.ok) return setError(response?.message || 'No se pudo salir de la mesa.');
+      sessionDashboardRef.current = true;
+      setSession(null);
+      setSessionResolved(true);
       refreshHostedSessions();
     });
   };
@@ -507,10 +524,19 @@ export default function GameMasterPanel() {
         <div className="game-launch-card">
           <span className="game-kicker">Mesa virtual</span>
           <Swords size={36} />
-          <h1>Abre la sala de juego</h1>
+          <h1>Mis mesas</h1>
           <p>Crea un punto de encuentro para tus jugadores y controla desde aquí todo lo que verán durante la sesión.</p>
-          <label><span>Nombre de la partida</span><input value={title} onChange={event => setTitle(event.target.value)} /></label>
-          <button disabled={creatingSession || !connected} onClick={() => createSession()}>
+          <div className="game-dashboard-list">
+            {hostedSessions.map(item => (
+              <article key={item.id}>
+                <div><span>{item.status === 'LIVE' ? 'En vivo' : item.status === 'PAUSED' ? 'Pausada' : 'Sala de espera'}</span><h2>{item.title || 'Mesa sin nombre'}</h2><small>Codigo {item.code} · Ronda {item.round || 0}</small></div>
+                <button disabled={switchingSession} onClick={() => openHostedSession(item.id)}>{switchingSession ? 'Abriendo...' : 'Abrir mesa'}</button>
+              </article>
+            ))}
+            {!hostedSessions.length && <div className="game-dashboard-empty">Todavia no tienes mesas activas. Crea la primera para comenzar.</div>}
+          </div>
+          <label><span>Nombre de la nueva mesa</span><input value={title} onChange={event => setTitle(event.target.value)} /></label>
+          <button disabled={creatingSession || !connected} onClick={() => createSession(true)}>
             {creatingSession ? <i className="game-button-spinner" /> : <Plus size={16} />}
             {creatingSession ? 'Creando sala...' : connected ? 'Crear sala' : 'Conectando...'}
           </button>
@@ -603,6 +629,7 @@ export default function GameMasterPanel() {
             <button className="is-danger" onClick={() => window.confirm('¿Finalizar esta partida?') && emit('game:set-status', { sessionId: session.id, status: 'FINISHED' })}>Finalizar</button>
           </div>
         )}
+        <button className="game-return-dashboard" disabled={switchingSession} onClick={leaveSessionToDashboard}><MapIcon size={14} /> Mis mesas</button>
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
@@ -833,7 +860,7 @@ export default function GameMasterPanel() {
             {rightTab === 'session' && (
               <div className="game-console-section">
                 <div className="game-console-heading"><div><span>Control de sesión</span><h2>Sala del director</h2></div><Settings2 size={17} /></div>
-                <div className="game-session-manager">
+                <div className="game-session-manager is-hidden">
                   <label>
                     <span>Mesas activas</span>
                     <select value={session.id} disabled={switchingSession} onChange={event => openHostedSession(event.target.value)}>

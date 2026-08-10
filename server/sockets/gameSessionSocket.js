@@ -558,6 +558,25 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
+    socket.on('game:leave-hosted', async (reply = () => {}) => {
+        try {
+            if (!isDm(socket)) return reply({ ok: false, message: 'Solo el DM puede salir desde este panel.' });
+            const sessionId = socket.gameSessionId;
+            if (sessionId) {
+                const session = await requireHostedSession(socket, sessionId);
+                if (!session) return reply({ ok: false, message: 'No tienes permiso para salir de esta mesa.' });
+                removePresence(sessionId, socket.user.id, socket.id);
+                socket.leave(roomName(sessionId));
+                socket.gameSessionId = null;
+                await broadcastSession(io, sessionId);
+            }
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:leave-hosted error:', error);
+            reply({ ok: false, message: 'No se pudo salir de la mesa.' });
+        }
+    });
+
     socket.on('game:create', async ({ title, forceNew = false } = {}, reply = () => {}) => {
         try {
             if (!isDm(socket)) {
