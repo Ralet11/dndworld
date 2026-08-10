@@ -81,6 +81,22 @@ export default function GamePlayerPanel() {
       ...current,
       stage_annotations: (current.stage_annotations || []).filter(item => item.view_key !== viewKey),
     }) : current);
+    const onVfxAdded = ({ effect }) => setSession(current => current && effect ? ({
+      ...current,
+      stage_vfx: [...(current.stage_vfx || []).filter(item => item.id !== effect.id), effect],
+    }) : current);
+    const onVfxUpdated = ({ effect }) => setSession(current => current && effect ? ({
+      ...current,
+      stage_vfx: (current.stage_vfx || []).map(item => item.id === effect.id ? effect : item),
+    }) : current);
+    const onVfxDeleted = ({ effectId, viewKey }) => setSession(current => current ? ({
+      ...current,
+      stage_vfx: (current.stage_vfx || []).filter(item => item.id !== effectId || item.view_key !== viewKey),
+    }) : current);
+    const onVfxCleared = ({ viewKey }) => setSession(current => current ? ({
+      ...current,
+      stage_vfx: (current.stage_vfx || []).filter(item => item.view_key !== viewKey),
+    }) : current);
     const onRollUpsert = roll => setSession(current => current ? ({
       ...current,
       rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)],
@@ -109,6 +125,10 @@ export default function GamePlayerPanel() {
     socket.on('game:annotation-updated', onAnnotationUpdated);
     socket.on('game:annotation-deleted', onAnnotationDeleted);
     socket.on('game:annotations-cleared', onAnnotationsCleared);
+    socket.on('game:vfx-added', onVfxAdded);
+    socket.on('game:vfx-updated', onVfxUpdated);
+    socket.on('game:vfx-deleted', onVfxDeleted);
+    socket.on('game:vfx-cleared', onVfxCleared);
     socket.on('game:roll-upsert', onRollUpsert);
     socket.on('game:roll-dismissing', onRollDismissing);
     socket.on('game:roll-dismissed', onRollDismissed);
@@ -128,6 +148,10 @@ export default function GamePlayerPanel() {
       socket.off('game:annotation-updated', onAnnotationUpdated);
       socket.off('game:annotation-deleted', onAnnotationDeleted);
       socket.off('game:annotations-cleared', onAnnotationsCleared);
+      socket.off('game:vfx-added', onVfxAdded);
+      socket.off('game:vfx-updated', onVfxUpdated);
+      socket.off('game:vfx-deleted', onVfxDeleted);
+      socket.off('game:vfx-cleared', onVfxCleared);
       socket.off('game:roll-upsert', onRollUpsert);
       socket.off('game:roll-dismissing', onRollDismissing);
       socket.off('game:roll-dismissed', onRollDismissed);

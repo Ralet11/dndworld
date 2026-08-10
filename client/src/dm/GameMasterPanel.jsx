@@ -151,6 +151,22 @@ export default function GameMasterPanel() {
       ...current,
       stage_annotations: (current.stage_annotations || []).filter(item => item.view_key !== viewKey),
     }) : current);
+    const onVfxAdded = ({ effect }) => setSession(current => current && effect ? ({
+      ...current,
+      stage_vfx: [...(current.stage_vfx || []).filter(item => item.id !== effect.id), effect],
+    }) : current);
+    const onVfxUpdated = ({ effect }) => setSession(current => current && effect ? ({
+      ...current,
+      stage_vfx: (current.stage_vfx || []).map(item => item.id === effect.id ? effect : item),
+    }) : current);
+    const onVfxDeleted = ({ effectId, viewKey }) => setSession(current => current ? ({
+      ...current,
+      stage_vfx: (current.stage_vfx || []).filter(item => item.id !== effectId || item.view_key !== viewKey),
+    }) : current);
+    const onVfxCleared = ({ viewKey }) => setSession(current => current ? ({
+      ...current,
+      stage_vfx: (current.stage_vfx || []).filter(item => item.view_key !== viewKey),
+    }) : current);
     const onRollUpsert = roll => setSession(current => current ? ({
       ...current,
       rolls: [roll, ...(current.rolls || []).filter(item => item.id !== roll.id)],
@@ -189,6 +205,10 @@ export default function GameMasterPanel() {
     socket.on('game:annotation-updated', onAnnotationUpdated);
     socket.on('game:annotation-deleted', onAnnotationDeleted);
     socket.on('game:annotations-cleared', onAnnotationsCleared);
+    socket.on('game:vfx-added', onVfxAdded);
+    socket.on('game:vfx-updated', onVfxUpdated);
+    socket.on('game:vfx-deleted', onVfxDeleted);
+    socket.on('game:vfx-cleared', onVfxCleared);
     socket.on('game:roll-upsert', onRollUpsert);
     socket.on('game:roll-dismissing', onRollDismissing);
     socket.on('game:roll-dismissed', onRollDismissed);
@@ -211,6 +231,10 @@ export default function GameMasterPanel() {
       socket.off('game:annotation-updated', onAnnotationUpdated);
       socket.off('game:annotation-deleted', onAnnotationDeleted);
       socket.off('game:annotations-cleared', onAnnotationsCleared);
+      socket.off('game:vfx-added', onVfxAdded);
+      socket.off('game:vfx-updated', onVfxUpdated);
+      socket.off('game:vfx-deleted', onVfxDeleted);
+      socket.off('game:vfx-cleared', onVfxCleared);
       socket.off('game:roll-upsert', onRollUpsert);
       socket.off('game:roll-dismissing', onRollDismissing);
       socket.off('game:roll-dismissed', onRollDismissed);
@@ -613,6 +637,10 @@ export default function GameMasterPanel() {
                 onUpdateAnnotation={(annotationId, changes) => emit('game:update-annotation', { sessionId: session.id, annotationId, ...changes })}
                 onDeleteAnnotation={annotationId => emit('game:delete-annotation', { sessionId: session.id, annotationId })}
                 onClearAnnotations={() => emit('game:clear-annotations', { sessionId: session.id })}
+                onAddVfx={effect => emit('game:add-vfx', { sessionId: session.id, effect })}
+                onUpdateVfx={(effectId, changes) => emit('game:update-vfx', { sessionId: session.id, effectId, ...changes })}
+                onDeleteVfx={effectId => emit('game:delete-vfx', { sessionId: session.id, effectId })}
+                onClearVfx={() => emit('game:clear-vfx', { sessionId: session.id })}
                 onDismissRoll={rollId => emit('game:dismiss-roll', { sessionId: session.id, rollId })}
                 onResolveRoll={resolveDiceRoll}
                 toolbarHost={stageToolbarHost}

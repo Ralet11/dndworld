@@ -19,6 +19,7 @@ const { resolveCharacterImage } = require('../utils/npcImages');
 const presence = new Map();
 const rollDismissTimers = new Map();
 const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
+const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 
 function roomName(sessionId) {
     return `game:${sessionId}`;
@@ -166,6 +167,13 @@ async function loadSession(sessionId) {
         ...character,
         image_url: resolveCharacterImage(character),
     })));
+    const now = Date.now();
+    const stageVfx = Array.isArray(session.stage_vfx) ? session.stage_vfx : [];
+    const activeVfx = stageVfx.filter(effect => effect.loop || !effect.expires_at || new Date(effect.expires_at).getTime() > now);
+    if (activeVfx.length !== stageVfx.length) {
+        session.stage_vfx = activeVfx;
+        await session.save();
+    }
     return session;
 }
 
@@ -578,6 +586,86 @@ function registerGameSessionSocket(io, socket) {
         session.stage_annotations = annotations.filter(item => item.view_key !== viewKey);
         await session.save();
         io.to(roomName(session.id)).emit('game:annotations-cleared', { viewKey });
+    });
+
+    socket.on('game:add-vfx', async ({ sessionId, effect } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || session.shared_type === 'NONE' || !effect) return;
+        const type = String(effect.type || '').toLowerCase();
+        if (!BOARD_VFX_TYPES.has(type)) return fail(socket, 'Ese efecto visual no está disponible.');
+        const loop = effect.loop !== false;
+        const duration = Math.max(2, Math.min(60, Number(effect.duration) || 8));
+        const startedAt = new Date();
+        const item = {
+            id: randomUUID(),
+            type,
+            view_key: annotationViewKey(session),
+            x: clamp(effect.x),
+            y: clamp(effect.y),
+            size: Math.max(60, Math.min(360, Number(effect.size) || 170)),
+            intensity: Math.max(0.45, Math.min(1.45, Number(effect.intensity) || 1)),
+            loop,
+            duration,
+            started_at: startedAt.toISOString(),
+            expires_at: loop ? null : new Date(startedAt.getTime() + duration * 1000).toISOString(),
+        };
+        const current = Array.isArray(session.stage_vfx) ? session.stage_vfx : [];
+        session.stage_vfx = [...current.slice(-47), item];
+        await session.save();
+        io.to(roomName(session.id)).emit('game:vfx-added', { effect: item });
+
+        if (!loop) {
+            setTimeout(async () => {
+                try {
+                    const fresh = await GameSession.findByPk(session.id);
+                    if (!fresh) return;
+                    const effects = Array.isArray(fresh.stage_vfx) ? fresh.stage_vfx : [];
+                    if (!effects.some(candidate => candidate.id === item.id)) return;
+                    fresh.stage_vfx = effects.filter(candidate => candidate.id !== item.id);
+                    await fresh.save();
+                    io.to(roomName(session.id)).emit('game:vfx-deleted', { effectId: item.id, viewKey: item.view_key });
+                } catch (error) {
+                    console.error('game:vfx-expiry error:', error);
+                }
+            }, duration * 1000);
+        }
+    });
+
+    socket.on('game:update-vfx', async ({ sessionId, effectId, x, y, size, intensity } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || !effectId) return;
+        const effects = Array.isArray(session.stage_vfx) ? [...session.stage_vfx] : [];
+        const index = effects.findIndex(effect => effect.id === effectId && effect.view_key === annotationViewKey(session));
+        if (index < 0) return;
+        const next = { ...effects[index] };
+        if (x != null) next.x = clamp(x);
+        if (y != null) next.y = clamp(y);
+        if (size != null) next.size = Math.max(60, Math.min(360, Number(size) || next.size));
+        if (intensity != null) next.intensity = Math.max(0.45, Math.min(1.45, Number(intensity) || next.intensity));
+        effects[index] = next;
+        session.stage_vfx = effects;
+        await session.save();
+        io.to(roomName(session.id)).emit('game:vfx-updated', { effect: next });
+    });
+
+    socket.on('game:delete-vfx', async ({ sessionId, effectId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session || !effectId) return;
+        const viewKey = annotationViewKey(session);
+        const effects = Array.isArray(session.stage_vfx) ? session.stage_vfx : [];
+        session.stage_vfx = effects.filter(effect => effect.id !== effectId || effect.view_key !== viewKey);
+        await session.save();
+        io.to(roomName(session.id)).emit('game:vfx-deleted', { effectId, viewKey });
+    });
+
+    socket.on('game:clear-vfx', async ({ sessionId } = {}) => {
+        const session = await requireHostedSession(socket, sessionId);
+        if (!session) return;
+        const viewKey = annotationViewKey(session);
+        const effects = Array.isArray(session.stage_vfx) ? session.stage_vfx : [];
+        session.stage_vfx = effects.filter(effect => effect.view_key !== viewKey);
+        await session.save();
+        io.to(roomName(session.id)).emit('game:vfx-cleared', { viewKey });
     });
 
     socket.on('game:toggle-scene-npc', async ({ sessionId, characterId } = {}) => {
