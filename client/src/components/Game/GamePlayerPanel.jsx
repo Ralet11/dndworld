@@ -224,7 +224,10 @@ export default function GamePlayerPanel() {
   };
 
   const pendingCombatNotice = (session?.combat_actions || []).find(action => {
-    if (Number(action.actor_user_id) !== Number(user.id) || dismissedCombatNotices.includes(String(action.id))) return false;
+    const ownerCharacterId = session?.participants?.find(item => Number(item.user_id) === Number(user.id))?.character_id;
+    const belongsToPlayer = Number(action.actor_user_id) === Number(user.id)
+      || Number(action.actor_character_id) === Number(ownerCharacterId);
+    if (!belongsToPlayer || dismissedCombatNotices.includes(String(action.id))) return false;
     return action.status === 'DAMAGE_READY' || (action.status === 'COMPLETED' && action.attack && action.attack.hit === false);
   });
 
