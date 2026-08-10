@@ -1,9 +1,10 @@
 const { Op } = require('sequelize');
-const { randomUUID } = require('crypto');
+const { randomInt, randomUUID } = require('crypto');
 const {
     AbilityScore,
     AudioTrack,
     Character,
+    GameCombatAction,
     GameAsset,
     GameParticipant,
     GameRoll,
@@ -15,6 +16,14 @@ const {
     User,
 } = require('../models');
 const { resolveCharacterImage } = require('../utils/npcImages');
+const {
+    abilityModifier,
+    buildActionCatalog,
+    hpAfterDamage,
+    hpAfterHealing,
+    parseDiceExpression,
+    resolveTargetTokens,
+} = require('../services/gameCombat');
 
 const presence = new Map();
 const rollDismissTimers = new Map();
@@ -147,6 +156,17 @@ async function loadSession(sessionId) {
                 separate: true,
                 order: [['createdAt', 'DESC']],
             },
+            {
+                model: GameCombatAction,
+                as: 'combatActions',
+                separate: true,
+                limit: 40,
+                order: [['createdAt', 'DESC']],
+                include: [
+                    { model: User, as: 'actor', attributes: ['id', 'username'] },
+                    { model: Character, as: 'actorCharacter', attributes: ['id', 'name', 'image_url', 'rendered_url', 'base_body_url'] },
+                ],
+            },
         ],
     });
     if (!session) return null;
@@ -215,6 +235,19 @@ function serializeSession(session, viewer) {
     });
     payload.dm_connected = Boolean(onlineUsers?.get(payload.dm_user_id)?.size);
     payload.active_character_id = payload.turn_order?.[payload.turn_index] ?? null;
+    payload.combat_actions = (payload.combatActions || []).map(action => ({
+        id: action.id,
+        actor_character_id: action.actor_character_id,
+        actor_name: action.actorCharacter?.name || action.actor?.username || 'Combatiente',
+        actor_image: resolveCharacterImage(action.actorCharacter),
+        action_name: action.action_name,
+        status: action.status,
+        targets: action.result?.targets || [],
+        summary: action.result?.summary || null,
+        undone_at: action.undone_at,
+        createdAt: action.createdAt,
+    }));
+    delete payload.combatActions;
     payload.server_now = new Date().toISOString();
     return payload;
 }
@@ -262,6 +295,203 @@ async function enterRoom(io, socket, sessionId) {
 async function requireHostedSession(socket, sessionId) {
     if (!isDm(socket)) return null;
     return GameSession.findOne({ where: { id: sessionId, dm_user_id: socket.user.id } });
+}
+
+async function hasPendingCombatAction(sessionId) {
+    return Boolean(await GameCombatAction.findOne({
+        where: { session_id: sessionId, status: { [Op.in]: ['PENDING', 'ATTACK_ROLL', 'EFFECT_ROLL'] } },
+        attributes: ['id'],
+    }));
+}
+
+function currentCombatState(session, actorCharacterId) {
+    const current = session.combat_state && typeof session.combat_state === 'object' ? session.combat_state : {};
+    const resources = { ...(current.resources || {}) };
+    if (Number(current.round) !== Number(session.round)
+        || Number(current.turnIndex) !== Number(session.turn_index)
+        || Number(current.actorCharacterId) !== Number(actorCharacterId)) {
+        return { round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources };
+    }
+    return { ...current, used: { ...(current.used || {}) }, resources };
+}
+
+function resourceAvailability(action, character, session) {
+    if (action.resource?.type === 'spell-slot') {
+        const minimumLevel = Number(action.resource.level) || 1;
+        const slots = character.spell_slots || {};
+        const availableLevel = Object.keys(slots)
+            .map(Number)
+            .filter(level => level >= minimumLevel && Number(slots[level]?.used || 0) < Number(slots[level]?.max || 0))
+            .sort((left, right) => left - right)[0];
+        return availableLevel ? { available: true, slotLevel: availableLevel } : { available: false, reason: `No quedan espacios de nivel ${minimumLevel} o superior.` };
+    }
+    if (action.resource?.type === 'feature-use') {
+        const remaining = Number(action.resource.max) - Number(action.resource.used || 0);
+        return remaining > 0 ? { available: true } : { available: false, reason: 'No quedan usos disponibles.' };
+    }
+    if (action.resource?.type === 'session-use') {
+        const state = currentCombatState(session, character.id);
+        const used = Number(state.resources?.[`${character.id}:${action.resource.key}`] || 0);
+        return used < Number(action.resource.max) ? { available: true, used } : { available: false, used, reason: 'No quedan usos disponibles.' };
+    }
+    return { available: true };
+}
+
+function decorateActions(actions, character, session) {
+    const state = currentCombatState(session, character.id);
+    return actions.map(action => {
+        const resource = resourceAvailability(action, character, session);
+        const economyUsed = Boolean(state.used?.[action.economy]);
+        return {
+            ...action,
+            available: resource.available && !economyUsed && session.status === 'LIVE',
+            unavailableReason: session.status !== 'LIVE'
+                ? 'La partida debe estar en vivo.'
+                : economyUsed
+                    ? `Ya usaste tu ${action.economy === 'bonus' ? 'acción bonus' : action.economy === 'reaction' ? 'reacción' : 'acción'} este turno.`
+                    : resource.reason || null,
+            selectedSlotLevel: resource.slotLevel || null,
+        };
+    });
+}
+
+async function createCombatRoll(io, session, actorUserId, character, request) {
+    const roll = await GameRoll.create({
+        session_id: session.id,
+        user_id: actorUserId,
+        character_id: character.id,
+        roller_name: character.name,
+        character_name: character.name,
+        character_image: resolveCharacterImage(character),
+        label: String(request.label || 'Acción de combate').slice(0, 120),
+        sides: request.sides,
+        quantity: request.quantity,
+        modifier: request.modifier || 0,
+        theme_color: request.themeColor || '#c89b43',
+        results: [],
+        total: request.modifier || 0,
+        resolved: false,
+    });
+    io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
+    return roll;
+}
+
+function savingThrowBonus(character, ability) {
+    const base = abilityModifier(character, ability);
+    const configured = character.saving_throws?.[ability]
+        ?? character.saving_throws?.[ability?.toLowerCase?.()]
+        ?? character.saving_throws?.[ability?.toUpperCase?.()];
+    if (Number.isFinite(Number(configured)) && typeof configured !== 'boolean') return Number(configured);
+    const proficiency = Number(character.proficiency_bonus) || (2 + Math.floor((Math.max(1, Number(character.level) || 1) - 1) / 4));
+    return base + (configured ? proficiency : 0);
+}
+
+async function finalizeCombatAction(io, combatAction, roll) {
+    const session = await loadSession(combatAction.session_id);
+    if (!session) return;
+    const action = combatAction.action_snapshot || {};
+    const actorToken = session.tokens.find(token => Number(token.character_id) === Number(combatAction.actor_character_id));
+    const targets = session.tokens.filter(token => (combatAction.target_token_ids || []).map(String).includes(String(token.id)));
+    if (!actorToken || !targets.length) {
+        combatAction.status = 'FAILED';
+        combatAction.result = { summary: 'La acción no pudo completarse porque ya no están sus objetivos.' };
+        await combatAction.save();
+        return broadcastSession(io, session.id);
+    }
+
+    const previousResult = combatAction.result || {};
+    if (String(combatAction.attack_roll_id) === String(roll.id)) {
+        const target = targets[0];
+        const natural = Number(roll.results?.[0]);
+        const hit = natural === 20 || (natural !== 1 && Number(roll.total) >= Number(target.character?.ac_base || 10));
+        combatAction.result = {
+            ...previousResult,
+            attack: { total: roll.total, natural, targetAc: Number(target.character?.ac_base || 10), hit, critical: natural === 20 },
+        };
+        if (!hit) {
+            combatAction.status = 'COMPLETED';
+            combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'miss' }], summary: `${combatAction.action_name}: falla contra ${target.label}.` };
+            await combatAction.save();
+            return broadcastSession(io, session.id);
+        }
+
+        const expression = parseDiceExpression(action.damage || action.healing);
+        if (!expression) {
+            combatAction.status = 'COMPLETED';
+            combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'hit' }], summary: `${combatAction.action_name}: impacta a ${target.label}.` };
+            await combatAction.save();
+            return broadcastSession(io, session.id);
+        }
+        const effectRoll = await createCombatRoll(io, session, combatAction.actor_user_id, actorToken.character, {
+            ...expression,
+            quantity: combatAction.result.attack.critical && action.damage ? expression.quantity * 2 : expression.quantity,
+            label: `${combatAction.action_name} · ${action.healing ? 'curación' : 'daño'}`,
+        });
+        combatAction.effect_roll_id = effectRoll.id;
+        combatAction.status = 'EFFECT_ROLL';
+        await combatAction.save();
+        return broadcastSession(io, session.id);
+    }
+
+    if (String(combatAction.effect_roll_id) !== String(roll.id)) return;
+    const outcomes = [];
+    const criticalMultiplier = combatAction.result?.attack?.critical ? 2 : 1;
+    const extraRolls = (action.extraDamage || []).flatMap(expression => {
+        const parsed = parseDiceExpression(expression);
+        if (!parsed) return [];
+        const results = Array.from({ length: parsed.quantity * criticalMultiplier }, () => randomInt(1, parsed.sides + 1));
+        return [{ expression, results, total: results.reduce((sum, value) => sum + value, 0) + parsed.modifier }];
+    });
+    const totalEffect = (Number(roll.total) || 0) + extraRolls.reduce((sum, item) => sum + item.total, 0);
+    for (const target of targets) {
+        const character = target.character;
+        if (!character) continue;
+        let amount = totalEffect;
+        let save = null;
+        if (action.saveAbility && action.saveDc) {
+            const natural = randomInt(1, 21);
+            const bonus = savingThrowBonus(character, action.saveAbility);
+            const total = natural + bonus;
+            const success = total >= Number(action.saveDc);
+            save = { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success };
+            if (success) amount = action.halfOnSave ? Math.floor(amount / 2) : 0;
+        }
+
+        if (action.healing) {
+            const next = hpAfterHealing(character, amount);
+            character.hp_current = next.hp_current;
+            character.hp_temp = next.hp_temp;
+            await character.save();
+            outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: 'healed', amount: next.amount, save });
+        } else {
+            const next = hpAfterDamage(character, amount, action.damageType);
+            character.hp_current = next.hp_current;
+            character.hp_temp = next.hp_temp;
+            await character.save();
+            outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: amount > 0 ? 'damaged' : 'saved', amount: next.amount, absorbed: next.absorbed, mitigation: next.modifier, save });
+        }
+        io.to(roomName(session.id)).emit('game:token-hp-updated', {
+            tokenId: target.id,
+            characterId: character.id,
+            hpCurrent: character.hp_current,
+            hpMax: character.hp_max,
+            hpTemp: character.hp_temp,
+        });
+    }
+    const affected = outcomes.filter(item => item.amount > 0).length;
+    combatAction.status = 'COMPLETED';
+    combatAction.result = {
+        ...previousResult,
+        ...(combatAction.result || {}),
+        effectRoll: { total: roll.total, results: roll.results },
+        extraRolls,
+        targets: outcomes,
+        summary: action.healing
+            ? `${combatAction.action_name}: ${totalEffect} PG, ${affected} objetivo${affected === 1 ? '' : 's'} curado${affected === 1 ? '' : 's'}.`
+            : `${combatAction.action_name}: ${totalEffect} de ${action.damageType || 'daño'}, ${affected} objetivo${affected === 1 ? '' : 's'} afectado${affected === 1 ? '' : 's'}.`,
+    };
+    await combatAction.save();
+    await broadcastSession(io, session.id);
 }
 
 function registerGameSessionSocket(io, socket) {
@@ -373,6 +603,8 @@ function registerGameSessionSocket(io, socket) {
                 ].filter(Boolean))];
                 session.turn_index = 0;
                 session.round = 1;
+                session.combat_state = { resources: {} };
+                session.changed('combat_state', true);
             }
             session.status = status;
             await session.save();
@@ -756,6 +988,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:next-turn', async ({ sessionId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !session.turn_order?.length) return;
+        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
         const nextIndex = session.turn_index + 1;
         if (nextIndex >= session.turn_order.length) {
             session.turn_index = 0;
@@ -763,6 +996,8 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index = nextIndex;
         }
+        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) } };
+        session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
             round: session.round,
@@ -775,12 +1010,15 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:previous-turn', async ({ sessionId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !session.turn_order?.length) return;
+        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
         if (session.turn_index <= 0) {
             session.turn_index = session.turn_order.length - 1;
             session.round = Math.max(1, session.round - 1);
         } else {
             session.turn_index -= 1;
         }
+        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) } };
+        session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
             round: session.round,
@@ -793,6 +1031,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:set-turn', async ({ sessionId, characterId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
+        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
         const normalizedId = Number(characterId);
         let turnIndex = session.turn_order.map(Number).indexOf(normalizedId);
         if (turnIndex < 0) {
@@ -805,6 +1044,8 @@ function registerGameSessionSocket(io, socket) {
             turnIndex = session.turn_order.length - 1;
         }
         session.turn_index = turnIndex;
+        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) } };
+        session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
             round: session.round,
@@ -1056,6 +1297,269 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, session.id);
     });
 
+    socket.on('game:get-actions', async ({ sessionId } = {}, reply = () => {}) => {
+        try {
+            const session = await GameSession.findByPk(sessionId);
+            if (!session) return reply({ ok: false, message: 'La mesa ya no está disponible.' });
+            const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
+            const actorCharacterId = isDm(socket)
+                ? Number(session.turn_order?.[session.turn_index])
+                : Number(participant?.character_id);
+            if (!actorCharacterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            const catalog = await buildActionCatalog(actorCharacterId);
+            if (!catalog) return reply({ ok: false, message: 'No se encontró el combatiente activo.' });
+            const active = Number(session.turn_order?.[session.turn_index]) === actorCharacterId;
+            const actions = decorateActions(catalog.actions, catalog.character, session).map(action => active ? action : ({ ...action, available: false, unavailableReason: 'Todavía no es tu turno.' }));
+            reply({ ok: true, characterId: actorCharacterId, actions, combatState: currentCombatState(session, actorCharacterId) });
+        } catch (error) {
+            console.error('game:get-actions error:', error);
+            reply({ ok: false, message: 'No se pudieron preparar tus acciones.' });
+        }
+    });
+
+    socket.on('game:begin-action', async ({ sessionId, actionKey, targetTokenIds = [], area = null, slotLevel = null } = {}, reply = () => {}) => {
+        try {
+            const session = await loadSession(sessionId);
+            if (!session || session.status !== 'LIVE') return reply({ ok: false, message: 'La partida no está en vivo.' });
+            const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
+            const activeCharacterId = Number(session.turn_order?.[session.turn_index]);
+            const actorCharacterId = isDm(socket) ? activeCharacterId : Number(participant?.character_id);
+            if (!actorCharacterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            if (actorCharacterId !== activeCharacterId) return reply({ ok: false, message: 'Todavía no es tu turno.' });
+
+            const pending = await GameCombatAction.findOne({
+                where: { session_id: session.id, actor_character_id: actorCharacterId, status: { [Op.in]: ['ATTACK_ROLL', 'EFFECT_ROLL'] } },
+            });
+            if (pending) return reply({ ok: false, message: 'Ya hay una acción esperando el resultado de los dados.' });
+
+            const catalog = await buildActionCatalog(actorCharacterId);
+            if (!catalog) return reply({ ok: false, message: 'No se encontró el combatiente activo.' });
+            const decorated = decorateActions(catalog.actions, catalog.character, session);
+            const action = decorated.find(item => item.key === actionKey);
+            if (!action) return reply({ ok: false, message: 'Esa acción ya no está disponible.' });
+            if (!action.available) return reply({ ok: false, message: action.unavailableReason || 'No puedes usar esa acción ahora.' });
+
+            const actorToken = session.tokens.find(token => token.visible && Number(token.character_id) === actorCharacterId);
+            if (!actorToken) return reply({ ok: false, message: 'Tu personaje necesita un token visible en el tablero.' });
+            const targets = resolveTargetTokens(action, actorToken, session.tokens, targetTokenIds, area);
+            if (!targets.length) return reply({ ok: false, message: String(action.target).startsWith('area-') ? 'El área no contiene objetivos válidos.' : 'Selecciona un objetivo válido.' });
+
+            const beforeState = {
+                actor: {
+                    characterId: catalog.character.id,
+                    spellSlots: JSON.parse(JSON.stringify(catalog.character.spell_slots || {})),
+                    featureActionId: action.resource?.type === 'feature-use' ? action.resource.actionId : null,
+                    featureUsedUses: action.resource?.type === 'feature-use' ? action.resource.used : null,
+                },
+                targets: targets.map(token => ({
+                    tokenId: token.id,
+                    characterId: token.character.id,
+                    hpCurrent: token.character.hp_current,
+                    hpMax: token.character.hp_max,
+                    hpTemp: token.character.hp_temp,
+                })),
+                combatState: JSON.parse(JSON.stringify(session.combat_state || {})),
+            };
+
+            const combatState = currentCombatState(session, actorCharacterId);
+            if (action.resource?.type === 'spell-slot') {
+                const minimum = Number(action.resource.level) || 1;
+                const slots = JSON.parse(JSON.stringify(catalog.character.spell_slots || {}));
+                const selected = Number(slotLevel || action.selectedSlotLevel);
+                const slot = slots[selected] || slots[String(selected)];
+                if (!selected || selected < minimum || !slot || Number(slot.used || 0) >= Number(slot.max || 0)) {
+                    return reply({ ok: false, message: 'Ese espacio de conjuro ya no está disponible.' });
+                }
+                slot.used = Number(slot.used || 0) + 1;
+                catalog.character.spell_slots = slots;
+                catalog.character.changed('spell_slots', true);
+                await catalog.character.save();
+            } else if (action.resource?.type === 'feature-use') {
+                const feature = (catalog.character.npcActions || []).find(item => Number(item.id) === Number(action.resource.actionId));
+                if (!feature || Number(feature.used_uses) >= Number(feature.max_uses)) return reply({ ok: false, message: 'No quedan usos de este rasgo.' });
+                feature.used_uses = Number(feature.used_uses) + 1;
+                await feature.save();
+            } else if (action.resource?.type === 'session-use') {
+                const resourceKey = `${actorCharacterId}:${action.resource.key}`;
+                const used = Number(combatState.resources?.[resourceKey] || 0);
+                if (used >= Number(action.resource.max)) return reply({ ok: false, message: 'No quedan usos de este rasgo.' });
+                combatState.resources[resourceKey] = used + 1;
+            }
+
+            combatState.used[action.economy] = true;
+            session.combat_state = combatState;
+            session.changed('combat_state', true);
+            await session.save();
+
+            const combatAction = await GameCombatAction.create({
+                session_id: session.id,
+                actor_user_id: socket.user.id,
+                actor_character_id: actorCharacterId,
+                action_key: action.key,
+                action_name: action.name,
+                status: 'PENDING',
+                action_snapshot: action,
+                target_token_ids: targets.map(token => token.id),
+                area,
+                before_state: beforeState,
+                result: {},
+            });
+
+            if (action.attackBonus != null) {
+                const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
+                    sides: 20,
+                    quantity: 1,
+                    modifier: Number(action.attackBonus),
+                    label: `${action.name} · ataque`,
+                });
+                combatAction.attack_roll_id = roll.id;
+                combatAction.status = 'ATTACK_ROLL';
+                await combatAction.save();
+            } else {
+                const expression = parseDiceExpression(action.damage || action.healing);
+                if (expression) {
+                    const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
+                        ...expression,
+                        label: `${action.name} · ${action.healing ? 'curación' : 'efecto'}`,
+                    });
+                    combatAction.effect_roll_id = roll.id;
+                    combatAction.status = 'EFFECT_ROLL';
+                    await combatAction.save();
+                } else {
+                    if (action.temporaryHp) {
+                        for (const target of targets) {
+                            target.character.hp_temp = Math.max(Number(target.character.hp_temp) || 0, Number(action.temporaryHp));
+                            await target.character.save();
+                            io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: target.id, characterId: target.character.id, hpCurrent: target.character.hp_current, hpMax: target.character.hp_max, hpTemp: target.character.hp_temp });
+                        }
+                    }
+                    combatAction.status = 'COMPLETED';
+                    combatAction.result = { targets: targets.map(token => ({ tokenId: token.id, name: token.label, outcome: action.temporaryHp ? 'temporary-hp' : 'used', amount: action.temporaryHp || 0 })), summary: action.temporaryHp ? `${action.name}: ${action.temporaryHp} PG temporales.` : `${action.name} fue utilizada.` };
+                    await combatAction.save();
+                }
+            }
+            await broadcastSession(io, session.id);
+            reply({ ok: true, combatActionId: combatAction.id });
+        } catch (error) {
+            console.error('game:begin-action error:', error);
+            reply({ ok: false, message: 'No se pudo iniciar la acción.' });
+        }
+    });
+
+    socket.on('game:undo-action', async ({ sessionId, combatActionId } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'Solo el DM puede deshacer acciones.' });
+            const latest = await GameCombatAction.findOne({
+                where: { session_id: session.id, status: 'COMPLETED', undone_at: null },
+                order: [['createdAt', 'DESC']],
+            });
+            if (!latest || String(latest.id) !== String(combatActionId)) return reply({ ok: false, message: 'Solo se puede deshacer la última acción resuelta.' });
+            const before = latest.before_state || {};
+            for (const target of before.targets || []) {
+                await Character.update({ hp_current: target.hpCurrent, hp_temp: target.hpTemp }, { where: { id: target.characterId } });
+                io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: target.tokenId, characterId: target.characterId, hpCurrent: target.hpCurrent, hpMax: target.hpMax, hpTemp: target.hpTemp });
+            }
+            if (before.actor?.characterId) {
+                await Character.update({ spell_slots: before.actor.spellSlots || {} }, { where: { id: before.actor.characterId } });
+            }
+            if (before.actor?.featureActionId != null) {
+                await NpcAction.update({ used_uses: before.actor.featureUsedUses || 0 }, { where: { id: before.actor.featureActionId } });
+            }
+            session.combat_state = before.combatState || {};
+            session.changed('combat_state', true);
+            await session.save();
+            latest.status = 'UNDONE';
+            latest.undone_at = new Date();
+            latest.result = { ...(latest.result || {}), summary: `${latest.action_name} fue deshecha por el DM.` };
+            await latest.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:undo-action error:', error);
+            reply({ ok: false, message: 'No se pudo deshacer la acción.' });
+        }
+    });
+
+    socket.on('game:cancel-action', async ({ sessionId, combatActionId } = {}, reply = () => {}) => {
+        try {
+            const action = await GameCombatAction.findOne({
+                where: { id: combatActionId, session_id: sessionId, status: { [Op.in]: ['ATTACK_ROLL', 'EFFECT_ROLL', 'PENDING'] } },
+            });
+            if (!action) return reply({ ok: false, message: 'La acción ya no está pendiente.' });
+            const session = await GameSession.findByPk(sessionId);
+            const authorizedDm = isDm(socket) && session?.dm_user_id === socket.user.id;
+            if (!authorizedDm && action.actor_user_id !== socket.user.id) return reply({ ok: false, message: 'No puedes cancelar esa acción.' });
+            const before = action.before_state || {};
+            if (before.actor?.characterId) await Character.update({ spell_slots: before.actor.spellSlots || {} }, { where: { id: before.actor.characterId } });
+            if (before.actor?.featureActionId != null) await NpcAction.update({ used_uses: before.actor.featureUsedUses || 0 }, { where: { id: before.actor.featureActionId } });
+            session.combat_state = before.combatState || {};
+            session.changed('combat_state', true);
+            await session.save();
+            action.status = 'CANCELED';
+            action.result = { ...(action.result || {}), summary: `${action.action_name} fue cancelada.` };
+            await action.save();
+            const rollIds = [action.attack_roll_id, action.effect_roll_id].filter(Boolean);
+            if (rollIds.length) {
+                await GameRoll.update({ dismissed: true }, { where: { id: { [Op.in]: rollIds }, session_id: session.id, resolved: false } });
+                io.to(roomName(session.id)).emit('game:roll-dismissed', { rollIds });
+            }
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:cancel-action error:', error);
+            reply({ ok: false, message: 'No se pudo cancelar la acción.' });
+        }
+    });
+
+    socket.on('game:rest-character', async ({ sessionId, characterId, restType } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'Solo el DM puede confirmar descansos.' });
+            if (await hasPendingCombatAction(session.id)) return reply({ ok: false, message: 'Espera a que termine la acción pendiente.' });
+            const type = restType === 'short' ? 'short' : restType === 'long' ? 'long' : null;
+            if (!type) return reply({ ok: false, message: 'Tipo de descanso inválido.' });
+            const catalog = await buildActionCatalog(Number(characterId));
+            if (!catalog) return reply({ ok: false, message: 'Personaje no encontrado.' });
+
+            const state = currentCombatState(session, Number(characterId));
+            for (const action of catalog.actions) {
+                if (action.resource?.type !== 'session-use') continue;
+                const recovery = String(action.resource.recovery || 'largo');
+                if (type === 'long' || recovery.includes('corto') || recovery.includes('short')) {
+                    state.resources[`${characterId}:${action.resource.key}`] = 0;
+                }
+            }
+            state.used = {};
+            session.combat_state = state;
+            session.changed('combat_state', true);
+            await session.save();
+
+            const slots = JSON.parse(JSON.stringify(catalog.character.spell_slots || {}));
+            Object.values(slots).forEach(slot => {
+                const recovery = String(slot?.recovery || slot?.source || '').toLowerCase();
+                if (type === 'long' || recovery.includes('corto') || recovery.includes('short') || recovery.includes('pacto')) slot.used = 0;
+            });
+            catalog.character.spell_slots = slots;
+            catalog.character.changed('spell_slots', true);
+            await catalog.character.save();
+
+            for (const feature of catalog.character.npcActions || []) {
+                if (!feature.max_uses) continue;
+                const recharge = String(feature.recharge || '').toLowerCase();
+                if (type === 'long' || recharge.includes('corto') || recharge.includes('short')) {
+                    feature.used_uses = 0;
+                    await feature.save();
+                }
+            }
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:rest-character error:', error);
+            reply({ ok: false, message: 'No se pudo aplicar el descanso.' });
+        }
+    });
+
     socket.on('game:roll-dice', async ({ sessionId, sides, quantity = 1, modifier = 0, label } = {}, reply = () => {}) => {
         try {
             const session = await GameSession.findByPk(sessionId);
@@ -1125,6 +1629,14 @@ function registerGameSessionSocket(io, socket) {
             roll.resolved = true;
             await roll.save();
             io.to(roomName(roll.session_id)).emit('game:roll-upsert', roll.toJSON());
+            const combatAction = await GameCombatAction.findOne({
+                where: {
+                    session_id: roll.session_id,
+                    status: { [Op.in]: ['ATTACK_ROLL', 'EFFECT_ROLL'] },
+                    [Op.or]: [{ attack_roll_id: roll.id }, { effect_roll_id: roll.id }],
+                },
+            });
+            if (combatAction) await finalizeCombatAction(io, combatAction, roll);
             reply({ ok: true, roll: roll.toJSON() });
         } catch (error) {
             console.error('game:resolve-roll error:', error);

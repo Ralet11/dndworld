@@ -32,6 +32,7 @@ import {
   Thermometer,
   Trash2,
   Upload,
+  Undo2,
   Users,
   X,
 } from 'lucide-react';
@@ -850,7 +851,32 @@ export default function GameMasterPanel() {
                     <button disabled={session.status === 'WAITING' || !initiativeEntries.length} onClick={() => emit('game:previous-turn', { sessionId: session.id })}><SkipBack size={13} /> Anterior</button>
                     <button disabled={session.status === 'WAITING' || !initiativeEntries.length} onClick={() => emit('game:next-turn', { sessionId: session.id })}>Siguiente <SkipForward size={13} /></button>
                   </div>
+                  {activeCharacter && session.status !== 'WAITING' && (
+                    <div className="game-rest-controls">
+                      <button type="button" onClick={() => socket.emit('game:rest-character', { sessionId: session.id, characterId: activeCharacter.id, restType: 'short' }, response => { if (!response?.ok) setError(response?.message || 'No se pudo aplicar el descanso corto.'); })}><Moon size={11} /> Descanso corto</button>
+                      <button type="button" onClick={() => socket.emit('game:rest-character', { sessionId: session.id, characterId: activeCharacter.id, restType: 'long' }, response => { if (!response?.ok) setError(response?.message || 'No se pudo aplicar el descanso largo.'); })}><Sun size={11} /> Descanso largo</button>
+                    </div>
+                  )}
                 </div>
+                {!!session.combat_actions?.length && (
+                  <div className="game-combat-log">
+                    <header><div><span>Resolución automática</span><strong>Registro de combate</strong></div><small>{session.combat_actions.length}</small></header>
+                    <div>
+                      {session.combat_actions.slice(0, 8).map((action, index) => (
+                        <article key={action.id} className={action.status === 'UNDONE' ? 'is-undone' : ''}>
+                          <span className="game-combat-log-avatar">{action.actor_image ? <img src={resolveMediaUrl(action.actor_image)} alt="" /> : action.actor_name?.slice(0, 1)}</span>
+                          <div><strong>{action.actor_name} · {action.action_name}</strong><small>{action.summary || (action.status.includes('ROLL') ? 'Esperando dados...' : action.status)}</small></div>
+                          {index === 0 && action.status === 'COMPLETED' && !action.undone_at && (
+                            <button type="button" title="Deshacer última acción" onClick={() => socket.emit('game:undo-action', { sessionId: session.id, combatActionId: action.id }, response => { if (!response?.ok) setError(response?.message || 'No se pudo deshacer la acción.'); })}><Undo2 size={12} /></button>
+                          )}
+                          {['PENDING', 'ATTACK_ROLL', 'EFFECT_ROLL'].includes(action.status) && (
+                            <button type="button" title="Cancelar acción bloqueada" onClick={() => socket.emit('game:cancel-action', { sessionId: session.id, combatActionId: action.id }, response => { if (!response?.ok) setError(response?.message || 'No se pudo cancelar la acción.'); })}><X size={12} /></button>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="game-token-list">
                   <div className="game-token-list-title"><span>Tokens en tablero</span><strong>{session.tokens.length}</strong></div>
                   {session.tokens.map(token => (

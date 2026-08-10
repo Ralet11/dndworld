@@ -7,6 +7,7 @@ import DiceTray from './DiceTray';
 import CharacterSheet from '../Hero/CharacterSheet';
 import CharacterEditorModal from '../Hero/CharacterEditorModal';
 import GameAudioPlayer from './GameAudioPlayer';
+import TurnActionPanel from './TurnActionPanel';
 
 export default function GamePlayerPanel() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ export default function GamePlayerPanel() {
   const [loading, setLoading] = useState(true);
   const [sheetSection, setSheetSection] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [combatTargeting, setCombatTargeting] = useState(null);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -50,13 +52,16 @@ export default function GamePlayerPanel() {
       const positions = new Map(moves.map(move => [move.tokenId, move]));
       return { ...current, tokens: (current.tokens || []).map(token => positions.has(token.id) ? { ...token, ...positions.get(token.id) } : token) };
     });
-    const onTokenHpUpdated = ({ tokenId, hpCurrent, hpMax, hpTemp }) => setSession(current => current ? ({
-      ...current,
-      tokens: (current.tokens || []).map(token => token.id === tokenId ? ({
-        ...token,
-        character: token.character ? { ...token.character, hp_current: hpCurrent, hp_max: hpMax, hp_temp: hpTemp } : token.character,
-      }) : token),
-    }) : current);
+    const onTokenHpUpdated = ({ tokenId, characterId, hpCurrent, hpMax, hpTemp }) => {
+      setSession(current => current ? ({
+        ...current,
+        tokens: (current.tokens || []).map(token => token.id === tokenId ? ({
+          ...token,
+          character: token.character ? { ...token.character, hp_current: hpCurrent, hp_max: hpMax, hp_temp: hpTemp } : token.character,
+        }) : token),
+      }) : current);
+      setCharacter(current => current && Number(current.id) === Number(characterId) ? ({ ...current, hp: hpCurrent, maxHp: hpMax, hp_current: hpCurrent, hp_max: hpMax, hp_temp: hpTemp }) : current);
+    };
     const onTokenConditionUpdated = ({ tokenId, conditions = [] }) => setSession(current => current ? ({
       ...current,
       tokens: (current.tokens || []).map(token => token.id === tokenId ? { ...token, conditions } : token),
@@ -266,6 +271,9 @@ export default function GamePlayerPanel() {
         <GameStage
           session={session}
           userId={user.id}
+          combatTargeting={combatTargeting}
+          onCombatTokenTarget={token => combatTargeting?.execute?.(combatTargeting.action, [token.id])}
+          onCombatAreaTarget={area => combatTargeting?.execute?.(combatTargeting.action, [], area)}
           onMoveToken={(tokenId, x, y) => socket.emit('game:move-token', { sessionId: session.id, tokenId, x, y })}
           onResolveRoll={resolveDiceRoll}
         />
@@ -278,6 +286,7 @@ export default function GamePlayerPanel() {
 
         <aside className="game-player-character" aria-label="Ficha básica del personaje">
           <GameAudioPlayer session={session} />
+          <TurnActionPanel session={session} socket={socket} isMyTurn={isMyTurn} targeting={combatTargeting} onTargetingChange={setCombatTargeting} onError={setError} />
           {character ? <PlayerCombatSheet character={character} onRoll={rollDice} onOpenSheet={setSheetSection} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
         </aside>
       </div>

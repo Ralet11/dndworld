@@ -118,6 +118,11 @@ const GameSession = sequelize.define('GameSession', {
         allowNull: false,
         defaultValue: 0,
     },
+    combat_state: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+    },
     audio_started_at: {
         type: DataTypes.DATE,
         allowNull: true,

@@ -24,6 +24,7 @@ const GameParticipant = require('./GameParticipant');
 const GameToken = require('./GameToken');
 const GameAsset = require('./GameAsset');
 const GameRoll = require('./GameRoll');
+const GameCombatAction = require('./GameCombatAction');
 const NpcAction = require('./NpcAction');
 const CharacterAuditLog = require('./CharacterAuditLog');
 const CharacterInventory = require('./CharacterInventory');
@@ -113,6 +114,10 @@ GameSession.hasMany(GameRoll, { foreignKey: 'session_id', as: 'rolls', onDelete:
 GameRoll.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameRoll.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 GameRoll.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
+GameSession.hasMany(GameCombatAction, { foreignKey: 'session_id', as: 'combatActions', onDelete: 'CASCADE' });
+GameCombatAction.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+GameCombatAction.belongsTo(User, { foreignKey: 'actor_user_id', as: 'actor' });
+GameCombatAction.belongsTo(Character, { foreignKey: 'actor_character_id', as: 'actorCharacter' });
 GameSession.belongsTo(AudioTrack, { foreignKey: 'audio_track_id', as: 'audioTrack' });
 AudioTrack.hasMany(GameSession, { foreignKey: 'audio_track_id', as: 'gameSessions' });
 AudioTrack.belongsTo(User, { foreignKey: 'uploaded_by', as: 'uploader' });
@@ -143,6 +148,7 @@ module.exports = {
     GameToken,
     GameAsset,
     GameRoll,
+    GameCombatAction,
     NpcAction,
     CharacterAuditLog,
     CharacterInventory,

@@ -87,6 +87,9 @@ export default function GameStage({
   onClearVfx,
   onDismissRoll,
   onResolveRoll,
+  combatTargeting,
+  onCombatTokenTarget,
+  onCombatAreaTarget,
   toolbarHost,
 }) {
   const stageRef = useRef(null);
@@ -128,6 +131,7 @@ export default function GameStage({
   const [selectedVfxDraft, setSelectedVfxDraft] = useState(null);
   const [draftPath, setDraftPath] = useState(null);
   const [textEditor, setTextEditor] = useState(null);
+  const [combatPointer, setCombatPointer] = useState(null);
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -580,13 +584,25 @@ export default function GameStage({
   return (
     <div
       ref={stageRef}
-      className={`game-stage${session?.shared_type === 'MAP' && session?.grid_enabled ? ' has-grid' : ''}${hasMedia ? ' has-media' : ''}${session?.shared_type === 'MAP' ? ` is-map map-fit-${String(session?.map_fit || 'COVER').toLowerCase()}` : ` is-narrative fit-${String(session?.narrative_fit || 'COVER').toLowerCase()}`}${showAllHealth ? ' is-showing-health' : ''}${isDm && annotationTool !== 'cursor' ? ` is-annotating tool-${annotationTool}` : ''}`}
+      className={`game-stage${session?.shared_type === 'MAP' && session?.grid_enabled ? ' has-grid' : ''}${hasMedia ? ' has-media' : ''}${session?.shared_type === 'MAP' ? ` is-map map-fit-${String(session?.map_fit || 'COVER').toLowerCase()}` : ` is-narrative fit-${String(session?.narrative_fit || 'COVER').toLowerCase()}`}${showAllHealth ? ' is-showing-health' : ''}${isDm && annotationTool !== 'cursor' ? ` is-annotating tool-${annotationTool}` : ''}${combatTargeting ? ' is-combat-targeting' : ''}`}
       style={{
         '--game-grid-color': session?.grid_color || '#d8cdb1',
         '--game-grid-line-width': `${session?.grid_line_width ?? 1}px`,
       }}
       onContextMenu={event => event.preventDefault()}
+      onPointerMove={event => {
+        if (!combatTargeting || !String(combatTargeting.action?.target).startsWith('area-')) return;
+        const position = positionFromEvent(event);
+        if (position) setCombatPointer({ ...position, actionKey: combatTargeting.action?.key });
+      }}
       onPointerDown={event => {
+        if (event.button === 0 && combatTargeting && String(combatTargeting.action?.target).startsWith('area-')) {
+          event.preventDefault();
+          event.stopPropagation();
+          const position = positionFromEvent(event);
+          if (position) onCombatAreaTarget?.({ x: position.x, y: position.y });
+          return;
+        }
         if (event.button !== 0 || !isDm) return;
         if (VFX_TOOLS.has(annotationTool)) {
           event.preventDefault();
@@ -1165,6 +1181,19 @@ export default function GameStage({
         </div>
       )}
       <DiceRollOverlay rolls={session?.rolls || []} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} />
+      {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && combatPointer?.actionKey === combatTargeting.action?.key && (() => {
+        const action = combatTargeting.action;
+        const shape = action.area?.shape || 'circle';
+        const size = Number(action.area?.sizePct) || 12;
+        const actor = tokens.find(token => Number(token.character_id) === Number(activeCharacterId));
+        const origin = actor ? { x: Number(actor.x), y: Number(actor.y) } : combatPointer;
+        const angle = Math.atan2(combatPointer.y - origin.y, combatPointer.x - origin.x) * (180 / Math.PI);
+        const directional = shape === 'cone' || shape === 'line';
+        const style = directional
+          ? { left: `${origin.x}%`, top: `${origin.y}%`, width: `${size}%`, '--combat-angle': `${angle}deg` }
+          : { left: `${combatPointer.x}%`, top: `${combatPointer.y}%`, width: `${size}%`, height: `${size}%` };
+        return <div className={`game-combat-area-preview is-${shape}`} style={style}><span>{action.name}</span></div>;
+      })()}
       {selectionBox && <div className="game-token-selection-box" style={boxStyle} />}
 
       {session?.shared_type === 'MAP' && tokens.map(token => {
@@ -1192,6 +1221,12 @@ export default function GameStage({
               ? '#65ad72'
               : token.color || '#83948c';
         const tokenSize = Math.max(44, Math.min(72, 50 * (Number(token.size) || 1)));
+        const targetingArea = String(combatTargeting?.action?.target || '').startsWith('area-');
+        const targetingAlly = String(combatTargeting?.action?.target || '').includes('ally');
+        const combatActor = tokens.find(item => Number(item.character_id) === Number(activeCharacterId));
+        const rangePct = Math.max(6, Math.min(100, (Number(combatTargeting?.action?.range) || 5) * 0.8));
+        const withinCombatRange = !combatActor || Math.hypot(Number(token.x) - Number(combatActor.x), Number(token.y) - Number(combatActor.y)) <= rangePct;
+        const validCombatTarget = !combatTargeting || targetingArea || (withinCombatRange && (targetingAlly ? ['player', 'ally'].includes(tokenRole) : ['enemy', 'neutral'].includes(tokenRole)));
         return (
           <button
             key={token.id}
@@ -1199,13 +1234,24 @@ export default function GameStage({
               if (element) tokenElementsRef.current.set(token.id, element);
               else tokenElementsRef.current.delete(token.id);
             }}
-            className={`game-token is-${tokenRole}${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}`}
+            className={`game-token is-${tokenRole}${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}${combatTargeting ? (validCombatTarget ? ' is-valid-combat-target' : ' is-invalid-combat-target') : ''}`}
             style={{ left: `${token.x}%`, top: `${token.y}%`, '--token-color': tokenAccent, '--token-size': `${tokenSize}px` }}
             onContextMenu={event => {
               event.preventDefault();
               if (isDm || ownedByPlayer) openTokenMenu(event, token);
             }}
             onPointerDown={event => {
+              if (combatTargeting && event.button === 0) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (targetingArea) {
+                  const position = positionFromEvent(event);
+                  if (position) onCombatAreaTarget?.({ x: position.x, y: position.y });
+                } else if (validCombatTarget) {
+                  onCombatTokenTarget?.(token);
+                }
+                return;
+              }
               if (isDm && event.button === 0 && annotationTool !== 'cursor') return;
               event.stopPropagation();
               if (event.button === 2) {
