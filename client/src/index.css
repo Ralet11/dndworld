@@ -4120,41 +4120,38 @@ a:focus-visible {
 .game-token-image { width: var(--token-size, 50px); height: var(--token-size, 50px); position: relative; z-index: 0; isolation: isolate; display: grid; place-items: center; color: #e9dfca; border: 3px solid #080c0a; border-radius: 50%; background: radial-gradient(circle at 50% 38%, #253229, #0a0f0d 72%); box-shadow: inset 0 0 0 2px var(--token-color), inset 0 -9px 15px rgba(0, 0, 0, .38), 0 5px 14px rgba(0, 0, 0, .72); font-family: var(--font-display); font-size: calc(var(--token-size, 50px) * .35); }
 .game-token-image::before { content: ""; position: absolute; inset: -6px; z-index: -1; border: 2px solid var(--token-color); border-radius: 50%; box-shadow: 0 0 0 2px rgba(2, 5, 4, .88), 0 0 11px color-mix(in srgb, var(--token-color) 28%, transparent); }
 .game-token-image::after { content: ""; position: absolute; inset: 2px; border: 1px solid rgba(255, 245, 216, .28); border-radius: 50%; background: radial-gradient(circle at 34% 22%, rgba(255, 255, 255, .17), transparent 34%); pointer-events: none; }
-.game-token-image img { width: 100%; height: 100%; display: block; border-radius: 50%; object-fit: cover; object-position: center 18%; }
+.game-token-portrait { position: absolute; inset: 3px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #101713; }
+.game-token-portrait img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center 14%; transform: scale(1.5); transform-origin: center 18%; }
 .game-token-name { max-width: 108px; min-height: 17px; padding: 3px 7px 2px; overflow: hidden; color: #f0e8db; border: 1px solid rgba(123, 134, 126, .42); border-bottom-color: var(--token-color); border-radius: 2px; background: linear-gradient(180deg, rgba(12, 18, 15, .97), rgba(2, 5, 4, .96)); box-shadow: 0 4px 10px rgba(0, 0, 0, .7), inset 0 1px rgba(255, 255, 255, .04); font-size: 8px; font-weight: 800; line-height: 1.15; text-overflow: ellipsis; text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .game-token.is-player .game-token-name { color: #f4e5bc; }
 .game-token.is-enemy .game-token-name { color: #f0d4cf; }
 .game-token.is-ally .game-token-name { color: #d5ead9; }
 .game-token-health {
-  width: 58px;
-  min-height: 5px;
+  width: 76px;
+  min-height: 17px;
   position: absolute;
   top: calc(100% + 2px);
   left: 50%;
   z-index: 2;
   display: grid;
-  grid-template-columns: 1fr 0;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 0;
-  padding: 1px;
-  opacity: .94;
-  border: 1px solid rgba(4, 8, 6, .92);
-  border-radius: 4px;
+  gap: 4px;
+  padding: 3px 4px;
+  opacity: 0;
+  border: 1px solid rgba(116, 128, 119, .42);
   background: rgba(3, 7, 5, .96);
   box-shadow: 0 4px 12px rgba(0, 0, 0, .58);
-  transform: translate(-50%, 0);
-  transition: width 120ms ease, min-height 120ms ease, padding 120ms ease, transform 120ms ease;
+  transform: translate(-50%, -3px);
+  transition: opacity 120ms ease, transform 120ms ease;
   pointer-events: none;
 }
 .game-token:hover .game-token-health,
 .game-token:focus-visible .game-token-health,
-.game-stage.is-showing-health .game-token-health { width: 76px; min-height: 17px; grid-template-columns: 1fr auto; gap: 4px; padding: 3px 4px; transform: translate(-50%, 1px); }
+.game-stage.is-showing-health .game-token-health { opacity: 1; transform: translate(-50%, 1px); }
 .game-token-health > i { width: 100%; height: 4px; overflow: hidden; border-radius: 5px; background: #252d29; }
 .game-token-health > i > b { height: 100%; display: block; border-radius: inherit; background: var(--token-hp-color); box-shadow: 0 0 6px color-mix(in srgb, var(--token-hp-color) 55%, transparent); }
-.game-token-health > em { width: 0; opacity: 0; overflow: hidden; color: #d0c9bd; font-size: 6px; font-style: normal; font-weight: 800; white-space: nowrap; transition: opacity 100ms ease; }
-.game-token:hover .game-token-health > em,
-.game-token:focus-visible .game-token-health > em,
-.game-stage.is-showing-health .game-token-health > em { width: auto; opacity: 1; }
+.game-token-health > em { color: #d0c9bd; font-size: 6px; font-style: normal; font-weight: 800; white-space: nowrap; }
 .game-token > svg { display: none; }
 .game-token.is-movable { cursor: grab; }
 .game-token.is-movable > svg { display: block; position: absolute; top: -4px; right: -4px; padding: 2px; color: #171108; border-radius: 50%; background: #c7a35c; }

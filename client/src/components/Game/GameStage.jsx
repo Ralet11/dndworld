@@ -1183,9 +1183,11 @@ export default function GameStage({
               : `${token.label}: clic izquierdo para ver ficha pública`}
           >
             <span className="game-token-image">
-              {token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url
-                ? <img src={resolveUrl(token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url)} alt="" />
-                : token.label.slice(0, 1).toUpperCase()}
+              <span className="game-token-portrait">
+                {token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url
+                  ? <img src={resolveUrl(token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url)} alt="" />
+                  : token.label.slice(0, 1).toUpperCase()}
+              </span>
             </span>
             <small className="game-token-name">{token.label}</small>
             {hasHp && (
