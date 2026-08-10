@@ -1128,6 +1128,22 @@ export default function GameStage({
         const hasHp = Number.isFinite(hpCurrent) && Number.isFinite(hpMax) && hpMax > 0;
         const hpPercent = hasHp ? Math.max(0, Math.min(100, (hpCurrent / hpMax) * 100)) : 0;
         const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 20 ? '#d0a348' : '#c94f43';
+        const npcType = String(token.character?.npc_type || '').toLowerCase();
+        const tokenRole = token.owner_user_id
+          ? 'player'
+          : ['enemigo', 'enemy'].includes(npcType)
+            ? 'enemy'
+            : ['amigo', 'compañero', 'ally'].includes(npcType)
+              ? 'ally'
+              : 'neutral';
+        const tokenAccent = tokenRole === 'player'
+          ? '#d7b35f'
+          : tokenRole === 'enemy'
+            ? '#c94f43'
+            : tokenRole === 'ally'
+              ? '#65ad72'
+              : token.color || '#83948c';
+        const tokenSize = Math.max(44, Math.min(72, 50 * (Number(token.size) || 1)));
         return (
           <button
             key={token.id}
@@ -1135,8 +1151,8 @@ export default function GameStage({
               if (element) tokenElementsRef.current.set(token.id, element);
               else tokenElementsRef.current.delete(token.id);
             }}
-            className={`game-token${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}`}
-            style={{ left: `${token.x}%`, top: `${token.y}%`, '--token-color': token.color }}
+            className={`game-token is-${tokenRole}${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}`}
+            style={{ left: `${token.x}%`, top: `${token.y}%`, '--token-color': tokenAccent, '--token-size': `${tokenSize}px` }}
             onContextMenu={event => {
               event.preventDefault();
               if (isDm || ownedByPlayer) openTokenMenu(event, token);
