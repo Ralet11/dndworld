@@ -95,7 +95,8 @@ void main() {
   p.x *= u_resolution.x / u_resolution.y;
   p /= max(.025, u_scale);
   vec4 fx = u_type < 1.5 ? fireFx(p, u_time) : (u_type < 2.5 ? iceFx(p, u_time) : acidFx(p, u_time));
-  fx.a *= lifetime() * u_intensity;
+  float edgeFade = 1. - smoothstep(.78, .98, length(p));
+  fx.a *= lifetime() * u_intensity * edgeFade;
   fx.rgb *= mix(.72, 1.28, clamp(u_intensity - .45, 0., 1.));
   outColor = fx;
 }`;
@@ -212,14 +213,19 @@ export default function GameBoardVfx({ effects = [] }) {
         const elapsed = reducedMotion ? Math.min(.9, duration * .4) : Math.max(0, (timestamp - new Date(effect.started_at).getTime()) / 1000);
         if (!effect.loop && elapsed > duration) return;
         hasLiveEffect = true;
-        gl.blendFunc(gl.SRC_ALPHA, type === 2 ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFuncSeparate(
+          gl.SRC_ALPHA,
+          type === 2 ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA,
+          gl.ONE,
+          gl.ONE_MINUS_SRC_ALPHA,
+        );
         gl.uniform1f(renderer.time, elapsed);
         gl.uniform1f(renderer.type, type);
         gl.uniform1f(renderer.scale, (Math.max(60, Number(effect.size) || 170) * dpr) / height);
         gl.uniform1f(renderer.intensity, Math.max(.45, Math.min(1.45, Number(effect.intensity) || 1)));
         gl.uniform1f(renderer.duration, duration);
         gl.uniform1f(renderer.loop, effect.loop ? 1 : 0);
-        const radius = Math.max(60, Number(effect.size) || 170) * dpr;
+        const radius = Math.max(60, Number(effect.size) || 170) * dpr * 1.08;
         vfxSamples(effect, width, height).forEach((sample, index) => {
           gl.uniform2f(renderer.center, sample.x / width, 1 - sample.y / height);
           gl.uniform1f(renderer.seed, numericSeed(effect.id) + index * .73);
