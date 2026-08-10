@@ -1143,6 +1143,13 @@ a:focus-visible {
 .dm-surface .game-console-heading h2 { margin-top: 4px; font-size: 18px; }
 .game-console-heading > svg,
 .game-console-heading > strong { color: #b18d51; font-family: var(--font-display); font-weight: 500; }
+.game-session-manager { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; margin-top: 12px; }
+.game-session-manager label { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.game-session-manager label > span { color: #747b73; font-size: 7px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
+.game-session-manager select { width: 100%; min-width: 0; height: 32px; padding: 0 8px; overflow: hidden; color: #d7c8a9; border: 1px solid #3a463e; border-radius: 0; background: #0b1210; font-family: var(--font-display); font-size: 9px; text-overflow: ellipsis; }
+.game-session-manager button { align-self: end; min-height: 32px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: #cbaa65; border: 1px solid #6e552b; background: rgba(159, 116, 37, .08); font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.game-session-manager button:hover:not(:disabled) { color: #f0d28c; border-color: #b88b42; background: rgba(159, 116, 37, .18); }
+.game-session-manager button:disabled { opacity: .55; cursor: wait; }
 
 .game-invite-card { width: 100%; margin-top: 13px; padding: 15px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: center; color: #a38451; border: 1px solid rgba(128, 102, 54, .52); background: radial-gradient(circle at 90% 50%, rgba(128, 102, 54, .12), transparent 10rem), #0c1411; text-align: left; }
 .game-invite-card > span { color: #77776f; font-size: 7px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }

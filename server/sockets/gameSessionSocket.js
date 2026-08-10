@@ -499,10 +499,17 @@ function registerGameSessionSocket(io, socket) {
         try {
             let session = null;
             if (isDm(socket)) {
-                session = await GameSession.findOne({
-                    where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
-                    order: [['updatedAt', 'DESC']],
-                });
+                if (socket.gameSessionId) {
+                    session = await GameSession.findOne({
+                        where: { id: socket.gameSessionId, dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                    });
+                }
+                if (!session) {
+                    session = await GameSession.findOne({
+                        where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                        order: [['updatedAt', 'DESC']],
+                    });
+                }
             } else {
                 const participant = await GameParticipant.findOne({
                     where: { user_id: socket.user.id },
@@ -523,7 +530,35 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:create', async ({ title } = {}, reply = () => {}) => {
+    socket.on('game:list-hosted', async (reply = () => {}) => {
+        try {
+            if (!isDm(socket)) return reply({ ok: false, message: 'Solo el DM puede administrar mesas.' });
+            const sessions = await GameSession.findAll({
+                where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                attributes: ['id', 'title', 'code', 'status', 'round', 'updatedAt'],
+                order: [['updatedAt', 'DESC']],
+            });
+            reply({ ok: true, sessions: sessions.map(item => ({ ...item.toJSON(), isCurrent: Number(item.id) === Number(socket.gameSessionId) })) });
+        } catch (error) {
+            console.error('game:list-hosted error:', error);
+            reply({ ok: false, message: 'No se pudieron cargar tus mesas.' });
+        }
+    });
+
+    socket.on('game:open-hosted', async ({ sessionId } = {}, reply = () => {}) => {
+        try {
+            if (!isDm(socket)) return reply({ ok: false, message: 'Solo el DM puede administrar mesas.' });
+            const session = await GameSession.findOne({ where: { id: sessionId, dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } } });
+            if (!session) return reply({ ok: false, message: 'La mesa elegida no existe o ya finalizo.' });
+            await enterRoom(io, socket, session.id);
+            reply({ ok: true, sessionId: session.id, code: session.code });
+        } catch (error) {
+            console.error('game:open-hosted error:', error);
+            reply({ ok: false, message: 'No se pudo abrir la mesa elegida.' });
+        }
+    });
+
+    socket.on('game:create', async ({ title, forceNew = false } = {}, reply = () => {}) => {
         try {
             if (!isDm(socket)) {
                 const message = 'Sólo el DM puede crear una sala.';
@@ -534,7 +569,7 @@ function registerGameSessionSocket(io, socket) {
                 where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
                 order: [['updatedAt', 'DESC']],
             });
-            const session = existing || await GameSession.create({
+            const session = (!forceNew && existing) ? existing : await GameSession.create({
                 code: await makeCode(),
                 title: String(title || 'La campaña actual').trim().slice(0, 120),
                 dm_user_id: socket.user.id,

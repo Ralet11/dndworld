@@ -55,6 +55,8 @@ export default function GameMasterPanel() {
   const { user } = useAuth();
   const [session, setSession] = useState(null);
   const [sessionResolved, setSessionResolved] = useState(false);
+  const [hostedSessions, setHostedSessions] = useState([]);
+  const [switchingSession, setSwitchingSession] = useState(false);
   const [players, setPlayers] = useState([]);
   const [scenes, setScenes] = useState([]);
   const [npcs, setNpcs] = useState([]);
@@ -186,6 +188,9 @@ export default function GameMasterPanel() {
     const syncGame = () => {
       setSessionResolved(false);
       socket.emit('game:get-current');
+      socket.timeout(5000).emit('game:list-hosted', (timeoutError, response) => {
+        if (!timeoutError && response?.ok) setHostedSessions(Array.isArray(response.sessions) ? response.sessions : []);
+      });
       socket.emit('get-players');
       socket.emit('get-scenes');
       socket.emit('get-global-state');
@@ -297,20 +302,39 @@ export default function GameMasterPanel() {
     });
   };
 
-  const createSession = () => {
+  const refreshHostedSessions = () => {
+    socket?.timeout(5000).emit('game:list-hosted', (timeoutError, response) => {
+      if (!timeoutError && response?.ok) setHostedSessions(Array.isArray(response.sessions) ? response.sessions : []);
+    });
+  };
+
+  const createSession = (forceNew = false) => {
     if (!socket || !connected) {
       setError(connectionError || 'La conexión con la mesa está interrumpida. Espera unos segundos o recarga la página.');
       return;
     }
     setError('');
     setCreatingSession(true);
-    socket.timeout(7000).emit('game:create', { title }, (timeoutError, response) => {
+    socket.timeout(7000).emit('game:create', { title: forceNew ? `${title} - prueba` : title, forceNew }, (timeoutError, response) => {
       setCreatingSession(false);
       if (timeoutError) {
         setError('El servidor no confirmó la creación de la sala. Inténtalo nuevamente.');
         return;
       }
       if (!response?.ok) setError(response?.message || 'No se pudo crear la sala.');
+      else refreshHostedSessions();
+    });
+  };
+
+  const openHostedSession = sessionId => {
+    if (!sessionId || Number(sessionId) === Number(session?.id) || switchingSession) return;
+    setError('');
+    setSwitchingSession(true);
+    socket?.timeout(7000).emit('game:open-hosted', { sessionId }, (timeoutError, response) => {
+      setSwitchingSession(false);
+      if (timeoutError) return setError('El servidor no confirmo el cambio de mesa.');
+      if (!response?.ok) return setError(response?.message || 'No se pudo abrir la mesa elegida.');
+      refreshHostedSessions();
     });
   };
 
@@ -486,7 +510,7 @@ export default function GameMasterPanel() {
           <h1>Abre la sala de juego</h1>
           <p>Crea un punto de encuentro para tus jugadores y controla desde aquí todo lo que verán durante la sesión.</p>
           <label><span>Nombre de la partida</span><input value={title} onChange={event => setTitle(event.target.value)} /></label>
-          <button disabled={creatingSession || !connected} onClick={createSession}>
+          <button disabled={creatingSession || !connected} onClick={() => createSession()}>
             {creatingSession ? <i className="game-button-spinner" /> : <Plus size={16} />}
             {creatingSession ? 'Creando sala...' : connected ? 'Crear sala' : 'Conectando...'}
           </button>
@@ -809,6 +833,20 @@ export default function GameMasterPanel() {
             {rightTab === 'session' && (
               <div className="game-console-section">
                 <div className="game-console-heading"><div><span>Control de sesión</span><h2>Sala del director</h2></div><Settings2 size={17} /></div>
+                <div className="game-session-manager">
+                  <label>
+                    <span>Mesas activas</span>
+                    <select value={session.id} disabled={switchingSession} onChange={event => openHostedSession(event.target.value)}>
+                      {(hostedSessions.length ? hostedSessions : [session]).map(item => (
+                        <option key={item.id} value={item.id}>{item.title || 'Mesa sin nombre'} · {item.code}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" disabled={creatingSession || switchingSession} onClick={() => createSession(true)} title="Crear una mesa separada para pruebas">
+                    {creatingSession ? <i className="game-button-spinner" /> : <Plus size={13} />}
+                    Nueva mesa
+                  </button>
+                </div>
                 <button className="game-invite-card game-invite-compact" onClick={copyCode}>
                   <span>Código de sala</span><strong>{session.code}</strong><small>{copied ? <><Check size={12} /> Copiado</> : <><Clipboard size={12} /> Copiar</>}</small>
                 </button>
