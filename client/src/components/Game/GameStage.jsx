@@ -113,8 +113,12 @@ export default function GameStage({
   const [annotationBackground, setAnnotationBackground] = useState(true);
   const [vfxSize, setVfxSize] = useState(170);
   const [vfxIntensity, setVfxIntensity] = useState(1);
+  const [vfxShape, setVfxShape] = useState('point');
   const [vfxLoop, setVfxLoop] = useState(true);
   const [vfxDuration, setVfxDuration] = useState(8);
+  const [draftVfxShape, setDraftVfxShape] = useState(null);
+  const [selectedVfxId, setSelectedVfxId] = useState(null);
+  const [selectedVfxDraft, setSelectedVfxDraft] = useState(null);
   const [draftPath, setDraftPath] = useState(null);
   const [textEditor, setTextEditor] = useState(null);
   const activeCharacterId = session?.active_character_id;
@@ -137,6 +141,10 @@ export default function GameStage({
   const annotationViewKey = `${session?.shared_type}:${session?.shared_url || ''}`;
   const annotations = (session?.stage_annotations || []).filter(item => item.view_key === annotationViewKey);
   const stageVfx = (session?.stage_vfx || []).filter(item => item.view_key === annotationViewKey);
+  const selectedVfx = stageVfx.find(item => item.id === selectedVfxId) || null;
+  const renderedStageVfx = selectedVfx && selectedVfxDraft
+    ? stageVfx.map(item => item.id === selectedVfx.id ? { ...item, ...selectedVfxDraft } : item)
+    : stageVfx;
   const latestSceneNpcsRef = useRef(sceneNpcs);
   const renderedSceneNpcsRef = useRef(sceneNpcs);
   const sceneNpcExitTimersRef = useRef(new Map());
@@ -219,9 +227,10 @@ export default function GameStage({
       onMoveTokens,
       onAddAnnotation,
       onUpdateAnnotation,
+      onAddVfx,
       onUpdateVfx,
     };
-  }, [session, userId, isDm, onMoveToken, onMoveTokens, onAddAnnotation, onUpdateAnnotation, onUpdateVfx]);
+  }, [session, userId, isDm, onMoveToken, onMoveTokens, onAddAnnotation, onUpdateAnnotation, onAddVfx, onUpdateVfx]);
 
   useEffect(() => {
     const applyTokenPositions = positions => {
@@ -302,6 +311,35 @@ export default function GameStage({
         return;
       }
 
+      if (interaction.type === 'vfx-shape') {
+        const current = {
+          x: clamp(((event.clientX - rect.left) / rect.width) * 100),
+          y: clamp(((event.clientY - rect.top) / rect.height) * 100),
+        };
+        interaction.current = current;
+        setDraftVfxShape({ ...interaction, current });
+        return;
+      }
+
+      if (interaction.type === 'vfx-drag') {
+        const dx = ((event.clientX - interaction.startClientX) / rect.width) * 100;
+        const dy = ((event.clientY - interaction.startClientY) / rect.height) * 100;
+        interaction.current = {
+          x: clamp(interaction.x + dx),
+          y: clamp(interaction.y + dy),
+          end_x: clamp(interaction.end_x + dx),
+          end_y: clamp(interaction.end_y + dy),
+          marker_x: clamp(interaction.marker_x + dx),
+          marker_y: clamp(interaction.marker_y + dy),
+        };
+        const element = vfxElementsRef.current.get(interaction.id);
+        if (element) {
+          element.style.left = `${interaction.current.marker_x}%`;
+          element.style.top = `${interaction.current.marker_y}%`;
+        }
+        return;
+      }
+
       if (interaction.type === 'selection') {
         const current = {
           x: clamp(((event.clientX - rect.left) / rect.width) * 100),
@@ -335,15 +373,24 @@ export default function GameStage({
         return;
       }
 
-      if (interaction.type === 'vfx-drag') {
-        const x = clamp(interaction.x + ((event.clientX - interaction.startClientX) / rect.width) * 100);
-        const y = clamp(interaction.y + ((event.clientY - interaction.startClientY) / rect.height) * 100);
-        interaction.current = { x, y };
-        const element = vfxElementsRef.current.get(interaction.id);
-        if (element) {
-          element.style.left = `${x}%`;
-          element.style.top = `${y}%`;
+      if (interaction.type === 'vfx-shape') {
+        const current = interaction.current || interaction.start;
+        if (Math.hypot(current.x - interaction.start.x, current.y - interaction.start.y) > .35) {
+          runtime.onAddVfx?.({
+            type: interaction.effectType,
+            shape: interaction.shape,
+            x: interaction.start.x,
+            y: interaction.start.y,
+            end_x: current.x,
+            end_y: current.y,
+            size: interaction.size,
+            intensity: interaction.intensity,
+            loop: interaction.loop,
+            duration: interaction.duration,
+          });
         }
+        setDraftVfxShape(null);
+        interactionRef.current = null;
         return;
       }
 
@@ -374,8 +421,13 @@ export default function GameStage({
       }
 
       if (interaction.type === 'vfx-drag') {
-        const position = interaction.current || { x: interaction.x, y: interaction.y };
-        runtime.onUpdateVfx?.(interaction.id, { x: position.x, y: position.y });
+        const position = interaction.current || interaction;
+        runtime.onUpdateVfx?.(interaction.id, {
+          x: position.x,
+          y: position.y,
+          end_x: position.end_x,
+          end_y: position.end_y,
+        });
         interactionRef.current = null;
         return;
       }
@@ -460,6 +512,8 @@ export default function GameStage({
       if (event.key === 'Escape') {
         setContextMenu(null);
         setSelectedIds([]);
+        setSelectedVfxId(null);
+        setSelectedVfxDraft(null);
       }
       const editable = event.target instanceof HTMLElement
         && (event.target.matches('input, textarea, select') || event.target.isContentEditable);
@@ -525,15 +579,33 @@ export default function GameStage({
           setContextMenu(null);
           const position = positionFromEvent(event);
           if (!position) return;
-          onAddVfx?.({
-            type: annotationTool.slice(4),
-            x: position.x,
-            y: position.y,
+          const config = {
+            effectType: annotationTool.slice(4),
+            shape: vfxShape,
+            start: position,
+            current: position,
             size: vfxSize,
             intensity: vfxIntensity,
             loop: vfxLoop,
             duration: vfxDuration,
-          });
+          };
+          if (vfxShape === 'point') {
+            onAddVfx?.({
+              type: config.effectType,
+              shape: 'point',
+              x: position.x,
+              y: position.y,
+              end_x: position.x,
+              end_y: position.y,
+              size: config.size,
+              intensity: config.intensity,
+              loop: config.loop,
+              duration: config.duration,
+            });
+          } else {
+            interactionRef.current = { type: 'vfx-shape', ...config };
+            setDraftVfxShape({ type: 'vfx-shape', ...config });
+          }
           return;
         }
         if (annotationTool === 'pen' && session?.shared_type === 'MAP') {
@@ -673,28 +745,45 @@ export default function GameStage({
         </div>
       )}
 
-      <GameBoardVfx effects={stageVfx} />
+      <GameBoardVfx effects={renderedStageVfx} />
+      {draftVfxShape && (
+        <svg className={`game-vfx-shape-preview is-${draftVfxShape.effectType}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {draftVfxShape.shape === 'line' && <line x1={draftVfxShape.start.x} y1={draftVfxShape.start.y} x2={draftVfxShape.current.x} y2={draftVfxShape.current.y} />}
+          {draftVfxShape.shape === 'square' && <rect x={Math.min(draftVfxShape.start.x, draftVfxShape.current.x)} y={Math.min(draftVfxShape.start.y, draftVfxShape.current.y)} width={Math.abs(draftVfxShape.current.x - draftVfxShape.start.x)} height={Math.abs(draftVfxShape.current.y - draftVfxShape.start.y)} />}
+          {draftVfxShape.shape === 'circle' && <circle cx={draftVfxShape.start.x} cy={draftVfxShape.start.y} r={Math.hypot(draftVfxShape.current.x - draftVfxShape.start.x, draftVfxShape.current.y - draftVfxShape.start.y)} />}
+        </svg>
+      )}
       {isDm && annotationTool === 'vfx-manage' && (
         <div className="game-vfx-control-layer" aria-label="Controles de efectos visuales">
-          {stageVfx.map(effect => (
+          {stageVfx.map(effect => {
+            const isAreaShape = effect.shape === 'line' || effect.shape === 'square';
+            const markerX = isAreaShape ? (Number(effect.x) + Number(effect.end_x ?? effect.x)) / 2 : Number(effect.x);
+            const markerY = isAreaShape ? (Number(effect.y) + Number(effect.end_y ?? effect.y)) / 2 : Number(effect.y);
+            return (
             <div
               key={effect.id}
               ref={element => {
                 if (element) vfxElementsRef.current.set(effect.id, element);
                 else vfxElementsRef.current.delete(effect.id);
               }}
-              className={`game-vfx-handle is-${effect.type}`}
-              style={{ left: `${effect.x}%`, top: `${effect.y}%`, '--vfx-handle-size': `${Math.max(42, Math.min(86, effect.size * .34))}px` }}
-              title="Arrastra para mover el efecto"
+              className={`game-vfx-handle is-${effect.type}${selectedVfxId === effect.id ? ' is-selected' : ''}`}
+              style={{ left: `${markerX}%`, top: `${markerY}%`, '--vfx-handle-size': `${effect.shape === 'point' ? Math.max(42, Math.min(68, effect.size * .28)) : 46}px` }}
+              title="Selecciona o arrastra para mover el efecto"
               onPointerDown={event => {
                 if (event.button !== 0) return;
                 event.preventDefault();
                 event.stopPropagation();
+                setSelectedVfxId(effect.id);
+                setSelectedVfxDraft({ size: Number(effect.size) || 170, intensity: Number(effect.intensity) || 1 });
                 interactionRef.current = {
                   type: 'vfx-drag',
                   id: effect.id,
-                  x: effect.x,
-                  y: effect.y,
+                  x: Number(effect.x),
+                  y: Number(effect.y),
+                  end_x: Number(effect.end_x ?? effect.x),
+                  end_y: Number(effect.end_y ?? effect.y),
+                  marker_x: markerX,
+                  marker_y: markerY,
                   startClientX: event.clientX,
                   startClientY: event.clientY,
                 };
@@ -706,10 +795,18 @@ export default function GameStage({
                 title="Eliminar efecto"
                 aria-label="Eliminar efecto"
                 onPointerDown={event => { event.preventDefault(); event.stopPropagation(); }}
-                onClick={event => { event.stopPropagation(); onDeleteVfx?.(effect.id); }}
+                onClick={event => {
+                  event.stopPropagation();
+                  onDeleteVfx?.(effect.id);
+                  if (selectedVfxId === effect.id) {
+                    setSelectedVfxId(null);
+                    setSelectedVfxDraft(null);
+                  }
+                }}
               ><X size={10} /></button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -935,13 +1032,19 @@ export default function GameStage({
               <div className="game-vfx-tools">
                 <div className="game-annotation-tools-title"><span>VFX del tablero</span><strong>{stageVfx.length}</strong></div>
                 <div className="game-vfx-tool-buttons">
-                  <button className={annotationTool === 'vfx-fire' ? 'is-active is-fire' : ''} onClick={() => setAnnotationTool('vfx-fire')} title="Colocar fuego"><Flame size={13} /><span>Fuego</span></button>
-                  <button className={annotationTool === 'vfx-ice' ? 'is-active is-ice' : ''} onClick={() => setAnnotationTool('vfx-ice')} title="Colocar hielo"><Snowflake size={13} /><span>Hielo</span></button>
-                  <button className={annotationTool === 'vfx-acid' ? 'is-active is-acid' : ''} onClick={() => setAnnotationTool('vfx-acid')} title="Colocar ácido"><FlaskConical size={13} /><span>Ácido</span></button>
+                  <button className={annotationTool === 'vfx-fire' ? 'is-active is-fire' : ''} onClick={() => { setAnnotationTool('vfx-fire'); setSelectedVfxId(null); }} title="Colocar fuego"><Flame size={13} /><span>Fuego</span></button>
+                  <button className={annotationTool === 'vfx-ice' ? 'is-active is-ice' : ''} onClick={() => { setAnnotationTool('vfx-ice'); setSelectedVfxId(null); }} title="Colocar hielo"><Snowflake size={13} /><span>Hielo</span></button>
+                  <button className={annotationTool === 'vfx-acid' ? 'is-active is-acid' : ''} onClick={() => { setAnnotationTool('vfx-acid'); setSelectedVfxId(null); }} title="Colocar ácido"><FlaskConical size={13} /><span>Ácido</span></button>
                   <button className={annotationTool === 'vfx-manage' ? 'is-active' : ''} onClick={() => setAnnotationTool('vfx-manage')} title="Mover o eliminar efectos"><Sparkles size={13} /><span>Editar</span></button>
                 </div>
-                {(VFX_TOOLS.has(annotationTool) || annotationTool === 'vfx-manage') && (
+                {VFX_TOOLS.has(annotationTool) && (
                   <>
+                    <div className="game-vfx-shape-buttons" aria-label="Forma del efecto">
+                      <button className={vfxShape === 'point' ? 'is-active' : ''} onClick={() => setVfxShape('point')} title="Punto"><Sparkles size={12} /><span>Punto</span></button>
+                      <button className={vfxShape === 'line' ? 'is-active' : ''} onClick={() => setVfxShape('line')} title="Línea"><Minus size={12} /><span>Línea</span></button>
+                      <button className={vfxShape === 'circle' ? 'is-active' : ''} onClick={() => setVfxShape('circle')} title="Círculo"><Circle size={12} /><span>Círculo</span></button>
+                      <button className={vfxShape === 'square' ? 'is-active' : ''} onClick={() => setVfxShape('square')} title="Cuadrado"><Square size={12} /><span>Cuadrado</span></button>
+                    </div>
                     <label className="game-annotation-range">
                       <span>Tamaño <output>{vfxSize}px</output></span>
                       <input type="range" min="80" max="320" step="10" value={vfxSize} onChange={event => setVfxSize(Number(event.target.value))} />
@@ -957,7 +1060,21 @@ export default function GameStage({
                     </div>
                   </>
                 )}
-                <p className="game-annotation-hint">{annotationTool === 'vfx-manage' ? 'Arrastra los marcadores para moverlos o usa × para eliminarlos.' : VFX_TOOLS.has(annotationTool) ? 'Haz clic sobre el tablero para colocar el efecto.' : 'Selecciona un elemento y colócalo directamente sobre la escena.'}</p>
+                {annotationTool === 'vfx-manage' && selectedVfx && selectedVfxDraft && (
+                  <div className="game-vfx-selected-editor">
+                    <strong>{selectedVfx.type} · {selectedVfx.shape || 'point'}</strong>
+                    <label className="game-annotation-range">
+                      <span>Tamaño <output>{selectedVfxDraft.size}px</output></span>
+                      <input type="range" min="80" max="320" step="10" value={selectedVfxDraft.size} onChange={event => setSelectedVfxDraft(current => ({ ...current, size: Number(event.target.value) }))} onPointerUp={event => onUpdateVfx?.(selectedVfx.id, { size: Number(event.currentTarget.value) })} onKeyUp={event => onUpdateVfx?.(selectedVfx.id, { size: Number(event.currentTarget.value) })} />
+                    </label>
+                    <label className="game-annotation-range">
+                      <span>Intensidad <output>{selectedVfxDraft.intensity.toFixed(2)}</output></span>
+                      <input type="range" min="0.45" max="1.45" step="0.05" value={selectedVfxDraft.intensity} onChange={event => setSelectedVfxDraft(current => ({ ...current, intensity: Number(event.target.value) }))} onPointerUp={event => onUpdateVfx?.(selectedVfx.id, { intensity: Number(event.currentTarget.value) })} onKeyUp={event => onUpdateVfx?.(selectedVfx.id, { intensity: Number(event.currentTarget.value) })} />
+                    </label>
+                    <button className="game-vfx-remove-selected" onClick={() => { onDeleteVfx?.(selectedVfx.id); setSelectedVfxId(null); setSelectedVfxDraft(null); }}><Trash2 size={11} /> Quitar seleccionado</button>
+                  </div>
+                )}
+                <p className="game-annotation-hint">{annotationTool === 'vfx-manage' ? (selectedVfx ? 'Edita el efecto seleccionado o arrástralo sobre el mapa.' : 'Selecciona un efecto del tablero para editarlo o quitarlo.') : VFX_TOOLS.has(annotationTool) ? (vfxShape === 'point' ? 'Haz clic para colocar el efecto.' : 'Arrastra sobre el tablero para darle forma y extensión.') : 'Selecciona un elemento y colócalo directamente sobre la escena.'}</p>
                 <button className="game-annotation-clear" disabled={!stageVfx.length} onClick={() => onClearVfx?.()}><Trash2 size={12} /> Quitar VFX de esta escena</button>
               </div>
             </div>

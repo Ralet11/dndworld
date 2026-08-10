@@ -132,6 +132,42 @@ function numericSeed(value) {
   return String(value).split('').reduce((total, character) => (total * 31 + character.charCodeAt(0)) % 997, 17) / 37;
 }
 
+function vfxSamples(effect, width, height) {
+  const start = { x: (Number(effect.x) || 0) * width / 100, y: (Number(effect.y) || 0) * height / 100 };
+  const end = {
+    x: (Number(effect.end_x ?? effect.x) || 0) * width / 100,
+    y: (Number(effect.end_y ?? effect.y) || 0) * height / 100,
+  };
+  const spacing = Math.max(26, (Number(effect.size) || 170) * .38);
+  const along = (from, to, count) => Array.from({ length: count }, (_, index) => {
+    const amount = count === 1 ? 0 : index / (count - 1);
+    return { x: from.x + (to.x - from.x) * amount, y: from.y + (to.y - from.y) * amount };
+  });
+  if (effect.shape === 'line') {
+    const count = Math.min(32, Math.max(2, Math.ceil(Math.hypot(end.x - start.x, end.y - start.y) / spacing) + 1));
+    return along(start, end, count);
+  }
+  if (effect.shape === 'circle') {
+    const radius = Math.hypot(end.x - start.x, end.y - start.y);
+    const count = Math.min(36, Math.max(8, Math.ceil((Math.PI * 2 * radius) / spacing)));
+    return Array.from({ length: count }, (_, index) => {
+      const angle = index / count * Math.PI * 2;
+      return { x: start.x + Math.cos(angle) * radius, y: start.y + Math.sin(angle) * radius };
+    });
+  }
+  if (effect.shape === 'square') {
+    const corners = [start, { x: end.x, y: start.y }, end, { x: start.x, y: end.y }];
+    const points = [];
+    corners.forEach((corner, index) => {
+      const next = corners[(index + 1) % corners.length];
+      const count = Math.min(12, Math.max(2, Math.ceil(Math.hypot(next.x - corner.x, next.y - corner.y) / spacing) + 1));
+      points.push(...along(corner, next, count).slice(0, -1));
+    });
+    return points.slice(0, 40);
+  }
+  return [start];
+}
+
 export default function GameBoardVfx({ effects = [] }) {
   const canvasRef = useRef(null);
   const rendererRef = useRef(null);
@@ -165,6 +201,7 @@ export default function GameBoardVfx({ effects = [] }) {
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
+      gl.enable(gl.SCISSOR_TEST);
       gl.uniform2f(renderer.resolution, width, height);
       const timestamp = Date.now();
       let hasLiveEffect = false;
@@ -175,17 +212,26 @@ export default function GameBoardVfx({ effects = [] }) {
         const elapsed = reducedMotion ? Math.min(.9, duration * .4) : Math.max(0, (timestamp - new Date(effect.started_at).getTime()) / 1000);
         if (!effect.loop && elapsed > duration) return;
         hasLiveEffect = true;
-        gl.blendFunc(gl.SRC_ALPHA, type === 3 ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE);
-        gl.uniform2f(renderer.center, Number(effect.x) / 100, 1 - Number(effect.y) / 100);
+        gl.blendFunc(gl.SRC_ALPHA, type === 2 ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
         gl.uniform1f(renderer.time, elapsed);
         gl.uniform1f(renderer.type, type);
         gl.uniform1f(renderer.scale, (Math.max(60, Number(effect.size) || 170) * dpr) / height);
-        gl.uniform1f(renderer.seed, numericSeed(effect.id));
         gl.uniform1f(renderer.intensity, Math.max(.45, Math.min(1.45, Number(effect.intensity) || 1)));
         gl.uniform1f(renderer.duration, duration);
         gl.uniform1f(renderer.loop, effect.loop ? 1 : 0);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        const radius = Math.max(60, Number(effect.size) || 170) * dpr;
+        vfxSamples(effect, width, height).forEach((sample, index) => {
+          gl.uniform2f(renderer.center, sample.x / width, 1 - sample.y / height);
+          gl.uniform1f(renderer.seed, numericSeed(effect.id) + index * .73);
+          const left = Math.max(0, Math.floor(sample.x - radius));
+          const bottom = Math.max(0, Math.floor(height - sample.y - radius));
+          const right = Math.min(width, Math.ceil(sample.x + radius));
+          const top = Math.min(height, Math.ceil(height - sample.y + radius));
+          gl.scissor(left, bottom, Math.max(1, right - left), Math.max(1, top - bottom));
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        });
       });
+      gl.disable(gl.SCISSOR_TEST);
       if (hasLiveEffect && !reducedMotion) frame = window.requestAnimationFrame(draw);
     };
     frame = window.requestAnimationFrame(draw);

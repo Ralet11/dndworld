@@ -1052,9 +1052,15 @@ a:focus-visible {
 .game-stage-toolbar-host .game-vfx-tool-buttons button { width: 29px; min-height: 24px; border-right: 0; }
 .game-stage-toolbar-host .game-vfx-tool-buttons button span { display: none; }
 .game-stage-toolbar-host .game-vfx-tool-buttons button svg { width: 11px; height: 11px; }
+.game-stage-toolbar-host .game-vfx-shape-buttons { display: flex; gap: 0; }
+.game-stage-toolbar-host .game-vfx-shape-buttons button { width: 26px; min-height: 24px; padding: 0; }
+.game-stage-toolbar-host .game-vfx-shape-buttons button span { display: none; }
 .game-stage-toolbar-host .game-vfx-lifetime { height: 24px; display: flex; gap: 0; }
 .game-stage-toolbar-host .game-vfx-lifetime button { min-height: 24px; padding: 0 5px; }
 .game-stage-toolbar-host .game-vfx-lifetime select { width: 45px; min-height: 24px; padding: 0 3px; }
+.game-stage-toolbar-host .game-vfx-selected-editor { display: flex; align-items: center; gap: 3px; }
+.game-stage-toolbar-host .game-vfx-selected-editor > strong { display: none; }
+.game-stage-toolbar-host .game-vfx-remove-selected { width: 27px; min-width: 27px; height: 24px; padding: 0; font-size: 0; }
 
 .game-stage-wrap-dm { min-height: 0; flex: 1; position: relative; background: #020403; }
 .game-stage-wrap-dm .game-stage { height: 100%; min-height: 100%; border: 0; }
@@ -3806,12 +3812,23 @@ a:focus-visible {
   background-size: 48px 48px;
 }
 .game-board-vfx { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.game-vfx-shape-preview { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 6; overflow: visible; pointer-events: none; }
+.game-vfx-shape-preview line,
+.game-vfx-shape-preview rect,
+.game-vfx-shape-preview circle { fill: rgba(232, 198, 106, .06); stroke: #e8c66a; stroke-width: 1.5px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px currentColor); }
+.game-vfx-shape-preview.is-fire { color: #ff7b38; }
+.game-vfx-shape-preview.is-fire :is(line, rect, circle) { stroke: #ff7b38; }
+.game-vfx-shape-preview.is-ice { color: #8de8ff; }
+.game-vfx-shape-preview.is-ice :is(line, rect, circle) { stroke: #8de8ff; }
+.game-vfx-shape-preview.is-acid { color: #b5ed55; }
+.game-vfx-shape-preview.is-acid :is(line, rect, circle) { stroke: #b5ed55; }
 .game-vfx-control-layer { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
 .game-vfx-handle { width: var(--vfx-handle-size, 48px); height: var(--vfx-handle-size, 48px); position: absolute; display: grid; place-items: center; color: #e8d7b5; border: 1px dashed rgba(232, 215, 181, .68); border-radius: 50%; background: rgba(5, 10, 8, .36); box-shadow: 0 0 0 3px rgba(5, 10, 8, .34); transform: translate(-50%, -50%); cursor: grab; touch-action: none; pointer-events: auto; backdrop-filter: blur(2px); }
 .game-vfx-handle:active { cursor: grabbing; }
 .game-vfx-handle.is-fire { color: #ff8a38; border-color: rgba(255, 112, 42, .78); }
 .game-vfx-handle.is-ice { color: #8ee9ff; border-color: rgba(108, 213, 255, .78); }
 .game-vfx-handle.is-acid { color: #b8f04e; border-color: rgba(159, 231, 55, .8); }
+.game-vfx-handle.is-selected { border-style: solid; box-shadow: 0 0 0 3px rgba(225, 190, 107, .3), 0 0 18px currentColor; }
 .game-vfx-handle > button { width: 18px; height: 18px; position: absolute; top: -7px; right: -7px; display: grid; place-items: center; color: #e3b3a9; border: 1px solid #81483f; border-radius: 50%; background: #170c0a; box-shadow: 0 4px 9px rgba(0, 0, 0, .58); }
 .game-vfx-handle > button:hover { color: #fff0e9; border-color: #c66c5d; }
 .game-stage-media { width: 100%; height: 100%; position: absolute; inset: 0; object-fit: contain; pointer-events: none; background: #030605; }
@@ -3964,9 +3981,15 @@ a:focus-visible {
 .game-vfx-tool-buttons button.is-active.is-fire { color: #ff9a4e; border-color: rgba(255, 112, 42, .62); background: rgba(146, 45, 12, .18); }
 .game-vfx-tool-buttons button.is-active.is-ice { color: #9deaff; border-color: rgba(92, 194, 235, .62); background: rgba(24, 91, 122, .18); }
 .game-vfx-tool-buttons button.is-active.is-acid { color: #b9ee62; border-color: rgba(143, 211, 50, .62); background: rgba(73, 111, 18, .18); }
+.game-vfx-shape-buttons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.game-vfx-shape-buttons button { min-height: 29px; display: flex; align-items: center; justify-content: center; gap: 4px; color: #737d76; border: 1px solid #303a35; background: #09110e; font-size: 6px; font-weight: 900; text-transform: uppercase; }
+.game-vfx-shape-buttons button.is-active { color: #ebd08b; border-color: #7c6235; background: rgba(185, 141, 68, .13); }
 .game-vfx-lifetime { display: grid; grid-template-columns: 1fr 1fr auto; gap: 4px; }
 .game-vfx-lifetime button, .game-vfx-lifetime select { min-height: 27px; padding: 0 6px; color: #858d87; border: 1px solid #303a35; background: #09110e; font-size: 6px; font-weight: 900; text-transform: uppercase; }
 .game-vfx-lifetime button.is-active { color: #e2c77f; border-color: #775d31; background: rgba(185, 141, 68, .11); }
+.game-vfx-selected-editor { padding: 7px; display: grid; gap: 7px; border: 1px solid #55472e; background: rgba(167, 125, 55, .06); }
+.game-vfx-selected-editor > strong { color: #d8bd78; font-size: 7px; letter-spacing: .09em; text-transform: uppercase; }
+.game-vfx-remove-selected { min-height: 27px; display: flex; align-items: center; justify-content: center; gap: 5px; color: #d18778; border: 1px solid rgba(194, 69, 47, .4); background: rgba(194, 69, 47, .07); font-size: 6px; font-weight: 900; text-transform: uppercase; }
 .game-scene-cast {
   max-width: calc(100% - 32px);
   position: absolute;

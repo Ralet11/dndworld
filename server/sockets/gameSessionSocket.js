@@ -20,6 +20,7 @@ const presence = new Map();
 const rollDismissTimers = new Map();
 const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
+const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
 
 function roomName(sessionId) {
     return `game:${sessionId}`;
@@ -595,13 +596,19 @@ function registerGameSessionSocket(io, socket) {
         if (!BOARD_VFX_TYPES.has(type)) return fail(socket, 'Ese efecto visual no está disponible.');
         const loop = effect.loop !== false;
         const duration = Math.max(2, Math.min(60, Number(effect.duration) || 8));
+        const shape = BOARD_VFX_SHAPES.has(effect.shape) ? effect.shape : 'point';
+        const x = clamp(effect.x);
+        const y = clamp(effect.y);
         const startedAt = new Date();
         const item = {
             id: randomUUID(),
             type,
             view_key: annotationViewKey(session),
-            x: clamp(effect.x),
-            y: clamp(effect.y),
+            shape,
+            x,
+            y,
+            end_x: shape === 'point' ? x : clamp(effect.end_x),
+            end_y: shape === 'point' ? y : clamp(effect.end_y),
             size: Math.max(60, Math.min(360, Number(effect.size) || 170)),
             intensity: Math.max(0.45, Math.min(1.45, Number(effect.intensity) || 1)),
             loop,
@@ -631,7 +638,7 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:update-vfx', async ({ sessionId, effectId, x, y, size, intensity } = {}) => {
+    socket.on('game:update-vfx', async ({ sessionId, effectId, x, y, end_x, end_y, size, intensity } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !effectId) return;
         const effects = Array.isArray(session.stage_vfx) ? [...session.stage_vfx] : [];
@@ -640,6 +647,8 @@ function registerGameSessionSocket(io, socket) {
         const next = { ...effects[index] };
         if (x != null) next.x = clamp(x);
         if (y != null) next.y = clamp(y);
+        if (end_x != null) next.end_x = clamp(end_x);
+        if (end_y != null) next.end_y = clamp(end_y);
         if (size != null) next.size = Math.max(60, Math.min(360, Number(size) || next.size));
         if (intensity != null) next.intensity = Math.max(0.45, Math.min(1.45, Number(intensity) || next.intensity));
         effects[index] = next;
