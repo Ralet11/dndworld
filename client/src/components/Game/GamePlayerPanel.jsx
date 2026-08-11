@@ -224,9 +224,12 @@ export default function GamePlayerPanel() {
   };
 
   const pendingCombatNotice = (session?.combat_actions || []).find(action => {
-    const ownerCharacterId = session?.participants?.find(item => Number(item.user_id) === Number(user.id))?.character_id;
-    const belongsToPlayer = Number(action.actor_user_id) === Number(user.id)
-      || Number(action.actor_character_id) === Number(ownerCharacterId);
+    // Los IDs de usuario son UUIDs. Convertirlos con Number() los vuelve NaN y
+    // hace que una acción propia no pueda identificarse después de recargar.
+    const ownerCharacterId = session?.participants?.find(item => String(item.user_id) === String(user.id))?.character_id;
+    const belongsToPlayer = String(action.actor_user_id) === String(user.id)
+      || Number(action.actor_character_id) === Number(ownerCharacterId)
+      || Number(action.actor_character_id) === Number(character?.id);
     if (!belongsToPlayer || dismissedCombatNotices.includes(String(action.id))) return false;
     return action.status === 'DAMAGE_READY' || (action.status === 'COMPLETED' && action.attack && action.attack.hit === false);
   });
