@@ -1622,7 +1622,9 @@ function registerGameSessionSocket(io, socket) {
             if (!combatAction) return reply({ ok: false, message: 'La tirada de daño ya no está disponible.' });
             const session = await loadSession(sessionId);
             const authorizedDm = isDm(socket) && session?.dm_user_id === socket.user.id;
-            if (!session || (!authorizedDm && Number(combatAction.actor_user_id) !== Number(socket.user.id))) return reply({ ok: false, message: 'No puedes tirar el daño de esta acción.' });
+            // Los usuarios usan UUIDs: convertirlos con Number() produce NaN y
+            // bloqueaba al dueño legítimo al momento de tirar su daño.
+            if (!session || (!authorizedDm && String(combatAction.actor_user_id) !== String(socket.user.id))) return reply({ ok: false, message: 'No puedes tirar el daño de esta acción.' });
             const actorToken = session.tokens.find(token => Number(token.character_id) === Number(combatAction.actor_character_id));
             const expression = parseDiceExpression(combatAction.action_snapshot?.damage || combatAction.action_snapshot?.healing);
             if (!actorToken?.character || !expression) return reply({ ok: false, message: 'No se pudo preparar el daño de esta acción.' });
