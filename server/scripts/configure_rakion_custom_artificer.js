@@ -109,7 +109,7 @@ const FEATURES = [
     {
         name: 'Escudo retráctil', kind: 'Reaccion', resource: 'Requiere escudo operativo',
         combat_action: { target: 'self', economy: 'reaction', shield: { bonus: 5, initial_break_threshold: 3 } },
-        description: 'Activación defensiva: +5 CA contra el ataque que dispara la reacción. Después tirá 1d20; se rompe con 3 o menos la primera vez. Tras cada activación, el umbral aumenta en 1: 4 o menos, luego 5 o menos, y así sucesivamente.',
+        description: 'Activación defensiva: +5 CA contra el ataque que dispara la reacción. Después tirá 1d6; se rompe con 3 o menos la primera vez. Tras cada activación, el umbral aumenta en 1: 4 o menos, luego 5 o menos, y así sucesivamente.',
     },
     {
         name: 'Granada explosiva', kind: 'Bonus', resource: 'Máximo 2 construidas',

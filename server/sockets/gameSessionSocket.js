@@ -1625,7 +1625,7 @@ function registerGameSessionSocket(io, socket) {
                     summary: `${action.name}: +${Number(action.shield.bonus) || 5} CA hasta el final del turno. Tirando control de rotura (${threshold} o menos rompe).`,
                 };
                 const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
-                    sides: 20,
+                    sides: 6,
                     quantity: 1,
                     label: `${action.name} · control de rotura`,
                 });
