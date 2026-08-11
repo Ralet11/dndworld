@@ -311,12 +311,19 @@ function currentCombatState(session, actorCharacterId) {
     const current = session.combat_state && typeof session.combat_state === 'object' ? session.combat_state : {};
     const resources = { ...(current.resources || {}) };
     const reactions = { ...(current.reactions || {}) };
+    const acBonuses = { ...(current.acBonuses || {}) };
+    const shields = { ...(current.shields || {}) };
     if (Number(current.round) !== Number(session.round)
         || Number(current.turnIndex) !== Number(session.turn_index)
         || Number(current.actorCharacterId) !== Number(actorCharacterId)) {
-        return { round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions };
+        return { round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions, acBonuses, shields };
     }
-    return { ...current, used: { ...(current.used || {}) }, resources, reactions };
+    return { ...current, used: { ...(current.used || {}) }, resources, reactions, acBonuses, shields };
+}
+
+function combatArmorClass(session, character) {
+    const bonus = Number(session?.combat_state?.acBonuses?.[character?.id]?.bonus) || 0;
+    return Math.max(1, (Number(character?.ac_base) || 10) + bonus);
 }
 
 function resourceAvailability(action, character, session) {
@@ -427,10 +434,11 @@ async function finalizeCombatAction(io, combatAction, roll) {
     if (String(combatAction.attack_roll_id) === String(roll.id)) {
         const target = targets[0];
         const natural = Number(roll.results?.[0]);
-        const hit = natural === 20 || (natural !== 1 && Number(roll.total) >= Number(target.character?.ac_base || 10));
+        const targetAc = combatArmorClass(session, target.character);
+        const hit = natural === 20 || (natural !== 1 && Number(roll.total) >= targetAc);
         combatAction.result = {
             ...previousResult,
-            attack: { total: roll.total, natural, targetAc: Number(target.character?.ac_base || 10), hit, critical: natural === 20 },
+            attack: { total: roll.total, natural, targetAc, hit, critical: natural === 20 },
         };
         if (!hit) {
             combatAction.status = 'COMPLETED';
@@ -454,6 +462,31 @@ async function finalizeCombatAction(io, combatAction, roll) {
     }
 
     if (String(combatAction.effect_roll_id) !== String(roll.id)) return;
+    if (action.shield) {
+        const state = currentCombatState(session, combatAction.actor_character_id);
+        const prior = state.shields?.[combatAction.actor_character_id] || {};
+        const threshold = Number(prior.breakThreshold ?? action.shield.initial_break_threshold ?? 3);
+        const natural = Number(roll.results?.[0]) || 0;
+        const broken = natural <= threshold;
+        state.shields[combatAction.actor_character_id] = {
+            broken,
+            breakThreshold: threshold + 1,
+        };
+        session.combat_state = state;
+        session.changed('combat_state', true);
+        await session.save();
+        combatAction.status = 'COMPLETED';
+        combatAction.result = {
+            ...previousResult,
+            shield: { bonus: Number(action.shield.bonus) || 5, natural, threshold, broken },
+            targets: [{ tokenId: actorToken.id, characterId: actorToken.character_id, name: actorToken.label, outcome: broken ? 'shield-broken' : 'shield-ready' }],
+            summary: broken
+                ? `${combatAction.action_name}: el control dio ${natural} (rotura con ${threshold} o menos). El escudo se rompió.`
+                : `${combatAction.action_name}: el control dio ${natural}; el escudo resiste. Próximo umbral de rotura: ${threshold + 1} o menos.`,
+        };
+        await combatAction.save();
+        return broadcastSession(io, session.id);
+    }
     const outcomes = [];
     const criticalMultiplier = combatAction.result?.attack?.critical ? 2 : 1;
     const extraRolls = (action.extraDamage || []).flatMap(expression => {
@@ -1519,6 +1552,9 @@ function registerGameSessionSocket(io, socket) {
             };
 
             const combatState = currentCombatState(session, actorCharacterId);
+            if (action.shield && combatState.shields?.[actorCharacterId]?.broken) {
+                return reply({ ok: false, message: 'El escudo retráctil está roto y debe repararse antes de volver a usarlo.' });
+            }
             if (action.resource?.type === 'spell-slot') {
                 const minimum = Number(action.resource.level) || 1;
                 const slots = JSON.parse(JSON.stringify(catalog.character.spell_slots || {}));
@@ -1557,6 +1593,12 @@ function registerGameSessionSocket(io, socket) {
 
             if (action.economy === 'reaction') combatState.reactions[actorCharacterId] = true;
             else combatState.used[action.economy] = true;
+            if (action.shield) {
+                combatState.acBonuses[actorCharacterId] = {
+                    bonus: Number(action.shield.bonus) || 5,
+                    source: action.name,
+                };
+            }
             session.combat_state = combatState;
             session.changed('combat_state', true);
             await session.save();
@@ -1575,7 +1617,22 @@ function registerGameSessionSocket(io, socket) {
                 result: {},
             });
 
-            if (action.attackBonus != null) {
+            if (action.shield) {
+                const shieldState = combatState.shields?.[actorCharacterId] || {};
+                const threshold = Number(shieldState.breakThreshold ?? action.shield.initial_break_threshold ?? 3);
+                combatAction.result = {
+                    shield: { bonus: Number(action.shield.bonus) || 5, threshold },
+                    summary: `${action.name}: +${Number(action.shield.bonus) || 5} CA hasta el final del turno. Tirando control de rotura (${threshold} o menos rompe).`,
+                };
+                const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
+                    sides: 20,
+                    quantity: 1,
+                    label: `${action.name} · control de rotura`,
+                });
+                combatAction.effect_roll_id = roll.id;
+                combatAction.status = 'EFFECT_ROLL';
+                await combatAction.save();
+            } else if (action.attackBonus != null) {
                 const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
                     sides: 20,
                     quantity: 1,
