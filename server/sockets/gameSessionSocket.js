@@ -440,6 +440,8 @@ async function finalizeCombatAction(io, combatAction, roll) {
             ...previousResult,
             attack: { total: roll.total, natural, targetAc, hit, critical: natural === 20 },
         };
+        roll.label = `${combatAction.action_name}: ${hit ? `impacta a ${target.label}` : `falla contra ${target.label}`}`.slice(0, 120);
+        await roll.save();
         if (!hit) {
             combatAction.status = 'COMPLETED';
             combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'miss' }], summary: `${combatAction.action_name}: falla contra ${target.label}.` };
@@ -532,6 +534,11 @@ async function finalizeCombatAction(io, combatAction, roll) {
         });
     }
     const affected = outcomes.filter(item => item.amount > 0).length;
+    const narrative = outcomes.map(item => `${item.name} ${action.healing ? 'recibe' : 'sufre'} ${item.amount} PG${action.healing ? ' de curación' : ' de daño'}`).join(' · ');
+    if (narrative) {
+        roll.label = narrative.slice(0, 120);
+        await roll.save();
+    }
     combatAction.status = 'COMPLETED';
     combatAction.result = {
         ...previousResult,

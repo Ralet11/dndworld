@@ -120,7 +120,12 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
     });
   }, [onResolveRoll, rolls, userId]);
 
-  const orderedRolls = rolls.filter(roll => roll.resolved).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  // Cola cronológica: las tres más recientes permanecen visibles y, al entrar
+  // una nueva, la más antigua abandona la pila por arriba.
+  const orderedRolls = rolls
+    .filter(roll => roll.resolved)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    .slice(-3);
 
   return (
     <>
