@@ -153,7 +153,8 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
     visibleStackRef.current = orderedRolls;
   }, [orderedRolls]);
 
-  const stackRolls = [...retiringRolls, ...orderedRolls];
+  const activeIds = new Set(orderedRolls.map(roll => String(roll.id)));
+  const stackRolls = [...retiringRolls.filter(roll => !activeIds.has(String(roll.id))), ...orderedRolls];
 
   return (
     <>
@@ -166,7 +167,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
             const naturalTwenty = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20;
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
             return (
-              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring ? ' is-stack-retiring' : ''}`}>
+              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring && !roll.dismissing ? ' is-stack-retiring' : ''}`}>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>

@@ -1170,7 +1170,7 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index = nextIndex;
         }
-        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, reactions: nextIndex >= session.turn_order.length ? {} : { ...(session.combat_state?.reactions || {}) } };
+        session.combat_state = { ...(session.combat_state || {}), resources: { ...(session.combat_state?.resources || {}) }, reactions: nextIndex >= session.turn_order.length ? {} : { ...(session.combat_state?.reactions || {}) } };
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1191,7 +1191,7 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index -= 1;
         }
-        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
+        session.combat_state = { ...(session.combat_state || {}), resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1218,7 +1218,7 @@ function registerGameSessionSocket(io, socket) {
             turnIndex = session.turn_order.length - 1;
         }
         session.turn_index = turnIndex;
-        session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
+        session.combat_state = { ...(session.combat_state || {}), resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
