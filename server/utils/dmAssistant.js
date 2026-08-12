@@ -580,14 +580,28 @@ async function readCharacterStatus(target) {
     }
 
     const character = await Character.findByPk(resolved.character.id, {
-        attributes: ['id', 'name', 'hp_current', 'hp_max', 'xp', 'gold', 'inspiration', 'is_npc', 'npc_type', 'is_active', 'owner_id'],
+        attributes: [
+            'id', 'name', 'race', 'class', 'level', 'hp_current', 'hp_max', 'ac_base',
+            'initiative_bonus', 'speed', 'passive_perception', 'challenge_rating', 'xp', 'gold',
+            'inspiration', 'is_npc', 'npc_type', 'is_active', 'owner_id', 'abilities_text',
+        ],
     });
+    const actions = character.is_npc
+        ? await NpcAction.findAll({
+            where: { character_id: character.id },
+            order: [['sort_order', 'ASC'], ['id', 'ASC']],
+        })
+        : [];
     const owner = character.owner_id
         ? await Character.findByPk(character.owner_id, { attributes: ['id', 'name'] })
         : null;
     const lines = [
         `${character.name}`,
         `PG: ${character.hp_current}/${character.hp_max}`,
+        `CA: ${character.ac_base || 10}`,
+        `Nivel: ${character.level || 1}`,
+        `Clase/Rol: ${character.class || 'sin definir'}`,
+        `Raza: ${character.race || 'sin definir'}`,
         `XP: ${character.xp || 0}`,
         `Oro: ${character.gold || 0}`,
         `Inspiracion: ${character.inspiration ? 'si' : 'no'}`,
@@ -599,6 +613,23 @@ async function readCharacterStatus(target) {
         if (owner?.name) {
             lines.push(`Vinculado a: ${owner.name}`);
         }
+        lines.push('', 'Acciones, rasgos y reacciones:');
+        if (!actions.length) {
+            lines.push('- Ninguna cargada.');
+        } else {
+            actions.forEach((action) => {
+                const mechanics = [
+                    action.attack_bonus != null ? `ataque ${Number(action.attack_bonus) >= 0 ? '+' : ''}${action.attack_bonus}` : null,
+                    action.damage_dice ? `daño ${action.damage_dice}${action.damage_bonus ? `${Number(action.damage_bonus) >= 0 ? '+' : ''}${action.damage_bonus}` : ''}${action.damage_type ? ` ${action.damage_type}` : ''}` : null,
+                    action.reach ? `alcance ${action.reach}` : null,
+                    action.save_dc ? `salvación ${action.save_ability || ''} CD ${action.save_dc}`.trim() : null,
+                    action.recharge ? `recarga ${action.recharge}` : null,
+                    action.max_uses ? `${action.max_uses} uso(s)` : null,
+                ].filter(Boolean).join('; ');
+                lines.push(`- ${action.name} [${action.action_type || 'acción'}]${action.description ? `: ${action.description}` : ''}${mechanics ? ` (${mechanics})` : ''}`);
+            });
+        }
+        if (character.abilities_text) lines.push(`Rasgos narrativos: ${String(character.abilities_text).slice(0, 1500)}`);
     }
 
     return buildReply(
@@ -608,6 +639,37 @@ async function readCharacterStatus(target) {
             tool: 'character.get',
             data: {
                 characterId: character.id,
+                name: character.name,
+                race: character.race || null,
+                className: character.class || null,
+                level: character.level || 1,
+                hp: character.hp_current,
+                maxHp: character.hp_max,
+                armorClass: character.ac_base || 10,
+                initiative: character.initiative_bonus || 0,
+                speed: character.speed || 0,
+                passivePerception: character.passive_perception || 10,
+                challengeRating: character.challenge_rating || null,
+                isNpc: !!character.is_npc,
+                npcType: character.npc_type || null,
+                isActive: !!character.is_active,
+                actions: actions.map((action) => ({
+                    id: action.id,
+                    name: action.name,
+                    type: action.action_type,
+                    description: action.description,
+                    attackBonus: action.attack_bonus,
+                    damage: action.damage_dice,
+                    damageBonus: action.damage_bonus,
+                    damageType: action.damage_type,
+                    reach: action.reach,
+                    saveAbility: action.save_ability,
+                    saveDc: action.save_dc,
+                    recharge: action.recharge,
+                    maxUses: action.max_uses,
+                    isPublic: !!action.is_public,
+                })),
+                narrativeTraits: character.abilities_text || '',
             },
         }
     );

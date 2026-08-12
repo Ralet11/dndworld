@@ -65,6 +65,7 @@ function buildSystemPrompt() {
         'Si faltan datos criticos o hay ambiguedad real, pregunta de forma breve y concreta.',
         'Puedes encadenar hasta 3 tools en un mismo turno.',
         'Puedes usar el historial reciente para resolver referencias como "quitale 5", "hacelo", "lo mismo", "ese goblin".',
+        'Cuando el DM pregunte qué habilidades, ataques, acciones, rasgos o reacciones tiene un personaje, usa get_character_status antes de responder y basa la respuesta en actions.',
         'Si el usuario viene hablando de un NPC y luego dice "pasalo a compañero de la party", debes inferir ese mismo NPC del historial y usar la tool correspondiente.',
         'No inventes personajes, quests, escenas ni numeros fuera del contexto y resultados de tools.',
         'Al crear o editar un NPC, toda habilidad, poder, ataque, pasiva, resistencia, reacción o rasgo jugable debe ser una entrada individual en actions. Usa type "rasgo" para pasivas y poderes sin tirada; abilitiesText queda reservado sólo para biografía, personalidad o lore que no se usa en combate.',
@@ -131,7 +132,7 @@ const TOOL_SPECS = [
         type: 'function',
         function: {
             name: 'get_character_status',
-            description: 'Consulta el estado puntual de un personaje o NPC.',
+            description: 'Consulta la ficha mecánica de un personaje o NPC, incluidas acciones, habilidades, rasgos, reacciones y estadísticas. No accede a notas privadas del DM.',
             parameters: {
                 type: 'object',
                 properties: {
