@@ -61,6 +61,7 @@ function buildSystemPrompt() {
         'Debes conversar normalmente, pero cuando el usuario quiera leer o cambiar estado de la sesion debes usar tools.',
         'Nunca digas que vas a hacer un cambio si no llamaste la tool correspondiente.',
         'Si el pedido es claro y ejecutable, llama la tool. No pidas confirmacion innecesaria.',
+        'Las eliminaciones son la excepción: primero usa request_delete y sólo usa confirm_delete cuando el DM haya escrito una confirmación explícita después del aviso.',
         'Si faltan datos criticos o hay ambiguedad real, pregunta de forma breve y concreta.',
         'Puedes encadenar hasta 3 tools en un mismo turno.',
         'Puedes usar el historial reciente para resolver referencias como "quitale 5", "hacelo", "lo mismo", "ese goblin".',
@@ -300,6 +301,48 @@ const TOOL_SPECS = [
     {
         type: 'function',
         function: {
+            name: 'create_npc', description: 'Crea un NPC o criatura con sus estadísticas básicas.',
+            parameters: { type: 'object', properties: { name: { type: 'string' }, race: { type: 'string' }, className: { type: 'string' }, npcType: { type: 'string', enum: ['neutral', 'amigo', 'compañero', 'enemigo'] }, hpMax: { type: 'number' }, hpCurrent: { type: 'number' }, ac: { type: 'number' }, level: { type: 'number' }, speed: { type: 'number' }, notes: { type: 'string' }, imageUrl: { type: 'string' } }, required: ['name'], additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'update_npc', description: 'Actualiza los campos básicos de un NPC existente.',
+            parameters: { type: 'object', properties: { target: { type: 'string' }, fields: { type: 'object', properties: { race: { type: 'string' }, className: { type: 'string' }, npcType: { type: 'string', enum: ['neutral', 'amigo', 'compañero', 'enemigo'] }, hpMax: { type: 'number' }, hpCurrent: { type: 'number' }, ac: { type: 'number' }, level: { type: 'number' }, speed: { type: 'number' }, notes: { type: 'string' }, imageUrl: { type: 'string' } }, additionalProperties: false } }, required: ['target', 'fields'], additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'create_item', description: 'Crea un objeto de campaña.',
+            parameters: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['Arma', 'Armadura', 'Consumible', 'Objeto Mágico', 'Otro'] }, rarity: { type: 'string', enum: ['Común', 'Poco Común', 'Raro', 'Muy Raro', 'Legendario'] }, level: { type: 'number' }, description: { type: 'string' }, damage: { type: 'string' }, damageType: { type: 'string' }, imageUrl: { type: 'string' } }, required: ['name'], additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'update_item', description: 'Actualiza un objeto existente.',
+            parameters: { type: 'object', properties: { target: { type: 'string' }, fields: { type: 'object', properties: { type: { type: 'string', enum: ['Arma', 'Armadura', 'Consumible', 'Objeto Mágico', 'Otro'] }, rarity: { type: 'string', enum: ['Común', 'Poco Común', 'Raro', 'Muy Raro', 'Legendario'] }, description: { type: 'string' }, damage: { type: 'string' }, damageType: { type: 'string' }, imageUrl: { type: 'string' } }, additionalProperties: false } }, required: ['target', 'fields'], additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'request_delete', description: 'Solicita eliminar un NPC u objeto. Nunca elimina: requiere confirmación posterior.',
+            parameters: { type: 'object', properties: { entity: { type: 'string', enum: ['npc', 'item'] }, target: { type: 'string' } }, required: ['entity', 'target'], additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'confirm_delete', description: 'Confirma la eliminación pendiente sólo si el DM lo pidió explícitamente.',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'post_timeline_message',
             description: 'Publica una narracion o mensaje del DM en el timeline de la escena actual.',
             parameters: {
@@ -385,6 +428,18 @@ function normalizeToolCall(toolCall) {
                     ...(typeof args.activeInParty === 'boolean' ? { activeInParty: args.activeInParty } : {}),
                 }
                 : null;
+        case 'create_npc':
+            return args.name ? { tool: 'npc.create', fields: args } : null;
+        case 'update_npc':
+            return args.target && args.fields ? { tool: 'npc.update', target: clampText(args.target, 120), fields: args.fields } : null;
+        case 'create_item':
+            return args.name ? { tool: 'item.create', fields: args } : null;
+        case 'update_item':
+            return args.target && args.fields ? { tool: 'item.update', target: clampText(args.target, 120), fields: args.fields } : null;
+        case 'request_delete':
+            return args.entity && args.target ? { tool: `${args.entity}.delete.request`, target: clampText(args.target, 120) } : null;
+        case 'confirm_delete':
+            return { tool: 'action.delete.confirm' };
         case 'post_timeline_message':
             return args.content ? { tool: 'timeline.post', content: clampText(args.content, 4000) } : null;
         case 'undo_last_action':

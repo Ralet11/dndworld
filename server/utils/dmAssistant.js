@@ -1,8 +1,9 @@
-const { Character, MapState, Quest, Scene, TimelineEvent } = require('../models');
+const { Character, CharacterInventory, Item, MapState, Quest, Scene, TimelineEvent } = require('../models');
 const { runAssistantConversation } = require('./dmAssistantLlm');
 const { deriveWorldConditions, normalizeWorldTime } = require('./worldTime');
 
 const undoStackByUser = new Map();
+const pendingDeletionByUser = new Map();
 
 const HELP_SUGGESTIONS = [
     'contexto',
@@ -159,6 +160,109 @@ async function resolveCharacter(target) {
     }
 
     return { ok: true, character: ranked[0].character };
+}
+
+async function resolveItem(target) {
+    const query = normalizeText(String(target || '').replace(/[.!?,;:]+$/g, ''));
+    if (!query) return { ok: false, error: 'No pude detectar a que objeto te refieres.' };
+    const items = await Item.findAll();
+    const ranked = items.map((item) => ({ item, score: scoreNameMatch(item.name, query) }))
+        .filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name));
+    if (!ranked.length) return { ok: false, error: `No encontre ningun objeto que matchee con "${target}".` };
+    if (ranked.length > 1 && ranked[0].score === ranked[1].score) return { ok: false, ambiguous: true, matches: ranked.slice(0, 4).map((entry) => entry.item.name), error: `Encontre varios objetos: ${ranked.slice(0, 4).map((entry) => entry.item.name).join(', ')}.` };
+    return { ok: true, item: ranked[0].item };
+}
+
+function safeNpcPatch(fields = {}) {
+    const text = (value, limit) => String(value || '').trim().slice(0, limit);
+    const integer = (value, min, max) => Number.isFinite(Number(value)) ? clampNumber(Math.round(Number(value)), min, max) : undefined;
+    const patch = {};
+    if (fields.race !== undefined) patch.race = text(fields.race, 80);
+    if (fields.className !== undefined) patch.class = text(fields.className, 80);
+    if (fields.npcType !== undefined && ['neutral', 'amigo', 'compañero', 'enemigo'].includes(fields.npcType)) patch.npc_type = fields.npcType;
+    if (fields.hpMax !== undefined) patch.hp_max = integer(fields.hpMax, 1, 9999);
+    if (fields.hpCurrent !== undefined) patch.hp_current = integer(fields.hpCurrent, 0, 9999);
+    if (fields.ac !== undefined) patch.ac_base = integer(fields.ac, 0, 99);
+    if (fields.level !== undefined) patch.level = integer(fields.level, 1, 20);
+    if (fields.speed !== undefined) patch.speed = integer(fields.speed, 0, 999);
+    if (fields.notes !== undefined) patch.notes = text(fields.notes, 5000);
+    if (fields.imageUrl !== undefined) patch.image_url = text(fields.imageUrl, 2000);
+    Object.keys(patch).forEach((key) => patch[key] === undefined && delete patch[key]);
+    return patch;
+}
+
+async function emitItemRefresh(io) { io.emit('all-items', await Item.findAll()); }
+
+async function createNpcFromAssistant({ fields, io, getCalculatedPartyStats }) {
+    const name = String(fields.name || '').trim().slice(0, 120);
+    if (!name) return buildReply('error', 'Para crear un NPC necesito al menos un nombre.');
+    const patch = safeNpcPatch(fields);
+    const hpMax = patch.hp_max || 10;
+    const npc = await Character.create({ name, is_npc: true, hp_max: hpMax, hp_current: patch.hp_current ?? hpMax, race: patch.race || 'Humanoide', class: patch.class || 'NPC', npc_type: patch.npc_type || 'neutral', level: patch.level || 1, ac_base: patch.ac_base || 10, speed: patch.speed || 30, notes: patch.notes || '', image_url: patch.image_url || null });
+    await emitNpcRefresh(io, getCalculatedPartyStats);
+    return buildReply('result', `Creé a ${npc.name}: ${npc.hp_current}/${npc.hp_max} PG, CA ${npc.ac_base}, ${npc.npc_type}.`, { tool: 'npc.create', suggestions: ['editar ' + npc.name, 'activar ' + npc.name] });
+}
+
+async function updateNpcFromAssistant({ target, fields, io, getCalculatedPartyStats }) {
+    const resolved = await resolveCharacter(target);
+    if (!resolved.ok || !resolved.character.is_npc) return buildReply('error', resolved.ok ? `${resolved.character.name} no es un NPC.` : resolved.error, resolved.ambiguous ? { suggestions: resolved.matches } : {});
+    const patch = safeNpcPatch(fields);
+    if (!Object.keys(patch).length) return buildReply('error', 'No detecté campos válidos para cambiar en el NPC.');
+    const npc = await Character.findByPk(resolved.character.id);
+    Object.assign(npc, patch); if (npc.hp_current > npc.hp_max) npc.hp_current = npc.hp_max; await npc.save();
+    await emitNpcRefresh(io, getCalculatedPartyStats);
+    return buildReply('result', `Actualicé ${npc.name}.`, { tool: 'npc.update', suggestions: ['deshacer'] });
+}
+
+async function createItemFromAssistant({ fields, io }) {
+    const name = String(fields.name || '').trim().slice(0, 120);
+    if (!name) return buildReply('error', 'Para crear un objeto necesito un nombre.');
+    const allowedTypes = ['Arma', 'Armadura', 'Consumible', 'Objeto Mágico', 'Otro'];
+    const allowedRarities = ['Común', 'Poco Común', 'Raro', 'Muy Raro', 'Legendario'];
+    const item = await Item.create({ name, type: allowedTypes.includes(fields.type) ? fields.type : 'Otro', rarity: allowedRarities.includes(fields.rarity) ? fields.rarity : 'Común', level: clampNumber(Number(fields.level) || 1, 1, 20), description: String(fields.description || '').trim().slice(0, 5000), damage: String(fields.damage || '').trim().slice(0, 32) || null, damage_type: String(fields.damageType || '').trim().slice(0, 40) || null, image_url: String(fields.imageUrl || '').trim().slice(0, 2000) || null });
+    await emitItemRefresh(io);
+    return buildReply('result', `Creé el objeto ${item.name} (${item.type}, ${item.rarity}).`, { tool: 'item.create', suggestions: ['editar ' + item.name] });
+}
+
+async function updateItemFromAssistant({ target, fields, io }) {
+    const resolved = await resolveItem(target);
+    if (!resolved.ok) return buildReply('error', resolved.error, resolved.ambiguous ? { suggestions: resolved.matches } : {});
+    const item = resolved.item; const patch = {};
+    if (fields.description !== undefined) patch.description = String(fields.description).slice(0, 5000);
+    if (fields.damage !== undefined) patch.damage = String(fields.damage).slice(0, 32);
+    if (fields.damageType !== undefined) patch.damage_type = String(fields.damageType).slice(0, 40);
+    if (fields.imageUrl !== undefined) patch.image_url = String(fields.imageUrl).slice(0, 2000);
+    if (fields.rarity !== undefined && ['Común', 'Poco Común', 'Raro', 'Muy Raro', 'Legendario'].includes(fields.rarity)) patch.rarity = fields.rarity;
+    if (fields.type !== undefined && ['Arma', 'Armadura', 'Consumible', 'Objeto Mágico', 'Otro'].includes(fields.type)) patch.type = fields.type;
+    if (!Object.keys(patch).length) return buildReply('error', 'No detecté campos válidos para cambiar en el objeto.');
+    Object.assign(item, patch); await item.save(); await emitItemRefresh(io);
+    return buildReply('result', `Actualicé ${item.name}.`, { tool: 'item.update', suggestions: ['deshacer'] });
+}
+
+async function requestDeletion({ entity, target, userId }) {
+    const resolved = entity === 'npc' ? await resolveCharacter(target) : await resolveItem(target);
+    const record = entity === 'npc' ? resolved.character : resolved.item;
+    if (!resolved.ok || (entity === 'npc' && !record.is_npc)) return buildReply('error', resolved.ok ? 'Sólo se pueden eliminar NPCs desde el Oráculo.' : resolved.error, resolved.ambiguous ? { suggestions: resolved.matches } : {});
+    pendingDeletionByUser.set(userId, { entity, id: record.id, name: record.name, expiresAt: Date.now() + 120000 });
+    return buildReply('confirm', `Vas a eliminar ${entity === 'npc' ? 'el NPC' : 'el objeto'} "${record.name}". Esta acción no se puede deshacer. Escribí “confirmar eliminación” para continuar.`, { tool: `${entity}.delete.request`, suggestions: ['confirmar eliminación', 'cancelar'] });
+}
+
+async function confirmDeletion({ userId, io, getCalculatedPartyStats }) {
+    const pending = pendingDeletionByUser.get(userId);
+    if (!pending || pending.expiresAt < Date.now()) { pendingDeletionByUser.delete(userId); return buildReply('info', 'No hay ninguna eliminación pendiente para confirmar.'); }
+    pendingDeletionByUser.delete(userId);
+    if (pending.entity === 'npc') {
+        const npc = await Character.findOne({ where: { id: pending.id, is_npc: true } });
+        if (!npc) return buildReply('error', 'Ese NPC ya no existe.');
+        await npc.destroy(); await emitNpcRefresh(io, getCalculatedPartyStats);
+        return buildReply('result', `Eliminé el NPC ${pending.name}.`, { tool: 'npc.delete' });
+    }
+    const item = await Item.findByPk(pending.id);
+    if (!item) return buildReply('error', 'Ese objeto ya no existe.');
+    const assigned = await CharacterInventory.count({ where: { item_id: item.id } });
+    if (assigned) return buildReply('error', `${item.name} está asignado a ${assigned} inventario(s). Quitalo primero antes de eliminarlo.`);
+    await item.destroy(); await emitItemRefresh(io);
+    return buildReply('result', `Eliminé el objeto ${pending.name}.`, { tool: 'item.delete' });
 }
 
 async function resolveQuest(target) {
@@ -1132,6 +1236,20 @@ async function executeStructuredToolCall({
                 io,
                 getCalculatedPartyStats,
             });
+        case 'npc.create':
+            return createNpcFromAssistant({ fields: toolCall.fields || {}, io, getCalculatedPartyStats });
+        case 'npc.update':
+            return updateNpcFromAssistant({ target: toolCall.target, fields: toolCall.fields || {}, io, getCalculatedPartyStats });
+        case 'npc.delete.request':
+            return requestDeletion({ entity: 'npc', target: toolCall.target, userId: user.id });
+        case 'item.create':
+            return createItemFromAssistant({ fields: toolCall.fields || {}, io });
+        case 'item.update':
+            return updateItemFromAssistant({ target: toolCall.target, fields: toolCall.fields || {}, io });
+        case 'item.delete.request':
+            return requestDeletion({ entity: 'item', target: toolCall.target, userId: user.id });
+        case 'action.delete.confirm':
+            return confirmDeletion({ userId: user.id, io, getCalculatedPartyStats });
         case 'timeline.post':
             return executeTimelinePost({
                 content: toolCall.content,
