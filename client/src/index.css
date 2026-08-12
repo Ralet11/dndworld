@@ -317,13 +317,15 @@ a:focus-visible {
 
 /* Oracle operational console */
 .dm-surface-assistant { overflow: hidden; }
-.dm-surface-assistant > div { width: 100%; max-width: none; height: 100%; padding: 22px 26px; }
-.oracle-workspace { height: 100%; display: flex; flex-direction: column; gap: 16px; }
-.oracle-header { min-height: 66px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 15px; border-bottom: 1px solid rgba(63, 169, 201, 0.22); }
+.dm-surface-assistant > div { width: 100%; max-width: none; height: 100%; padding: 16px 20px; }
+.oracle-workspace { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.oracle-header { min-height: 58px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 4px 2px 12px; border-bottom: 1px solid rgba(63, 169, 201, 0.22); }
 .oracle-header h1 { display: flex; align-items: center; gap: 11px; color: #c9d8d7 !important; font-size: 28px !important; }
-.oracle-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(230px, 0.28fr) minmax(480px, 1fr); gap: 10px; }
-.oracle-context-rail { min-height: 0; padding-right: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; border-right: 1px solid rgba(63, 169, 201, 0.16); }
-.oracle-context-rail .panel { padding: 14px !important; border-color: rgba(63, 169, 201, 0.16); border-radius: 4px; background: rgba(11, 20, 19, 0.82); }
+.oracle-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: clamp(250px, 22vw, 300px) minmax(0, 1fr); gap: 16px; }
+.oracle-context-rail { min-height: 0; padding: 0 12px 0 0; display: flex; flex-direction: column; gap: 7px; overflow-y: auto; border-right: 1px solid rgba(63, 169, 201, 0.16); }
+.oracle-context-rail .panel { padding: 11px 12px !important; border-color: rgba(63, 169, 201, 0.16); border-radius: 4px; background: rgba(11, 20, 19, 0.82); }
+.oracle-context-rail .panel .text-xs { font-size: 9px; line-height: 1.55; }
+.oracle-context-rail .panel .text-sm { font-size: 11px; }
 .oracle-history-panel { padding: 11px; border: 1px solid rgba(63, 169, 201, .2); background: rgba(9, 18, 16, .8); }
 .oracle-history-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #67c5df; font-size: 7px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
 .oracle-history-title button, .oracle-thread-actions > button { width: 25px; height: 25px; display: grid; place-items: center; color: #8fdbef; border: 1px solid rgba(63, 169, 201, .34); background: rgba(63, 169, 201, .08); }
@@ -338,7 +340,7 @@ a:focus-visible {
 .oracle-history-list p { padding: 6px 2px; color: #64716c; font-size: 8px; line-height: 1.5; }
 .oracle-conversation { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .oracle-chat-panel { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border-color: rgba(63, 169, 201, 0.26); border-radius: 5px; box-shadow: none; }
-.oracle-messages { min-height: 0; flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: linear-gradient(180deg, #09110f, #080d0c); }
+.oracle-messages { min-height: 0; flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: radial-gradient(circle at 50% 38%, rgba(32, 104, 117, .08), transparent 25rem), linear-gradient(180deg, #09110f, #080d0c); }
 .oracle-chat-panel textarea { border-radius: 4px; }
 .oracle-thread-header { min-height: 76px; padding: 13px 15px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; border-bottom: 1px solid rgba(63, 169, 201, .2); background: linear-gradient(135deg, rgba(17, 32, 29, .98), rgba(7, 14, 12, .98)); }
 .oracle-thread-emblem { width: 34px; height: 34px; display: grid; place-items: center; color: #65cae7; border: 1px solid rgba(63, 169, 201, .38); background: rgba(63, 169, 201, .08); box-shadow: inset 0 0 16px rgba(63, 169, 201, .06); transform: rotate(45deg); }
@@ -354,6 +356,14 @@ a:focus-visible {
 .oracle-thread-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
 .oracle-thread-actions select { max-width: 210px; height: 27px; padding: 0 23px 0 8px; overflow: hidden; color: #b5c5bc; border: 1px solid rgba(63, 169, 201, .24); outline: none; background: #0a1512; font-size: 7px; text-overflow: ellipsis; }
 .oracle-history-loading { padding: 18px; color: #6bc9e2; font-size: 9px; text-align: center; }
+.oracle-empty-state { width: min(480px, 92%); margin: auto; padding: 36px 28px; display: flex; flex-direction: column; align-items: center; border: 1px solid rgba(63, 169, 201, .25); background: linear-gradient(135deg, rgba(18, 43, 43, .58), rgba(8, 15, 13, .74)); box-shadow: 0 22px 65px rgba(0, 0, 0, .25); text-align: center; }
+.oracle-empty-emblem { width: 50px; height: 50px; margin-bottom: 15px; display: grid; place-items: center; color: #65cce5; border: 1px solid rgba(63, 169, 201, .45); background: rgba(63, 169, 201, .08); transform: rotate(45deg); }
+.oracle-empty-emblem svg { transform: rotate(-45deg); }
+.oracle-empty-state > span { color: #5cb5ce; font-size: 7px; font-weight: 900; letter-spacing: .17em; text-transform: uppercase; }
+.oracle-empty-state h3 { margin-top: 9px; color: #e5ddce; font-family: var(--font-display); font-size: 23px; font-weight: 500; }
+.oracle-empty-state p { max-width: 350px; margin-top: 9px; color: #81918a; font-size: 10px; line-height: 1.7; }
+.oracle-empty-state button { min-height: 34px; margin-top: 19px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; color: #8fdbef; border: 1px solid rgba(63, 169, 201, .43); background: rgba(63, 169, 201, .1); font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.oracle-empty-state button:hover { background: rgba(63, 169, 201, .2); }
 .oracle-message-row { display: flex; }
 .oracle-message-row.is-user { justify-content: flex-end; }
 .oracle-message-row.is-assistant { justify-content: flex-start; }

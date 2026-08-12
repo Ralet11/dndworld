@@ -518,7 +518,16 @@ export default function AssistantPanel({ embedded = false }) {
 
             <div className="oracle-messages">
               {historyLoading && <div className="oracle-history-loading">Cargando conversación…</div>}
-              {!historyLoading && messages.map((msg) => (
+              {!historyLoading && !conversationId && (
+                <div className="oracle-empty-state">
+                  <div className="oracle-empty-emblem"><Sparkles size={25} /></div>
+                  <span>Oracle de campaña</span>
+                  <h3>Tu mesa tiene memoria.</h3>
+                  <p>Abrí un hilo para preparar encuentros, narrar escenas o ejecutar cambios. Cada conversación queda guardada para retomarla cuando quieras.</p>
+                  <button onClick={createConversation}><Plus size={15} /> Nueva conversación</button>
+                </div>
+              )}
+              {!historyLoading && !!conversationId && messages.map((msg) => (
                 <MessageBubble key={msg.id} msg={msg} onUndo={() => sendCommand('deshacer')} />
               ))}
               {loading && (
