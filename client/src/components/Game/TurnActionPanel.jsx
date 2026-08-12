@@ -80,7 +80,8 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
     else refresh();
   });
 
-  if (session.status !== 'LIVE' || session.combat_state?.mode !== 'COMBAT') return null;
+  const isCombatMode = session.combat_state?.mode === 'COMBAT' || (session.combat_state?.mode == null && (session.turn_order || []).length > 0);
+  if (session.status !== 'LIVE' || !isCombatMode) return null;
 
   if (!isMyTurn) {
     if (!reactions.length) return null;

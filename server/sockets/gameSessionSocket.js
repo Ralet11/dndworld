@@ -316,7 +316,10 @@ function currentCombatState(session, actorCharacterId) {
     if (Number(current.round) !== Number(session.round)
         || Number(current.turnIndex) !== Number(session.turn_index)
         || Number(current.actorCharacterId) !== Number(actorCharacterId)) {
-        return { round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions, acBonuses, shields };
+        // Mantener los metadatos globales (especialmente mode) al iniciar el
+        // estado de un nuevo turno. Si se perdía mode, el cliente volvía a
+        // interpretar la mesa como narrativa después de cualquier acción.
+        return { ...current, round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions, acBonuses, shields };
     }
     return { ...current, used: { ...(current.used || {}) }, resources, reactions, acBonuses, shields };
 }

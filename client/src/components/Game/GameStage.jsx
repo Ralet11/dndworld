@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Circle, Copy, Equal, Eraser, Eye, EyeOff, FlaskConical, Flame, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Snowflake, Sparkles, Square, Trash2, Type, X } from 'lucide-react';
+import { Check, Circle, Copy, Equal, Eraser, Eye, EyeOff, FlaskConical, Flame, Heart, Image as ImageIcon, Map as MapIcon, Minus, MousePointer2, Move, Palette, Pencil, Plus, Shield, Snowflake, Sparkles, Square, Swords, Trash2, Type, X } from 'lucide-react';
 import API_URL from '../../config';
 import DiceRollOverlay from './DiceRollOverlay';
 import GameBoardVfx from './GameBoardVfx';

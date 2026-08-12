@@ -300,7 +300,8 @@ export default function GamePlayerPanel() {
 
   const participant = session.participants.find(item => item.user_id === user.id);
   const activeParticipant = session.participants.find(item => item.character_id === session.active_character_id);
-  const isMyTurn = session.combat_state?.mode === 'COMBAT' && participant?.character_id === session.active_character_id;
+  const isCombatMode = session.combat_state?.mode === 'COMBAT' || (session.combat_state?.mode == null && (session.turn_order || []).length > 0);
+  const isMyTurn = isCombatMode && participant?.character_id === session.active_character_id;
 
   if (session.status === 'WAITING') {
     return (
@@ -379,8 +380,8 @@ export default function GamePlayerPanel() {
         />
         <div className="game-player-stage-note">
           <DiceTray onRoll={rollDice} compact />
-          <span>{session.combat_state?.mode === 'COMBAT' ? 'Mapa de combate' : 'Escena narrativa'}</span>
-          <p>{session.combat_state?.mode === 'COMBAT' ? (isMyTurn ? 'Puedes mover tu token durante tu turno.' : 'Espera tu turno para moverte.') : 'Puedes mover libremente tu token por la escena.'}</p>
+          <span>{isCombatMode ? 'Mapa de combate' : 'Escena narrativa'}</span>
+          <p>{isCombatMode ? (isMyTurn ? 'Puedes mover tu token durante tu turno.' : 'Espera tu turno para moverte.') : 'Puedes mover libremente tu token por la escena.'}</p>
         </div>
         </section>
 
