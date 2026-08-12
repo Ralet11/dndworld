@@ -5259,31 +5259,32 @@ a:focus-visible {
 
 /* NPC sheet refinement: a compact roster and deliberate field proportions. */
 @media (min-width: 1101px) {
-  .dm-surface.dm-surface-npcs > .npc-director { grid-template-columns: 242px minmax(0, 1fr); }
-  .npc-director-list { padding: 18px 12px; }
+  .dm-surface.dm-surface-npcs > .npc-director { grid-template-columns: clamp(300px, 26vw, 350px) minmax(0, 1fr); }
+  .npc-director-list { padding: 22px 16px; }
   .npc-director-list > header { align-items: flex-end; }
-  .npc-director-list h1 { font-size: 24px; }
-  .npc-director-list > header > button { min-width: 36px; width: 36px; padding: 0; }
-  .npc-director-list > header > button:not(:hover) { font-size: 0; }
-  .npc-director-list > header > button svg { width: 15px; height: 15px; }
-  .npc-director-list > label { height: 36px; margin: 16px 0 10px; }
+  .npc-director-list h1 { font-size: 27px; }
+  .npc-director-list > header > button { min-width: 76px; padding-inline: 9px; }
+  .npc-director-list > label { height: 38px; margin: 18px 0 12px; }
   .npc-director-cards { gap: 5px; }
-  .npc-director-cards > button { min-height: 52px; padding: 8px; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 7px; }
-  .npc-director-cards img, .npc-director-cards svg { width: 34px; height: 34px; }
-  .npc-director-cards strong { font-size: 12px; }
-  .npc-director-editor { padding: 28px clamp(28px, 3.5vw, 60px) 76px; }
+  .npc-director-cards > button { min-height: 57px; padding: 9px; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 9px; }
+  .npc-director-cards img, .npc-director-cards svg { width: 38px; height: 38px; }
+  .npc-director-cards strong { font-size: 13px; }
+  .npc-director-editor { padding: 24px clamp(20px, 2.8vw, 46px) 70px; }
   .npc-director-editor > header { top: -28px; margin-top: -28px; }
   .npc-director-editor > header h2 { font-size: clamp(27px, 2.7vw, 37px); }
-  .npc-director-grid { grid-template-columns: 164px minmax(0, 1fr); gap: 18px; max-width: none; margin-top: 23px; }
-  .npc-director-image { min-height: 212px; }
-  .npc-identity { grid-template-columns: minmax(200px, 1.45fr) minmax(125px, .85fr) minmax(125px, .85fr); }
+  .npc-director-grid { grid-template-columns: 144px minmax(0, 1fr); gap: 15px; max-width: none; margin-top: 18px; }
+  .npc-director-image { min-height: 184px; padding: 9px; }
+  .npc-identity { grid-template-columns: minmax(150px, 1.2fr) repeat(2, minmax(110px, .85fr)); gap: 9px; }
   .npc-identity label:first-child { grid-column: auto; }
   .npc-stat-row, .npc-editor-section { max-width: none; }
-  .npc-stat-row { margin: 16px 0; padding: 11px; gap: 8px; }
-  .npc-fields input, .npc-fields select, .npc-fields textarea, .npc-director-image input, .npc-stat-row input { min-height: 41px; padding: 8px 9px; }
-  .npc-editor-section { margin-top: 15px; padding: 19px 20px; }
-  .npc-editor-section > header { margin-bottom: 14px; }
-  .npc-ability-editor > label { min-height: 96px; padding: 10px 8px; }
+  .npc-stat-row { margin: 13px 0; padding: 9px; gap: 7px; }
+  .npc-fields input, .npc-fields select, .npc-fields textarea, .npc-director-image input, .npc-stat-row input { min-height: 36px; padding: 7px 8px; font-size: 11px; }
+  .npc-fields textarea { min-height: 82px; }
+  .npc-editor-section { margin-top: 13px; padding: 15px 16px; }
+  .npc-editor-section > header { margin-bottom: 11px; }
+  .npc-editor-section header strong { font-size: 15px; }
+  .npc-ability-editor > label { min-height: 82px; padding: 8px 7px; }
+  .npc-ability-editor input[type=number] { min-height: 29px; }
 }
 
 /* Compact desktop table: remove duplicated chrome and keep the whole play surface above the fold. */
