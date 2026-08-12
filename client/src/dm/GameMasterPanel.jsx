@@ -708,6 +708,7 @@ export default function GameMasterPanel() {
                 onClearVfx={() => emit('game:clear-vfx', { sessionId: session.id })}
                 onDismissRoll={rollId => emit('game:dismiss-roll', { sessionId: session.id, rollId })}
                 onResolveRoll={resolveDiceRoll}
+                onRollCharacter={({ characterId, label, modifier }) => rollDice({ sides: 20, quantity: 1, modifier, label, characterId })}
                 toolbarHost={stageToolbarHost}
               />
             </div>

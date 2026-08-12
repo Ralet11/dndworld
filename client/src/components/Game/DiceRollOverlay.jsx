@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Crown, Dices, X } from 'lucide-react';
 import API_URL from '../../config';
 
@@ -31,6 +31,8 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
   const [retiringRolls, setRetiringRolls] = useState([]);
   const visibleStackRef = useRef([]);
   const retirementTimersRef = useRef(new Map());
+  const cardNodesRef = useRef(new Map());
+  const cardPositionsRef = useRef(new Map());
 
   useEffect(() => () => {
     window.clearTimeout(hideTimerRef.current);
@@ -131,7 +133,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
   const orderedRolls = rolls
     .filter(roll => roll.resolved)
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-    .slice(-3);
+    .slice(-2);
 
   useEffect(() => {
     const desiredIds = new Set(orderedRolls.map(roll => String(roll.id)));
@@ -158,6 +160,24 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
   const activeIds = new Set(orderedRolls.map(roll => String(roll.id)));
   const stackRolls = [...retiringRolls.filter(roll => !activeIds.has(String(roll.id))), ...orderedRolls];
 
+  useLayoutEffect(() => {
+    const nextPositions = new Map();
+    cardNodesRef.current.forEach((node, id) => {
+      if (!node || node.classList.contains('is-exiting') || node.classList.contains('is-stack-retiring')) return;
+      const top = node.getBoundingClientRect().top;
+      const previousTop = cardPositionsRef.current.get(id);
+      if (previousTop != null) {
+        const delta = previousTop - top;
+        if (Math.abs(delta) > 1) node.animate([
+          { transform: `translate3d(0, ${delta}px, 0)` },
+          { transform: 'translate3d(0, 0, 0)' },
+        ], { duration: 380, easing: 'cubic-bezier(.18, .82, .25, 1)', fill: 'both' });
+      }
+      nextPositions.set(id, top);
+    });
+    cardPositionsRef.current = nextPositions;
+  }, [stackRolls]);
+
   return (
     <>
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
@@ -172,7 +192,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
             const modifier = Number(roll.modifier) || 0;
             const hasModifier = modifier !== 0;
             return (
-              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring && !roll.dismissing ? ' is-stack-retiring' : ''}`}>
+              <article ref={node => { if (node) cardNodesRef.current.set(String(roll.id), node); else cardNodesRef.current.delete(String(roll.id)); }} key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring && !roll.dismissing ? ' is-stack-retiring' : ''}`}>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>
@@ -188,7 +208,7 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
                     <strong className={hasModifier ? 'is-modified' : ''} data-base={diceTotal}>{roll.total}</strong>
                   </div>
                 </div>
-                {isDm && <button className="game-roll-dismiss" disabled={roll.dismissing} onClick={() => onDismiss?.(roll.id)} aria-label="Cerrar resultado"><X size={12} /></button>}
+                <button className="game-roll-dismiss" disabled={roll.dismissing} onClick={() => onDismiss?.(roll.id)} aria-label="Cerrar resultado"><X size={12} /></button>
               </article>
             );
           })}

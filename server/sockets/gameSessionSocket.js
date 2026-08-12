@@ -31,6 +31,24 @@ const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
 
+function dismissRollForEveryone(io, sessionId, rollId, delay = 5000) {
+    const timerKey = `${sessionId}:${rollId}`;
+    if (rollDismissTimers.has(timerKey)) return;
+    const timer = setTimeout(async () => {
+        try {
+            io.to(roomName(sessionId)).emit('game:roll-dismissing', { rollIds: [rollId] });
+            await new Promise(resolve => setTimeout(resolve, 700));
+            await GameRoll.update({ dismissed: true }, { where: { id: rollId, session_id: sessionId } });
+            io.to(roomName(sessionId)).emit('game:roll-dismissed', { rollIds: [rollId] });
+        } catch (error) {
+            console.error('automatic game roll dismissal error:', error);
+        } finally {
+            rollDismissTimers.delete(timerKey);
+        }
+    }, delay);
+    rollDismissTimers.set(timerKey, timer);
+}
+
 function roomName(sessionId) {
     return `game:${sessionId}`;
 }
@@ -434,6 +452,34 @@ async function finalizeCombatAction(io, combatAction, roll) {
     }
 
     const previousResult = combatAction.result || {};
+    const queueMultiattackFollowup = async () => {
+        if (Number(action.multiattack) <= 1 || action.attackBonus == null) return false;
+        const character = await loadCombatCharacter(combatAction.actor_character_id);
+        if (!character) return false;
+        const followupAction = { ...action, multiattack: 1, name: `${action.name} · golpe 2` };
+        const followup = await GameCombatAction.create({
+            session_id: session.id,
+            actor_user_id: combatAction.actor_user_id,
+            actor_character_id: combatAction.actor_character_id,
+            action_key: `${combatAction.action_key}:2`,
+            action_name: followupAction.name,
+            status: 'ATTACK_ROLL',
+            action_snapshot: followupAction,
+            target_token_ids: combatAction.target_token_ids,
+            area: combatAction.area,
+            before_state: combatAction.before_state,
+            result: { summary: `${action.name}: segundo ataque.` },
+        });
+        const attackRoll = await createCombatRoll(io, session, combatAction.actor_user_id, character, {
+            sides: 20,
+            quantity: 1,
+            modifier: Number(followupAction.attackBonus),
+            label: `${followupAction.name} · ataque`,
+        });
+        followup.attack_roll_id = attackRoll.id;
+        await followup.save();
+        return true;
+    };
     if (String(combatAction.attack_roll_id) === String(roll.id)) {
         const target = targets[0];
         const natural = Number(roll.results?.[0]);
@@ -449,6 +495,7 @@ async function finalizeCombatAction(io, combatAction, roll) {
             combatAction.status = 'COMPLETED';
             combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'miss' }], summary: `${combatAction.action_name}: falla contra ${target.label}.` };
             await combatAction.save();
+            await queueMultiattackFollowup();
             return broadcastSession(io, session.id);
         }
 
@@ -457,6 +504,7 @@ async function finalizeCombatAction(io, combatAction, roll) {
             combatAction.status = 'COMPLETED';
             combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'hit' }], summary: `${combatAction.action_name}: impacta a ${target.label}.` };
             await combatAction.save();
+            await queueMultiattackFollowup();
             return broadcastSession(io, session.id);
         }
         combatAction.status = 'DAMAGE_READY';
@@ -554,6 +602,7 @@ async function finalizeCombatAction(io, combatAction, roll) {
             : `${combatAction.action_name}: ${totalEffect} de ${action.damageType || 'daño'}, ${affected} objetivo${affected === 1 ? '' : 's'} afectado${affected === 1 ? '' : 's'}.`,
     };
     await combatAction.save();
+    await queueMultiattackFollowup();
     await broadcastSession(io, session.id);
 }
 
@@ -1866,7 +1915,7 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:roll-dice', async ({ sessionId, sides, quantity = 1, modifier = 0, label } = {}, reply = () => {}) => {
+    socket.on('game:roll-dice', async ({ sessionId, sides, quantity = 1, modifier = 0, label, characterId = null } = {}, reply = () => {}) => {
         try {
             const session = await GameSession.findByPk(sessionId);
             if (!session) return reply({ ok: false, message: 'La mesa ya no esta disponible.' });
@@ -1892,7 +1941,13 @@ function registerGameSessionSocket(io, socket) {
                 return reply({ ok: false, message: 'Ese dado no esta permitido.' });
             }
 
-            const character = participant?.character || null;
+            let character = participant?.character || null;
+            if (dmRoll && characterId != null) {
+                const actorToken = await GameToken.findOne({ where: { session_id: session.id, character_id: Number(characterId), visible: true } });
+                if (!actorToken) return reply({ ok: false, message: 'Ese combatiente no tiene un token visible en esta mesa.' });
+                character = await loadCombatCharacter(Number(characterId));
+                if (!character) return reply({ ok: false, message: 'No se encontró el combatiente para la tirada.' });
+            }
             const roll = await GameRoll.create({
                 session_id: session.id,
                 user_id: socket.user.id,
@@ -1935,6 +1990,7 @@ function registerGameSessionSocket(io, socket) {
             roll.resolved = true;
             await roll.save();
             io.to(roomName(roll.session_id)).emit('game:roll-upsert', roll.toJSON());
+            dismissRollForEveryone(io, roll.session_id, roll.id);
             const combatAction = await GameCombatAction.findOne({
                 where: {
                     session_id: roll.session_id,
@@ -1951,13 +2007,19 @@ function registerGameSessionSocket(io, socket) {
     });
 
     socket.on('game:dismiss-roll', async ({ sessionId, rollId } = {}) => {
-        const session = await requireHostedSession(socket, sessionId);
+        const session = await GameSession.findByPk(sessionId);
         if (!session) return;
+        const participant = isDm(socket) ? null : await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
+        if (!isDm(socket) && !participant) return;
         const roll = await GameRoll.findOne({ where: { id: rollId, session_id: session.id, dismissed: false } });
         if (!roll) return;
 
         const timerKey = `${session.id}:${roll.id}`;
-        if (rollDismissTimers.has(timerKey)) return;
+        const automaticTimer = rollDismissTimers.get(timerKey);
+        if (automaticTimer) {
+            clearTimeout(automaticTimer);
+            rollDismissTimers.delete(timerKey);
+        }
 
         io.to(roomName(session.id)).emit('game:roll-dismissing', { rollIds: [roll.id] });
         const timer = setTimeout(async () => {
@@ -1969,7 +2031,7 @@ function registerGameSessionSocket(io, socket) {
                 console.error('game:dismiss-roll error:', error);
                 io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
             }
-        }, 1100);
+        }, 700);
         rollDismissTimers.set(timerKey, timer);
     });
 

@@ -64,6 +64,10 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   const choose = action => {
     if (!action.available || submitting) return;
     if (action.target === 'self') return execute(action);
+    if (!['enemy', 'ally'].includes(action.target) && !String(action.target).startsWith('area-')) {
+      onError?.('Esta habilidad no tiene un objetivo de combate configurado.');
+      return;
+    }
     onTargetingChange?.({
       action,
       instruction: String(action.target).startsWith('area-')

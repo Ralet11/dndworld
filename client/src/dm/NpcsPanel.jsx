@@ -1,169 +1,41 @@
-import { useState, useEffect } from 'react';
-import { Plus, Skull, X, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, Plus, Save, Search, Shield, Skull, Swords, UserRound, X } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+
+const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+const emptyAction = () => ({ name: '', action_type: 'acción', description: '', attack_bonus: '', damage_dice: '', damage_bonus: '', damage_type: '', reach: '', save_ability: '', save_dc: '', recharge: '', max_uses: '', is_public: false });
+const baseNpc = () => ({ name: '', race: 'Humanoide', class: 'NPC', npc_type: 'enemigo', level: 1, hp_current: 10, hp_max: 10, ac_base: 10, initiative_bonus: 0, speed: 30, size: 'Mediano', creature_type: 'Humanoide', challenge_rating: '', proficiency_bonus: 2, passive_perception: 10, image_url: '', rendered_url: '', abilities_text: '', notes: '', saving_throws: {}, damage_resistances: [], damage_immunities: [], damage_vulnerabilities: [], condition_immunities: [], senses: [], languages: [], abilityScores: Object.fromEntries(ABILITIES.map(key => [key, 10])), npcActions: [] });
+const listValue = value => Array.isArray(value) ? value.join(', ') : '';
+
+function toForm(npc) {
+  if (!npc) return baseNpc();
+  return { ...baseNpc(), ...npc, image_url: npc.image_url || '', rendered_url: npc.rendered_url || '', abilityScores: Object.fromEntries(ABILITIES.map(key => [key, (npc.abilityScores || []).find(score => score.ability === key)?.base_value ?? 10])), npcActions: (npc.npcActions || []).map(action => ({ ...emptyAction(), ...action })), damage_resistances: listValue(npc.damage_resistances), damage_immunities: listValue(npc.damage_immunities), damage_vulnerabilities: listValue(npc.damage_vulnerabilities), condition_immunities: listValue(npc.condition_immunities), senses: listValue(npc.senses), languages: listValue(npc.languages) };
+}
+function cleanedList(value) { return String(value || '').split(',').map(item => item.trim()).filter(Boolean); }
 
 export default function NpcsPanel() {
   const { socket } = useSocket();
-  const [npcs, setNpcs] = useState([]);
-  const [search, setSearch] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', race: 'Monstruo', class: 'NPC', hp_max: 10, ac_base: 10, npc_type: 'enemy' });
-
-  useEffect(() => {
-    if (!socket) return;
-    socket.emit('get-all-npcs');
-    const handler = (data) => { setNpcs(data); setLoading(false); };
-    socket.on('all-npcs', handler);
-    return () => socket.off('all-npcs', handler);
-  }, [socket]);
-
-  const handleCreate = () => {
-    if (!form.name.trim()) return;
-    socket.emit('create-npc', form);
-    setForm({ name: '', race: 'Monstruo', class: 'NPC', hp_max: 10, ac_base: 10, npc_type: 'enemy' });
-    setShowCreate(false);
-    setTimeout(() => socket.emit('get-all-npcs'), 500);
+  const [npcs, setNpcs] = useState([]); const [query, setQuery] = useState(''); const [selectedId, setSelectedId] = useState(null); const [form, setForm] = useState(baseNpc); const [saving, setSaving] = useState(false); const [message, setMessage] = useState('');
+  useEffect(() => { if (!socket) return undefined; const receive = data => setNpcs(data || []); socket.on('all-npcs', receive); socket.emit('get-all-npcs'); return () => socket.off('all-npcs', receive); }, [socket]);
+  const selected = npcs.find(npc => Number(npc.id) === Number(selectedId));
+  useEffect(() => { setForm(toForm(selected)); setMessage(''); }, [selectedId, selected]);
+  const filtered = useMemo(() => npcs.filter(npc => `${npc.name} ${npc.race} ${npc.npc_type}`.toLowerCase().includes(query.toLowerCase())), [npcs, query]);
+  const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
+  const save = () => {
+    if (!form.name.trim()) return setMessage('El NPC necesita nombre.'); setSaving(true); setMessage('');
+    const core = { ...form, hp_current: Number(form.hp_current), hp_max: Number(form.hp_max), ac_base: Number(form.ac_base), level: Number(form.level), initiative_bonus: Number(form.initiative_bonus), speed: Number(form.speed), proficiency_bonus: Number(form.proficiency_bonus), passive_perception: Number(form.passive_perception), saving_throws: Object.fromEntries(Object.entries(form.saving_throws || {}).filter(([, value]) => value !== '').map(([key, value]) => [key, Number(value)])), damage_resistances: cleanedList(form.damage_resistances), damage_immunities: cleanedList(form.damage_immunities), damage_vulnerabilities: cleanedList(form.damage_vulnerabilities), condition_immunities: cleanedList(form.condition_immunities), senses: cleanedList(form.senses), languages: cleanedList(form.languages) };
+    const complete = () => socket.emit('npc:save-actions', { characterId: selectedId, actions: form.npcActions }, response => { setSaving(false); if (!response?.ok) setMessage(response?.message || 'No se pudieron guardar las acciones.'); else { setMessage('Cambios guardados.'); socket.emit('get-all-npcs'); } });
+    if (selectedId) socket.emit('character:update', { characterId: selectedId, diff: core }, response => { if (!response?.ok) { setSaving(false); setMessage(response?.message || 'No se pudo guardar el NPC.'); } else complete(); });
+    else socket.emit('create-npc', core, () => { setSaving(false); socket.emit('get-all-npcs'); setMessage('NPC creado. Selecciónalo para seguir editándolo.'); });
   };
-
-  const handleActivate = (npcId) => {
-    socket.emit('activate-npc', { npcId });
-  };
-
-  const filtered = npcs.filter(n => n.name?.toLowerCase().includes(search.toLowerCase()));
-
-  const npcTypeColor = {
-    enemy:  '#C2452F',
-    ally:   '#5BA86B',
-    neutral:'#A89F8E',
-  };
-
-  return (
-    <div className="p-4 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="label-caps">Herramienta DM</p>
-          <h1 className="text-3xl font-black mt-1" style={{ color: '#EDE6D8' }}>NPCs & Criaturas</h1>
-        </div>
-        <button onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm glow-ember"
-          style={{ background: '#FF7A1A', color: '#1A0E04' }}>
-          <Plus size={18} /> Nuevo NPC
-        </button>
-      </div>
-
-      <div className="relative mb-4">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#6B6557' }} />
-        <input className="input-base pl-9" placeholder="Buscar NPC..." value={search} onChange={e => setSearch(e.target.value)} />
-      </div>
-
-      {loading && (
-        <div className="flex justify-center py-10">
-          <div className="w-8 h-8 border-2 border-amber rounded-full animate-spin" style={{ borderTopColor: 'transparent' }} />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(npc => (
-          <div key={npc.id} className="panel p-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full overflow-hidden shrink-0"
-                style={{ border: `1px solid ${npcTypeColor[npc.npc_type] || '#2A332F'}40` }}>
-                <img src={npc.image_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${npc.name}`}
-                  alt={npc.name} className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm truncate" style={{ color: '#EDE6D8' }}>{npc.name}</p>
-                <p className="label-caps" style={{ color: npcTypeColor[npc.npc_type] || '#6B6557' }}>
-                  {npc.race} — {npc.npc_type || 'NPC'}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {[['PG', npc.hp_max],['CA', npc.ac_base],['Nivel', npc.level || '?']].map(([l, v]) => (
-                <div key={l} className="text-center p-1.5 rounded-lg" style={{ background: '#0F1518' }}>
-                  <p className="label-caps">{l}</p>
-                  <p className="font-black text-sm" style={{ color: '#EDE6D8' }}>{v}</p>
-                </div>
-              ))}
-            </div>
-
-            <button onClick={() => handleActivate(npc.id)}
-              className="w-full py-1.5 rounded-lg label-caps transition-colors"
-              style={{ background: 'rgba(155,93,229,0.1)', border: '1px solid rgba(155,93,229,0.3)', color: '#9B5DE5' }}>
-              Añadir a escena
-            </button>
-          </div>
-        ))}
-
-        {!loading && filtered.length === 0 && (
-          <div className="col-span-full flex flex-col items-center py-16 gap-3" style={{ color: '#6B6557' }}>
-            <Skull size={32} />
-            <p>{search ? 'Sin resultados.' : 'No hay NPCs creados.'}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Create modal */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setShowCreate(false)}>
-          <div className="panel-raised w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h2 className="font-black text-lg" style={{ color: '#EDE6D8' }}>Nuevo NPC</h2>
-              <button onClick={() => setShowCreate(false)} style={{ color: '#6B6557' }}><X size={18} /></button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <p className="label-caps mb-1">Nombre</p>
-                <input className="input-base" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre del NPC" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="label-caps mb-1">Raza / Tipo</p>
-                  <input className="input-base" value={form.race} onChange={e => setForm(f => ({ ...f, race: e.target.value }))} />
-                </div>
-                <div>
-                  <p className="label-caps mb-1">Rol</p>
-                  <select className="input-base" value={form.npc_type} onChange={e => setForm(f => ({ ...f, npc_type: e.target.value }))}>
-                    <option value="enemy">Enemigo</option>
-                    <option value="ally">Aliado</option>
-                    <option value="neutral">Neutral</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="label-caps mb-1">PG Máximo</p>
-                  <input type="number" className="input-base" value={form.hp_max} onChange={e => setForm(f => ({ ...f, hp_max: parseInt(e.target.value) || 1 }))} />
-                </div>
-                <div>
-                  <p className="label-caps mb-1">Clase de Armadura</p>
-                  <input type="number" className="input-base" value={form.ac_base} onChange={e => setForm(f => ({ ...f, ac_base: parseInt(e.target.value) || 10 }))} />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button onClick={() => setShowCreate(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-bold"
-                style={{ background: '#1E2A28', color: '#A89F8E', border: '1px solid #2A332F' }}>
-                Cancelar
-              </button>
-              <button onClick={handleCreate} disabled={!form.name.trim()}
-                className="flex-1 py-2.5 rounded-lg text-sm font-black disabled:opacity-50"
-                style={{ background: '#FF7A1A', color: '#1A0E04' }}>
-                Crear NPC
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  if (!selectedId && !message && false) return null;
+  return <div className="npc-director">
+    <aside className="npc-director-list"><header><div><span>Archivo del director</span><h1>Personajes</h1></div><button onClick={() => { setSelectedId(null); setForm(baseNpc()); setMessage(''); }}><Plus size={14} /> Crear</button></header><label><Search size={13} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar NPC o criatura" /></label><div className="npc-director-cards">{filtered.map(npc => <button key={npc.id} className={Number(npc.id) === Number(selectedId) ? 'is-selected' : ''} onClick={() => setSelectedId(npc.id)}>{npc.image_url ? <img src={npc.image_url} alt="" /> : <Skull size={18} />}<span><strong>{npc.name}</strong><small>{npc.race || 'Criatura'} · {npc.npc_type || 'neutral'}</small></span><em>{npc.hp_current}/{npc.hp_max}</em></button>)}</div></aside>
+    <main className="npc-director-editor"><header><div>{selectedId && <button className="npc-back" onClick={() => setSelectedId(null)}><ChevronLeft size={16} /></button>}<span>{selectedId ? 'Ficha completa' : 'Nueva criatura'}</span><h2>{form.name || 'Sin nombre'}</h2></div><button className="npc-save" disabled={saving} onClick={save}><Save size={14} />{saving ? 'Guardando' : 'Guardar NPC'}</button></header>{message && <p className="npc-director-message">{message}</p>}
+      <section className="npc-director-grid"><div className="npc-director-image">{form.image_url ? <img src={form.image_url} alt="" /> : <Skull size={36} />}<label>Imagen / URL<input value={form.image_url} onChange={event => set('image_url', event.target.value)} placeholder="https://..." /></label></div><div className="npc-fields npc-identity"><label>Nombre<input value={form.name} onChange={event => set('name', event.target.value)} /></label><label>Raza<input value={form.race} onChange={event => set('race', event.target.value)} /></label><label>Clase / rol<input value={form.class} onChange={event => set('class', event.target.value)} /></label><label>Tipo<select value={form.npc_type} onChange={event => set('npc_type', event.target.value)}><option value="enemigo">Enemigo</option><option value="amigo">Aliado</option><option value="compañero">Compañero</option><option value="neutral">Neutral</option></select></label><label>CR<input value={form.challenge_rating || ''} onChange={event => set('challenge_rating', event.target.value)} /></label><label>Nivel<input type="number" value={form.level} onChange={event => set('level', event.target.value)} /></label></div></section>
+      <section className="npc-stat-row">{[['PG actual','hp_current'],['PG máximo','hp_max'],['CA','ac_base'],['Iniciativa','initiative_bonus'],['Velocidad','speed'],['Percepción pasiva','passive_perception'],['Competencia','proficiency_bonus']].map(([label,key]) => <label key={key}>{label}<input type="number" value={form[key]} onChange={event => set(key,event.target.value)} /></label>)}</section>
+      <section className="npc-editor-section"><header><UserRound size={15}/><div><strong>Atributos y salvaciones</strong><small>Estos valores alimentan las pruebas y salvaciones del tablero.</small></div></header><div className="npc-ability-editor">{ABILITIES.map(key => <label key={key}>{key}<input type="number" min="1" max="30" value={form.abilityScores[key]} onChange={event => set('abilityScores',{...form.abilityScores,[key]:event.target.value})}/><span>Salv.<input type="number" value={form.saving_throws?.[key.toLowerCase()] ?? ''} placeholder="—" onChange={event => set('saving_throws',{...form.saving_throws,[key.toLowerCase()]:event.target.value})}/></span></label>)}</div></section>
+      <section className="npc-editor-section"><header><Shield size={15}/><div><strong>Defensas, sentidos y notas</strong><small>Separá cada valor con comas.</small></div></header><div className="npc-fields npc-wide-fields">{[['Resistencias','damage_resistances'],['Inmunidades de daño','damage_immunities'],['Vulnerabilidades','damage_vulnerabilities'],['Inmunidades de estado','condition_immunities'],['Sentidos','senses'],['Idiomas','languages']].map(([label,key]) => <label key={key}>{label}<input value={form[key]} onChange={event => set(key,event.target.value)} /></label>)}<label className="wide">Rasgos narrativos<textarea value={form.abilities_text} onChange={event => set('abilities_text',event.target.value)} /></label><label className="wide">Notas privadas del DM<textarea value={form.notes} onChange={event => set('notes',event.target.value)} /></label></div></section>
+      <section className="npc-editor-section"><header><Swords size={15}/><div><strong>Acciones, rasgos y reacciones</strong><small>Todo lo que cargues aquí aparece en el panel de turno y puede usar el motor de combate.</small></div><button onClick={() => set('npcActions',[...form.npcActions,emptyAction()])}><Plus size={13}/> Acción</button></header><div className="npc-action-editor">{form.npcActions.map((action,index) => <article key={action.id || index}><button className="npc-action-remove" onClick={() => set('npcActions',form.npcActions.filter((_,i) => i !== index))}><X size={12}/></button><div className="npc-fields"><label>Nombre<input value={action.name} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,name:event.target.value}:item))}/></label><label>Tipo<select value={action.action_type} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,action_type:event.target.value}:item))}><option>acción</option><option>bonus</option><option>reacción</option><option>rasgo</option></select></label><label>Ataque<input type="number" value={action.attack_bonus ?? ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,attack_bonus:event.target.value}:item))}/></label><label>Daño<input value={action.damage_dice || ''} placeholder="1d8" onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,damage_dice:event.target.value}:item))}/></label><label>Bonus daño<input type="number" value={action.damage_bonus ?? ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,damage_bonus:event.target.value}:item))}/></label><label>Tipo daño<input value={action.damage_type || ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,damage_type:event.target.value}:item))}/></label><label>Alcance<input value={action.reach || ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,reach:event.target.value}:item))}/></label><label>CD salvación<input type="number" value={action.save_dc ?? ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,save_dc:event.target.value}:item))}/></label><label>Salvación<input value={action.save_ability || ''} placeholder="DEX" onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,save_ability:event.target.value}:item))}/></label><label>Recarga / usos<input value={action.recharge || ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,recharge:event.target.value}:item))}/></label><label className="wide">Descripción<textarea value={action.description || ''} onChange={event => set('npcActions',form.npcActions.map((item,i)=>i===index?{...item,description:event.target.value}:item))}/></label></div></article>)}</div></section>
+    </main></div>;
 }

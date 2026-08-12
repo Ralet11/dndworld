@@ -87,6 +87,7 @@ export default function GameStage({
   onClearVfx,
   onDismissRoll,
   onResolveRoll,
+  onRollCharacter,
   combatTargeting,
   onCombatTokenTarget,
   onCombatAreaTarget,
@@ -1402,7 +1403,7 @@ export default function GameStage({
                           const score = menuCharacter?.abilityScores?.find(item => item.ability === ability);
                           if (!score) return <div key={ability}><span>{ability}</span><strong>—</strong><small>Sin dato</small></div>;
                           const total = (Number(score?.base_value) || 10) + (Number(score?.bonus_value) || 0);
-                          return <div key={ability}><span>{ability}</span><strong>{signed(abilityModifier(score))}</strong><small>{total}</small></div>;
+                          return isDm ? <button type="button" key={ability} onClick={() => onRollCharacter?.({ characterId: menuCharacter?.id, label: `Prueba de ${ability}`, modifier: abilityModifier(score) })}><span>{ability}</span><strong>{signed(abilityModifier(score))}</strong><small>{total}</small></button> : <div key={ability}><span>{ability}</span><strong>{signed(abilityModifier(score))}</strong><small>{total}</small></div>;
                         })}
                       </div>
                     </section>
@@ -1410,7 +1411,7 @@ export default function GameStage({
                       <header><span>Perfil de combate</span></header>
                       {menuCharacter?.initiative_bonus != null && <p><strong>Iniciativa</strong><span>{signed(menuCharacter.initiative_bonus)}</span></p>}
                       {menuCharacter?.passive_perception != null && <p><strong>Percepción pasiva</strong><span>{menuCharacter.passive_perception}</span></p>}
-                      {Object.keys(menuCharacter?.saving_throws || {}).length > 0 && <p><strong>Salvaciones</strong><span>{Object.entries(menuCharacter.saving_throws).map(([key, value]) => `${key} ${signed(value)}`).join(', ')}</span></p>}
+                      {Object.keys(menuCharacter?.saving_throws || {}).length > 0 && <div className="game-token-saving-throws"><strong>Salvaciones</strong><span>{Object.entries(menuCharacter.saving_throws).map(([key, value]) => <button type="button" key={key} onClick={() => onRollCharacter?.({ characterId: menuCharacter?.id, label: `Salvación de ${key.toUpperCase()}`, modifier: Number(value) || 0 })}>{key.toUpperCase()} {signed(value)}</button>)}</span></div>}
                       {!!menuCharacter?.skills?.length && <p><strong>Competencias</strong><span>{menuCharacter.skills.filter(skill => skill.proficiency_level > 0).map(skill => skill.name).join(', ') || 'Ninguna'}</span></p>}
                       {!!menuCharacter?.damage_resistances?.length && <p><strong>Resistencias</strong><span>{menuCharacter.damage_resistances.join(', ')}</span></p>}
                       {!!menuCharacter?.damage_vulnerabilities?.length && <p><strong>Vulnerabilidades</strong><span>{menuCharacter.damage_vulnerabilities.join(', ')}</span></p>}

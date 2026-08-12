@@ -212,8 +212,14 @@ function weaponProfile(item, character, slot) {
     };
 }
 
-function npcActionProfile(action) {
-    const target = action.damage_dice || action.attack_bonus != null || action.save_dc ? 'enemy' : 'self';
+function npcActionProfile(action, allActions = []) {
+    const isMultiattack = normalize(action.name) === 'multiataque';
+    const referencedAction = isMultiattack
+        ? allActions.find(candidate => candidate.id !== action.id && candidate.attack_bonus != null && candidate.damage_dice)
+        : null;
+    const source = referencedAction || action;
+    const sourceDice = parseDiceExpression(source.damage_dice);
+    const target = source.damage_dice || source.attack_bonus != null || source.save_dc ? 'enemy' : 'self';
     return {
         key: `feature:${action.id}`,
         source: 'feature',
@@ -222,15 +228,16 @@ function npcActionProfile(action) {
         description: action.description,
         economy: action.action_type || 'action',
         target,
-        range: Number(String(action.reach || '').match(/\d+/)?.[0]) || 5,
-        attackBonus: action.attack_bonus == null ? null : Number(action.attack_bonus),
-        saveAbility: action.save_ability || null,
-        saveDc: action.save_dc == null ? null : Number(action.save_dc),
-        damage: action.damage_dice ? formatDice({ ...(parseDiceExpression(action.damage_dice) || { quantity: 1, sides: 4, modifier: 0 }), modifier: (parseDiceExpression(action.damage_dice)?.modifier || 0) + (Number(action.damage_bonus) || 0) }) : null,
-        damageType: action.damage_type,
+        range: Number(String(source.reach || '').match(/\d+/)?.[0]) || 5,
+        attackBonus: source.attack_bonus == null ? null : Number(source.attack_bonus),
+        saveAbility: source.save_ability || null,
+        saveDc: source.save_dc == null ? null : Number(source.save_dc),
+        damage: source.damage_dice ? formatDice({ ...(sourceDice || { quantity: 1, sides: 4, modifier: 0 }), modifier: (sourceDice?.modifier || 0) + (Number(source.damage_bonus) || 0) }) : null,
+        damageType: source.damage_type,
+        multiattack: isMultiattack ? 2 : 1,
         resource: action.max_uses ? { type: 'feature-use', actionId: action.id, max: action.max_uses, used: action.used_uses || 0 } : null,
-        formula: action.damage_dice,
-        summary: [action.attack_bonus != null && `Ataque ${signed(action.attack_bonus)}`, action.save_dc && `Salv. ${action.save_ability} CD ${action.save_dc}`, action.damage_dice && `${action.damage_dice}${Number(action.damage_bonus) ? signed(action.damage_bonus) : ''} ${action.damage_type || ''}`.trim(), action.max_uses && `${Math.max(0, action.max_uses - action.used_uses)}/${action.max_uses} usos`].filter(Boolean).join(' · '),
+        formula: source.damage_dice,
+        summary: [isMultiattack && '2 ataques separados', source.attack_bonus != null && `Ataque ${signed(source.attack_bonus)}`, source.save_dc && `Salv. ${source.save_ability} CD ${source.save_dc}`, source.damage_dice && `${source.damage_dice}${Number(source.damage_bonus) ? signed(source.damage_bonus) : ''} ${source.damage_type || ''}`.trim(), action.max_uses && `${Math.max(0, action.max_uses - action.used_uses)}/${action.max_uses} usos`].filter(Boolean).join(' · '),
     };
 }
 
@@ -338,7 +345,7 @@ async function buildActionCatalog(characterId) {
     const actions = [
         weaponProfile(character.equipment?.primary_weapon, character, 'primary'),
         weaponProfile(character.equipment?.secondary_weapon, character, 'secondary'),
-        ...(character.npcActions || []).map(npcActionProfile),
+        ...(character.npcActions || []).map(action => npcActionProfile(action, character.npcActions || [])),
         ...customActions,
         ...spells.map(spell => spellProfile(spell, character)),
     ].filter(Boolean).map(action => ({ ...action, available: true, unavailableReason: null }));

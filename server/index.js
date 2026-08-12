@@ -528,6 +528,9 @@ const EDITABLE_CHARACTER_FIELDS = {
     abilities_text: 'string', spell_slots: 'json', spells_known: 'json', spells_prepared: 'json', blueprints_known: 'json',
     custom_features: 'json', talent_choices: 'json', feature_choices: 'json',
     image_url: 'string', base_body_url: 'string', image_scale: 'float', image_offset_x: 'float', image_offset_y: 'float',
+    rendered_url: 'string', npc_type: 'string', origin: 'string', creature_type: 'string', size: 'string', challenge_rating: 'string',
+    proficiency_bonus: 'number', passive_perception: 'number', damage_resistances: 'json', damage_vulnerabilities: 'json',
+    damage_immunities: 'json', condition_immunities: 'json', senses: 'json', languages: 'json',
 };
 
 function isDmUser(socket) {
@@ -592,10 +595,16 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
             coreUpdates[field] = next;
         }
 
-        if (diff.savingThrows && typeof diff.savingThrows === 'object') {
+        if ((diff.savingThrows || diff.saving_throws) && typeof (diff.savingThrows || diff.saving_throws) === 'object') {
+            const requestedSaves = diff.saving_throws || diff.savingThrows;
             const next = {};
             ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(key => {
-                if (diff.savingThrows[key]) next[key] = true;
+                if (!requestedSaves[key]) return;
+                // Los NPCs pueden declarar el bono final de salvación; para
+                // fichas de jugador se conserva el booleano de competencia.
+                next[key] = character.is_npc && isDmUser(socket) && Number.isFinite(Number(requestedSaves[key]))
+                    ? Number(requestedSaves[key])
+                    : true;
             });
             if (!valuesEqual(character.saving_throws || {}, next)) {
                 changes.saving_throws = { before: character.saving_throws || {}, after: next };
@@ -653,6 +662,10 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
 
     const updatedStats = await getCalculatedPartyStats();
     io.emit('stats-updated', updatedStats);
+    if (character.is_npc) {
+        npcSnapshot = null;
+        io.emit('all-npcs', await getNpcsForClient());
+    }
     if (isDmUser(socket) && changes.gold) {
         const before = Number(changes.gold.before || 0);
         const after = Number(changes.gold.after || 0);
@@ -1659,17 +1672,21 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('create-npc', async (npcData) => {
+    socket.on('create-npc', async (npcData, reply = () => {}) => {
         try {
-            await Character.create({
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede crear NPCs.');
+            const npc = await Character.create({
                 ...npcData,
                 is_npc: true,
                 hp_current: npcData.hp_max, // Default full HP
             });
+            npcSnapshot = null;
             const npcs = await getNpcsForClient();
             io.emit('all-npcs', npcs); // Broadcast to DMs (or just emit back to socket?)
+            reply({ ok: true, npc });
         } catch (e) {
             console.error('Create NPC error:', e);
+            reply({ ok: false, message: e.message || 'No se pudo crear el NPC.' });
         }
     });
 
@@ -1764,6 +1781,39 @@ io.on('connection', async (socket) => {
             console.error('Update-hp error:', err);
             fail(socket, err.message);
         }
+    });
+
+    socket.on('npc:save-actions', async ({ characterId, actions } = {}, reply = () => {}) => {
+        try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede editar acciones de NPC.');
+            const npc = await Character.findOne({ where: { id: characterId, is_npc: true } });
+            if (!npc) throw new Error('NPC no encontrado.');
+            await sequelize.transaction(async transaction => {
+                await NpcAction.destroy({ where: { character_id: npc.id }, transaction });
+                for (const [index, raw] of (Array.isArray(actions) ? actions.slice(0, 40) : []).entries()) {
+                    const action = raw || {};
+                    const name = String(action.name || '').trim().slice(0, 120);
+                    if (!name) continue;
+                    await NpcAction.create({
+                        character_id: npc.id, name, action_type: String(action.action_type || 'acción').trim().slice(0, 24),
+                        description: String(action.description || '').trim().slice(0, 5000) || null,
+                        attack_bonus: Number.isFinite(Number(action.attack_bonus)) ? Number(action.attack_bonus) : null,
+                        damage_dice: String(action.damage_dice || '').trim().slice(0, 32) || null,
+                        damage_bonus: Number.isFinite(Number(action.damage_bonus)) ? Number(action.damage_bonus) : null,
+                        damage_type: String(action.damage_type || '').trim().slice(0, 40) || null,
+                        reach: String(action.reach || '').trim().slice(0, 60) || null,
+                        save_ability: String(action.save_ability || '').trim().toUpperCase().slice(0, 3) || null,
+                        save_dc: Number.isFinite(Number(action.save_dc)) ? Number(action.save_dc) : null,
+                        recharge: String(action.recharge || '').trim().slice(0, 24) || null,
+                        max_uses: Number.isFinite(Number(action.max_uses)) ? Number(action.max_uses) : null,
+                        used_uses: Math.max(0, Number(action.used_uses) || 0), is_public: Boolean(action.is_public), sort_order: index,
+                    }, { transaction });
+                }
+            });
+            npcSnapshot = null;
+            io.emit('all-npcs', await getNpcsForClient());
+            reply({ ok: true });
+        } catch (error) { reply({ ok: false, message: error.message || 'No se pudieron guardar las acciones.' }); }
     });
 
     socket.on('update-character-archetype', async ({ characterId, archetypeSlug }) => {
