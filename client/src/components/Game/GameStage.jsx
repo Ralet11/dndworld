@@ -1381,6 +1381,10 @@ export default function GameStage({
             </div>
           )}
 
+          {isDm && Number(menuToken.character_id) === Number(activeCharacterId) && session?.combat_state?.mode === 'COMBAT' && (
+            <button className="game-token-use-actions" onClick={() => { onActiveTokenClick?.(menuToken); setContextMenu(null); }}><Swords size={13} /> Abrir acciones de turno</button>
+          )}
+
           {canSeeFullSheet && (
             <>
               <nav className="game-token-detail-tabs">

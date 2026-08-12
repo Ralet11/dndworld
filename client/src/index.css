@@ -3827,6 +3827,10 @@ a:focus-visible {
 .game-initiative-navigation { margin-top: 7px; display: grid; grid-template-columns: 1fr 1.35fr; gap: 5px; }
 .game-turn-card .game-initiative-navigation button { min-height: 29px; }
 .game-turn-card .game-initiative-navigation button:last-child { color: #e0c37c; border-color: #775c2e; background: linear-gradient(180deg, #211a0e, #12130d); }
+.game-combat-end-button { min-height: 25px; padding: 0 8px; color: #e59a82; border: 1px solid #713b32; background: rgba(104, 35, 27, .18); font-size: 6px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.game-combat-end-button:hover { color: #f3c0aa; border-color: #b15a48; background: rgba(135, 48, 35, .3); }
+.game-token-use-actions { width: calc(100% - 18px); min-height: 31px; margin: 9px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #e2c77e; border: 1px solid #725b2e; background: linear-gradient(180deg, #1f1b0e, #11130d); font-size: 7px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.game-token-use-actions:hover { border-color: #b68f43; background: #2a230f; }
 
 .game-stage {
   width: 100%;
@@ -4901,9 +4905,7 @@ a:focus-visible {
 .game-roll-card.is-stack-retiring .game-roll-card-copy { animation: game-roll-panel-body-stack-exit .46s cubic-bezier(.38, .02, .55, 1) 35ms forwards; }
 .game-roll-card.is-stack-retiring .game-roll-total { animation: game-roll-panel-total-stack-exit .42s cubic-bezier(.38, .02, .55, 1) 65ms forwards; }
 .game-roll-card.is-exiting::after { animation: none; }
-.game-roll-card.is-exiting .game-roll-card-portrait { animation: game-roll-panel-portrait-exit .7s cubic-bezier(.55, .05, .75, .35) forwards; }
-.game-roll-card.is-exiting .game-roll-card-copy { animation: game-roll-panel-body-exit .68s cubic-bezier(.55, .05, .75, .35) 55ms forwards; }
-.game-roll-card.is-exiting .game-roll-total { animation: game-roll-panel-total-exit .62s cubic-bezier(.55, .05, .75, .35) forwards; }
+.game-roll-card.is-exiting .game-roll-card-portrait, .game-roll-card.is-exiting .game-roll-card-copy, .game-roll-card.is-exiting .game-roll-total { animation: none; }
 .game-roll-card.is-exiting .game-roll-dismiss { opacity: 0; transition: opacity 120ms ease; }
 .game-roll-card.is-critical { border-color: #d7a83e; box-shadow: 0 0 24px rgba(221, 169, 54, .25), 0 12px 28px rgba(0,0,0,.42); }
 .game-roll-card.is-critical::before { box-shadow: 8px 10px 18px rgba(0, 0, 0, .52), 0 0 18px rgba(221, 169, 54, .28); }

@@ -912,7 +912,7 @@ export default function GameMasterPanel() {
                     />
                   )}
                 <div className="game-turn-card game-initiative-card">
-                  <header><div><span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong></div><small>Ronda {session.round}</small></header>
+                  <header><div><span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong></div>{session.combat_state?.mode === 'COMBAT' ? <button className="game-combat-end-button" onClick={() => setCombatMode('NARRATIVE')}>Finalizar combate</button> : <small>Narrativa</small>}</header>
                   <div className="game-initiative-order" aria-label="Orden de iniciativa">
                     {initiativeEntries.map((entry, index) => {
                       const active = entry.id === Number(session.active_character_id);
