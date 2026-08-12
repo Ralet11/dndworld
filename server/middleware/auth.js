@@ -1,5 +1,11 @@
 const jwt = require('jsonwebtoken');
 
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET debe estar configurado. El servidor no puede iniciarse con una clave por defecto.');
+}
+
 const verifyToken = (req, res, next) => {
     let token = req.headers['authorization'];
 
@@ -11,7 +17,7 @@ const verifyToken = (req, res, next) => {
         token = token.slice(7, token.length);
     }
 
-    jwt.verify(token, process.env.JWT_SECRET || 'dndworld_secret', (err, decoded) => {
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (err) {
             return res.status(401).send({ message: "Unauthorized!" });
         }

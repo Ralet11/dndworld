@@ -71,7 +71,6 @@ export default function SceneChat({ scene, onBack }) {
   const [input, setInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [pendingImage, setPendingImage] = useState(null);
-  const [myPlayerId, setMyPlayerId] = useState(null);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -88,7 +87,6 @@ export default function SceneChat({ scene, onBack }) {
     const handleUpdated = (msg) => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
     const handlePlayers = (players) => {
       const mine = players.find(p => p.UserId == user?.id);
-      if (mine) setMyPlayerId(mine.id);
     };
 
     socket.on('timeline-data', handleTimeline);

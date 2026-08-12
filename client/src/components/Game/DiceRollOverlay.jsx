@@ -18,7 +18,7 @@ function fallbackResults(quantity, sides) {
   return Array.from(values, value => (value % sides) + 1);
 }
 
-export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDismiss, onResolveRoll }) {
+export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll }) {
   const boxRef = useRef(null);
   const diceReadyRef = useRef(Promise.resolve(null));
   const initializedRef = useRef(false);

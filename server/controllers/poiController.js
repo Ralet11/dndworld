@@ -10,7 +10,9 @@ exports.getAllPointsOfInterest = async (req, res) => {
         if (parent_id === 'null' || parent_id === '') where.parent_id = null;
         else if (parent_id !== undefined) where.parent_id = parent_id;
 
-        const pois = await PointOfInterest.findAll({ where });
+        const attributes = { exclude: [] };
+        if (req.user.role !== 'DM' && req.user.role !== 'ADMIN') attributes.exclude.push('dmDescription');
+        const pois = await PointOfInterest.findAll({ where, attributes });
         res.status(200).json(pois);
     } catch (error) {
         console.error("Error fetching Points of Interest:", error);
@@ -65,9 +67,9 @@ exports.getPoiLore = async (req, res) => {
         const userId = req.user.id; // From auth middleware
 
         // 1. Fetch global POI state
-        const poi = await PointOfInterest.findByPk(id, {
-            attributes: ['id', 'description', 'dmDescription', 'partyKnowledge']
-        });
+        const attributes = ['id', 'description', 'partyKnowledge'];
+        if (req.user.role === 'DM' || req.user.role === 'ADMIN') attributes.push('dmDescription');
+        const poi = await PointOfInterest.findByPk(id, { attributes });
 
         if (!poi) {
             return res.status(404).json({ error: 'Point of Interest not found' });
@@ -94,8 +96,6 @@ exports.updateGlobalLore = async (req, res) => {
     try {
         const { id } = req.params;
         const { dmDescription, partyKnowledge } = req.body;
-        // In a real app we would strictly enforce `req.user.role === 'DM'` here
-
         const poi = await PointOfInterest.findByPk(id);
         if (!poi) return res.status(404).json({ error: 'POI not found' });
 
@@ -116,8 +116,16 @@ exports.updateUserNotes = async (req, res) => {
         const { userNotes, specializedKnowledge, targetUserId } = req.body;
         const requestingUser = req.user;
 
-        // If targetUserId is provided, a DM is trying to update another user's specialized knowledge
-        // Otherwise, the user is saving their own notes
+        const isDm = requestingUser.role === 'DM' || requestingUser.role === 'ADMIN';
+        if (targetUserId && !isDm) {
+            return res.status(403).json({ error: 'Sólo el DM puede editar datos de otro jugador.' });
+        }
+        if (specializedKnowledge !== undefined && !isDm) {
+            return res.status(403).json({ error: 'Sólo el DM puede editar conocimiento especializado.' });
+        }
+
+        // If targetUserId is provided, a DM is editing specialized knowledge.
+        // Otherwise, a player is saving their own notes.
         const targetId = targetUserId || requestingUser.id;
 
         const [userData, created] = await UserPoiData.findOrCreate({
@@ -135,7 +143,6 @@ exports.updateUserNotes = async (req, res) => {
             userData.userNotes = userNotes;
         }
 
-        // Only DM hypothetically should do this, but for testing we leave it open
         if (specializedKnowledge !== undefined) {
             userData.specializedKnowledge = specializedKnowledge;
         }

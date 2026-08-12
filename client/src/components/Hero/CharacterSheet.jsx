@@ -61,7 +61,7 @@ const TABS = [
 // ─── Roll Modal ────────────────────────────────────────────────
 function RollModal({ roll, onClose }) {
   if (!roll) return null;
-  const d20 = Math.floor(Math.random() * 20) + 1;
+  const d20 = roll.d20;
   const result = d20 + roll.modifier;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center"
@@ -1144,7 +1144,9 @@ export default function CharacterSheet({ character, embedded = false, onRoll, in
   const [rollTarget, setRollTarget] = useState(null);
   if (!character) return null;
 
-  const handleRoll = onRoll || setRollTarget;
+  const handleRoll = onRoll || ((roll) => {
+    setRollTarget({ ...roll, d20: Math.floor(Math.random() * 20) + 1 });
+  });
 
   const renderTabContent = (tab) => {
     if (tab === 'stats')     return <StatsOverviewTab character={character} onRoll={handleRoll} />;

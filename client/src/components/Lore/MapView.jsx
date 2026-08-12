@@ -158,7 +158,7 @@ export default function MapView({ onBack }) {
     setError('');
     try {
       const query = parentId === null || parentId === undefined ? 'null' : parentId;
-      const response = await fetch(`${API_URL}/api/pois?parent_id=${query}`);
+      const response = await fetch(`${API_URL}/api/pois?parent_id=${query}`, { headers: requestHeaders });
       if (!response.ok) throw new Error('No se pudieron cargar los puntos del mapa.');
       setMarkers(await response.json());
     } catch (fetchError) {
@@ -166,7 +166,7 @@ export default function MapView({ onBack }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [requestHeaders]);
 
   useEffect(() => {
     if (isContinentView) {

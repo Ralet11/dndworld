@@ -6,6 +6,9 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET debe estar configurado.');
+
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
 const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, Blueprint, NpcAction, CharacterAuditLog, CharacterInventory, AudioTrack, GameSession } = require('./models');
@@ -23,6 +26,7 @@ const server = http.createServer(app);
 
 // Simple cache for spell lists
 const classSpellCache = {};
+const silencedScenes = new Set();
 
 const io = new Server(server, {
     cors: {
@@ -226,7 +230,7 @@ app.delete('/api/audio/tracks/:id', verifyToken, isDm, async (req, res) => {
 });
 
 // AI Narrator Endpoint (Architecture Ready)
-app.post('/api/ai/narrate', verifyToken, async (req, res) => {
+app.post('/api/ai/narrate', verifyToken, isDm, async (req, res) => {
     try {
         const { prompt } = req.body;
         // HERE is where we would connect to OpenAI / Gemini.
@@ -248,7 +252,7 @@ app.post('/api/ai/narrate', verifyToken, async (req, res) => {
 io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('AUTH_REQUIRED'));
-    jwt.verify(token, process.env.JWT_SECRET || 'dndworld_secret', (error, decoded) => {
+    jwt.verify(token, JWT_SECRET, (error, decoded) => {
         if (error) return next(new Error('AUTH_INVALID'));
         socket.user = decoded;
         next();
@@ -789,6 +793,13 @@ io.on('connection', async (socket) => {
     // --- TIMELINE / CHAT ---
     socket.on('get-timeline', async (sceneId) => {
         try {
+            if (sceneId && !isDmUser(socket)) {
+                const scene = await Scene.findByPk(sceneId);
+                const character = await Character.findOne({ where: { UserId: socket.user.id, is_npc: false } });
+                if (!scene || !character || !(await scene.hasParticipant(character))) {
+                    throw new Error('No tienes acceso a esta escena.');
+                }
+            }
             const whereClause = {};
             if (sceneId) {
                 whereClause.scene_id = sceneId;
@@ -811,7 +822,10 @@ io.on('connection', async (socket) => {
                 include: [{ model: Character, as: 'author' }]
             });
             // Send back in chronological order (Oldest -> Newest) for the chat UI
-            socket.emit('timeline-data', events.reverse());
+            const visibleEvents = isDmUser(socket)
+                ? events
+                : events.filter(event => event.metadata?.mode !== 'THINK' || event.author?.UserId === socket.user.id);
+            socket.emit('timeline-data', visibleEvents.reverse());
         } catch (err) {
             console.error('Get timeline error:', err);
         }
@@ -823,7 +837,10 @@ io.on('connection', async (socket) => {
                 order: [['updatedAt', 'DESC']],
                 include: [{ model: Character, as: 'participants' }]
             });
-            socket.emit('scenes-data', scenes);
+            const visibleScenes = isDmUser(socket)
+                ? scenes
+                : scenes.filter(scene => scene.participants.some(character => character.UserId === socket.user.id));
+            socket.emit('scenes-data', visibleScenes);
         } catch (err) {
             console.error('Get scenes error:', err);
         }
@@ -831,6 +848,7 @@ io.on('connection', async (socket) => {
 
     socket.on('create-scene', async (data) => {
         try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede crear escenas.');
             const { title, description, imageUrl, participants } = data;
             const newScene = await Scene.create({
                 title,
@@ -855,6 +873,7 @@ io.on('connection', async (socket) => {
 
     socket.on('update-scene-participants', async (data) => {
         try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede cambiar participantes.');
             const { sceneId, participants } = data;
             const scene = await Scene.findByPk(sceneId);
             if (!scene) return;
@@ -878,10 +897,8 @@ io.on('connection', async (socket) => {
     });
 
     // --- NEW: CHAT CONTROLS (SILENCE & TYPING) ---
-    // Memory state for silenced scenes
-    const silencedScenes = new Set();
-
     socket.on('toggle-silence', ({ sceneId, isSilenced }) => {
+        if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede silenciar una escena.');
         if (isSilenced) {
             silencedScenes.add(sceneId);
         } else {
@@ -1006,13 +1023,22 @@ io.on('connection', async (socket) => {
 
     socket.on('chat-message', async (data) => {
         try {
-            console.log('Server: chat-message received. Content:', data.text, 'UID:', Math.random());
             const { text, mode, author_id, image, replyTo, type, sceneId } = data;
+            if (!String(text || '').trim()) throw new Error('El mensaje no puede estar vacío.');
+            const author = await Character.findByPk(author_id);
+            if (!author || (!isDmUser(socket) && author.UserId !== socket.user.id)) {
+                throw new Error('No tienes permiso para hablar como ese personaje.');
+            }
+            if (sceneId && !isDmUser(socket)) {
+                const scene = await Scene.findByPk(sceneId);
+                if (!scene || !(await scene.hasParticipant(author))) throw new Error('Tu personaje no participa de esta escena.');
+            }
+            if (mode === 'DO' && author.is_npc) throw new Error('Los NPC no pueden declarar acciones de jugador.');
 
             const newMessage = await TimelineEvent.create({
                 type: type || 'CHAT',
-                content: text,
-                author_id: author_id,
+                content: String(text).trim().slice(0, 5000),
+                author_id: author.id,
                 scene_id: sceneId || null,
                 metadata: {
                     ...(data.metadata || {}), // IMPORTANT: Capture itemRequest and other dynamic data
@@ -1040,6 +1066,7 @@ io.on('connection', async (socket) => {
             const msg = await TimelineEvent.findByPk(messageId);
 
             if (!msg) return;
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede resolver acciones o editar mensajes.');
 
             // Apply updates
             if (updates.status) {
@@ -1419,6 +1446,7 @@ io.on('connection', async (socket) => {
 
     socket.on('create-assign-quest', async (data) => {
         try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede asignar misiones.');
             const { characterId, title, description, rewards, objectives } = data; // Added objectives to destructure
 
             const createForCharacter = async (cId) => {
@@ -1624,6 +1652,9 @@ io.on('connection', async (socket) => {
                 console.error(`Quest ${questId} not found`);
                 return;
             }
+            if (!isDmUser(socket) && quest.Character?.UserId !== socket.user.id) {
+                return fail(socket, 'No tienes permiso para actualizar esta misión.');
+            }
 
             // Update Objective
             if (objectiveId !== undefined) {
@@ -1694,6 +1725,7 @@ io.on('connection', async (socket) => {
 
     socket.on('share-image', async (data) => {
         try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede compartir imágenes.');
             const newImage = await Media.create({ url: data.url, caption: data.caption });
             io.emit('image-shared', newImage);
         } catch (err) {
@@ -1702,6 +1734,7 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('stop-sharing-image', () => {
+        if (!isDmUser(socket)) return fail(socket, 'Sólo el DM puede ocultar la imagen compartida.');
         io.emit('image-sharing-stopped');
     });
 
@@ -1857,6 +1890,8 @@ io.on('connection', async (socket) => {
 
     socket.on('update-position', async (pos) => {
         try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede mover a la party.');
+            if (!Number.isFinite(Number(pos?.x)) || !Number.isFinite(Number(pos?.y))) throw new Error('La posición no es válida.');
             const mapState = await MapState.findByPk(1);
             if (mapState) {
                 mapState.party_x = pos.x;
@@ -1872,7 +1907,13 @@ io.on('connection', async (socket) => {
     // RPG Logic: Using an item (e.g., Potion)
     // RPG Logic: Using an item (e.g., Potion) with Quantity Tracking
     socket.on('use-item', async ({ characterId, itemId }) => {
-        await consumeItemLogic(characterId, itemId);
+        try {
+            const character = await Character.findByPk(characterId);
+            if (!character || !canEditCharacter(socket, character)) throw new Error('No tienes permiso para usar ese objeto.');
+            await consumeItemLogic(characterId, itemId);
+        } catch (error) {
+            fail(socket, error.message || 'No se pudo usar el objeto.');
+        }
     });
 
     socket.on('unequip-item', async ({ characterId, slot } = {}, reply = () => {}) => {
