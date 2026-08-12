@@ -5180,6 +5180,83 @@ a:focus-visible {
 @media (max-width: 900px) { .npc-director { grid-template-columns: 1fr; }.npc-director-list { max-height: 260px; border-right: 0; border-bottom: 1px solid #28342d; }.npc-director-editor { padding: 20px; }.npc-stat-row { grid-template-columns: repeat(4,minmax(0,1fr)); }.npc-action-editor .npc-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }.npc-director-grid { grid-template-columns: 120px minmax(0,1fr); } }
 @media (max-width: 560px) { .npc-director-grid { grid-template-columns: 1fr; }.npc-director-image { min-height: 130px; }.npc-identity, .npc-fields, .npc-wide-fields { grid-template-columns: 1fr; }.npc-stat-row { grid-template-columns: repeat(2,minmax(0,1fr)); }.npc-ability-editor { grid-template-columns: repeat(3,minmax(0,1fr)); }.npc-ability-editor > label:nth-child(3) { border-right: 0; }.npc-ability-editor > label:nth-child(-n+3) { border-bottom: 1px solid #37423a; } }
 
+/* NPC director: spacious, desktop-first authoring workspace. */
+.dm-surface.dm-surface-npcs { overflow: hidden; }
+.dm-surface.dm-surface-npcs > .npc-director {
+  width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0;
+  grid-template-columns: clamp(272px, 23vw, 340px) minmax(0, 1fr);
+  background: radial-gradient(circle at 72% -12%, rgba(172, 131, 53, .08), transparent 38rem), #07100c;
+}
+.npc-director-list { padding: 24px 16px; border-right-color: rgba(120, 102, 61, .45); }
+.npc-director-list > header { padding: 0 4px; }
+.npc-director-list h1 { font-size: clamp(25px, 2vw, 32px); letter-spacing: .025em; }
+.npc-director-list > header > button { min-width: 78px; min-height: 36px; }
+.npc-director-list > label { height: 40px; margin: 22px 0 14px; padding-inline: 12px; border-color: #34443a; }
+.npc-director-list input { font-size: 11px; }
+.npc-director-cards { gap: 7px; }
+.npc-director-cards > button { min-height: 58px; padding: 10px; grid-template-columns: 38px minmax(0, 1fr) auto; border-color: rgba(56, 68, 59, .35); }
+.npc-director-cards img, .npc-director-cards svg { width: 38px; height: 38px; }
+.npc-director-cards strong { font-size: 14px; letter-spacing: .015em; }
+.npc-director-cards small, .npc-director-cards em { font-size: 8px; }
+.npc-director-editor { padding: 34px clamp(24px, 4.5vw, 78px) 90px; overflow-y: auto; overscroll-behavior: contain; }
+.npc-director-editor > header { position: sticky; top: -34px; z-index: 5; min-height: 72px; margin: -34px 0 0; padding: 18px 0 15px; background: rgba(7, 16, 12, .94); backdrop-filter: blur(14px); }
+.npc-director-editor > header h2 { font-size: clamp(29px, 3vw, 40px); letter-spacing: .025em; }
+.npc-director-editor > header span { font-size: 8px; }
+.npc-save { min-width: 118px; min-height: 38px; }
+.npc-director-grid { max-width: 1180px; margin-top: 28px; grid-template-columns: 184px minmax(0, 1fr); gap: 22px; }
+.npc-director-image { min-height: 246px; padding: 12px; border-color: #3d4b40; box-shadow: inset 0 1px rgba(255,255,255,.025); }
+.npc-director-image label { font-size: 8px; }
+.npc-director-image input { min-height: 37px; font-size: 10px; }
+.npc-fields { gap: 12px; }
+.npc-fields label, .npc-stat-row label { gap: 6px; font-size: 8px; color: #abb0a4; }
+.npc-fields input, .npc-fields select, .npc-fields textarea, .npc-director-image input, .npc-stat-row input { min-height: 46px; padding: 10px 11px; border-color: #3a493f; font-size: 12px; }
+.npc-fields textarea { min-height: 104px; line-height: 1.45; }
+.npc-stat-row { max-width: 1180px; margin: 18px 0; padding: 14px; grid-template-columns: repeat(7, minmax(84px, 1fr)); gap: 10px; overflow-x: auto; border-color: #3a493f; }
+.npc-stat-row label { min-width: 84px; }
+.npc-stat-row input { min-height: 40px; padding: 8px 10px; }
+.npc-editor-section { max-width: 1180px; margin-top: 18px; padding: clamp(16px, 2.2vw, 25px); border-color: #3b493f; box-shadow: 0 14px 34px rgba(0,0,0,.12); }
+.npc-editor-section > header { min-height: 34px; margin-bottom: 18px; }
+.npc-editor-section header strong { font-size: 17px; }
+.npc-editor-section header small { font-size: 9px; line-height: 1.35; }
+.npc-ability-editor { border-color: #3c4b40; }
+.npc-ability-editor > label { min-height: 112px; padding: 14px 10px; gap: 8px; border-right-color: #3c4b40; font-size: 9px; }
+.npc-ability-editor input[type=number] { min-height: 34px; padding: 6px; font-size: 12px; }
+.npc-ability-editor span { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 8px; }
+.npc-ability-editor span input[type=number] { width: 44px; min-height: 25px; margin: 0; padding: 3px; font-size: 9px; }
+.npc-wide-fields { gap: 14px; }
+.npc-action-editor article { padding: 20px; border-color: #435046; }
+.npc-action-editor .npc-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-right: 34px; }
+.npc-action-remove { width: 28px; height: 28px; top: 10px; right: 10px; }
+
+@media (max-width: 1100px) {
+  .dm-surface.dm-surface-npcs { overflow: auto; }
+  .dm-surface.dm-surface-npcs > .npc-director { height: auto; min-height: 100%; grid-template-columns: 250px minmax(0, 1fr); }
+  .npc-director-editor { overflow: visible; padding-inline: 26px; }
+  .npc-director-editor > header { top: 0; margin-inline: -26px; padding-inline: 26px; }
+  .npc-director-grid { grid-template-columns: 155px minmax(0, 1fr); }
+  .npc-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .npc-identity label:first-child { grid-column: 1 / -1; }
+  .npc-stat-row { grid-template-columns: repeat(4, minmax(110px, 1fr)); }
+  .npc-action-editor .npc-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .dm-surface.dm-surface-npcs > .npc-director { display: block; }
+  .npc-director-list { max-height: 310px; border-right: 0; border-bottom: 1px solid #39473d; }
+  .npc-director-editor { padding: 22px 16px 64px; }
+  .npc-director-editor > header { top: 0; min-height: 62px; margin: -22px -16px 0; padding: 13px 16px; }
+  .npc-director-editor > header h2 { font-size: 26px; }
+  .npc-save { min-width: auto; padding-inline: 10px; }
+  .npc-save svg { display: none; }
+  .npc-director-grid { grid-template-columns: 1fr; margin-top: 22px; }
+  .npc-director-image { min-height: 150px; grid-template-columns: 112px minmax(0, 1fr); align-items: center; }
+  .npc-director-image img { height: 112px; }
+  .npc-stat-row { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .npc-ability-editor { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .npc-ability-editor > label:nth-child(3) { border-right: 0; }
+  .npc-ability-editor > label:nth-child(-n+3) { border-bottom: 1px solid #3c4b40; }
+}
+
 /* Compact desktop table: remove duplicated chrome and keep the whole play surface above the fold. */
 @media (min-width: 768px) {
   .app-frame.is-game-mode .app-topbar { display: none; }
