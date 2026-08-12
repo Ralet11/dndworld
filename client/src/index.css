@@ -5257,6 +5257,35 @@ a:focus-visible {
   .npc-ability-editor > label:nth-child(-n+3) { border-bottom: 1px solid #3c4b40; }
 }
 
+/* NPC sheet refinement: a compact roster and deliberate field proportions. */
+@media (min-width: 1101px) {
+  .dm-surface.dm-surface-npcs > .npc-director { grid-template-columns: 242px minmax(0, 1fr); }
+  .npc-director-list { padding: 18px 12px; }
+  .npc-director-list > header { align-items: flex-end; }
+  .npc-director-list h1 { font-size: 24px; }
+  .npc-director-list > header > button { min-width: 36px; width: 36px; padding: 0; }
+  .npc-director-list > header > button:not(:hover) { font-size: 0; }
+  .npc-director-list > header > button svg { width: 15px; height: 15px; }
+  .npc-director-list > label { height: 36px; margin: 16px 0 10px; }
+  .npc-director-cards { gap: 5px; }
+  .npc-director-cards > button { min-height: 52px; padding: 8px; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 7px; }
+  .npc-director-cards img, .npc-director-cards svg { width: 34px; height: 34px; }
+  .npc-director-cards strong { font-size: 12px; }
+  .npc-director-editor { padding: 28px clamp(28px, 3.5vw, 60px) 76px; }
+  .npc-director-editor > header { top: -28px; margin-top: -28px; }
+  .npc-director-editor > header h2 { font-size: clamp(27px, 2.7vw, 37px); }
+  .npc-director-grid { grid-template-columns: 164px minmax(0, 1fr); gap: 18px; max-width: none; margin-top: 23px; }
+  .npc-director-image { min-height: 212px; }
+  .npc-identity { grid-template-columns: minmax(200px, 1.45fr) minmax(125px, .85fr) minmax(125px, .85fr); }
+  .npc-identity label:first-child { grid-column: auto; }
+  .npc-stat-row, .npc-editor-section { max-width: none; }
+  .npc-stat-row { margin: 16px 0; padding: 11px; gap: 8px; }
+  .npc-fields input, .npc-fields select, .npc-fields textarea, .npc-director-image input, .npc-stat-row input { min-height: 41px; padding: 8px 9px; }
+  .npc-editor-section { margin-top: 15px; padding: 19px 20px; }
+  .npc-editor-section > header { margin-bottom: 14px; }
+  .npc-ability-editor > label { min-height: 96px; padding: 10px 8px; }
+}
+
 /* Compact desktop table: remove duplicated chrome and keep the whole play surface above the fold. */
 @media (min-width: 768px) {
   .app-frame.is-game-mode .app-topbar { display: none; }
