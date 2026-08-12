@@ -219,6 +219,17 @@ async function replaceNpcActions(npcId, actions) {
     return valid.length;
 }
 
+async function saveNpcActions(npcId, actions, mode = 'replace') {
+    if (!Array.isArray(actions)) return 0;
+    if (mode !== 'append') return replaceNpcActions(npcId, actions);
+    const valid = safeNpcActions(actions);
+    if (!valid.length) return 0;
+    const latest = await NpcAction.max('sort_order', { where: { character_id: npcId } });
+    const startOrder = Number.isInteger(latest) ? latest + 1 : 0;
+    await NpcAction.bulkCreate(valid.map((action, index) => ({ ...action, character_id: npcId, sort_order: startOrder + index })));
+    return valid.length;
+}
+
 async function emitItemRefresh(io) { io.emit('all-items', await Item.findAll()); }
 
 async function createNpcFromAssistant({ fields, io, getCalculatedPartyStats }) {
@@ -227,7 +238,7 @@ async function createNpcFromAssistant({ fields, io, getCalculatedPartyStats }) {
     const patch = safeNpcPatch(fields);
     const hpMax = patch.hp_max || 10;
     const npc = await Character.create({ name, is_npc: true, hp_max: hpMax, hp_current: patch.hp_current ?? hpMax, race: patch.race || 'Humanoide', class: patch.class || 'NPC', npc_type: patch.npc_type || 'neutral', level: patch.level || 1, ac_base: patch.ac_base || 10, speed: patch.speed || 30, notes: patch.notes || '', abilities_text: patch.abilities_text || '', image_url: patch.image_url || null });
-    const actionCount = await replaceNpcActions(npc.id, fields.actions);
+    const actionCount = await saveNpcActions(npc.id, fields.actions, fields.actionMode);
     await emitNpcRefresh(io, getCalculatedPartyStats);
     return buildReply('result', `Creé a ${npc.name}: ${npc.hp_current}/${npc.hp_max} PG, CA ${npc.ac_base}, ${npc.npc_type}${actionCount ? ` y ${actionCount} acción(es)` : ''}.`, { tool: 'npc.create', suggestions: ['editar ' + npc.name, 'activar ' + npc.name] });
 }
@@ -239,7 +250,7 @@ async function updateNpcFromAssistant({ target, fields, io, getCalculatedPartySt
     if (!Object.keys(patch).length && !Array.isArray(fields.actions)) return buildReply('error', 'No detecté campos válidos para cambiar en el NPC.');
     const npc = await Character.findByPk(resolved.character.id);
     Object.assign(npc, patch); if (npc.hp_current > npc.hp_max) npc.hp_current = npc.hp_max; await npc.save();
-    const actionCount = await replaceNpcActions(npc.id, fields.actions);
+    const actionCount = await saveNpcActions(npc.id, fields.actions, fields.actionMode);
     await emitNpcRefresh(io, getCalculatedPartyStats);
     return buildReply('result', `Actualicé ${npc.name}${Array.isArray(fields.actions) ? ` con ${actionCount} acción(es)` : ''}.`, { tool: 'npc.update', suggestions: ['deshacer'] });
 }
