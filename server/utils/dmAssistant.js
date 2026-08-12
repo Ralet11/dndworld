@@ -1,4 +1,4 @@
-const { Character, CharacterInventory, Item, MapState, Quest, Scene, TimelineEvent } = require('../models');
+const { Character, CharacterInventory, Item, MapState, NpcAction, Quest, Scene, TimelineEvent } = require('../models');
 const { runAssistantConversation } = require('./dmAssistantLlm');
 const { deriveWorldConditions, normalizeWorldTime } = require('./worldTime');
 
@@ -186,9 +186,37 @@ function safeNpcPatch(fields = {}) {
     if (fields.level !== undefined) patch.level = integer(fields.level, 1, 20);
     if (fields.speed !== undefined) patch.speed = integer(fields.speed, 0, 999);
     if (fields.notes !== undefined) patch.notes = text(fields.notes, 5000);
+    if (fields.abilitiesText !== undefined) patch.abilities_text = text(fields.abilitiesText, 10000);
     if (fields.imageUrl !== undefined) patch.image_url = text(fields.imageUrl, 2000);
     Object.keys(patch).forEach((key) => patch[key] === undefined && delete patch[key]);
     return patch;
+}
+
+function safeNpcActions(actions) {
+    if (!Array.isArray(actions)) return [];
+    return actions.slice(0, 40).map((action, index) => ({
+        name: String(action?.name || '').trim().slice(0, 120),
+        action_type: ['acción', 'bonus', 'reacción', 'rasgo'].includes(String(action?.type || action?.action_type || '').trim()) ? String(action.type || action.action_type).trim() : 'acción',
+        description: String(action?.description || '').trim().slice(0, 5000) || null,
+        attack_bonus: Number.isFinite(Number(action?.attackBonus)) ? clampNumber(Math.round(Number(action.attackBonus)), -50, 100) : null,
+        damage_dice: String(action?.damage || action?.damage_dice || '').trim().slice(0, 32) || null,
+        damage_bonus: Number.isFinite(Number(action?.damageBonus)) ? clampNumber(Math.round(Number(action.damageBonus)), -100, 100) : null,
+        damage_type: String(action?.damageType || action?.damage_type || '').trim().slice(0, 40) || null,
+        reach: String(action?.reach || '').trim().slice(0, 60) || null,
+        save_ability: String(action?.saveAbility || action?.save_ability || '').trim().toUpperCase().slice(0, 3) || null,
+        save_dc: Number.isFinite(Number(action?.saveDc)) ? clampNumber(Math.round(Number(action.saveDc)), 1, 100) : null,
+        recharge: String(action?.recharge || '').trim().slice(0, 24) || null,
+        max_uses: Number.isFinite(Number(action?.maxUses)) ? clampNumber(Math.round(Number(action.maxUses)), 1, 99) : null,
+        used_uses: 0, is_public: Boolean(action?.isPublic), sort_order: index,
+    })).filter((action) => action.name);
+}
+
+async function replaceNpcActions(npcId, actions) {
+    if (!Array.isArray(actions)) return 0;
+    const valid = safeNpcActions(actions);
+    await NpcAction.destroy({ where: { character_id: npcId } });
+    if (valid.length) await NpcAction.bulkCreate(valid.map((action) => ({ ...action, character_id: npcId })));
+    return valid.length;
 }
 
 async function emitItemRefresh(io) { io.emit('all-items', await Item.findAll()); }
@@ -198,20 +226,22 @@ async function createNpcFromAssistant({ fields, io, getCalculatedPartyStats }) {
     if (!name) return buildReply('error', 'Para crear un NPC necesito al menos un nombre.');
     const patch = safeNpcPatch(fields);
     const hpMax = patch.hp_max || 10;
-    const npc = await Character.create({ name, is_npc: true, hp_max: hpMax, hp_current: patch.hp_current ?? hpMax, race: patch.race || 'Humanoide', class: patch.class || 'NPC', npc_type: patch.npc_type || 'neutral', level: patch.level || 1, ac_base: patch.ac_base || 10, speed: patch.speed || 30, notes: patch.notes || '', image_url: patch.image_url || null });
+    const npc = await Character.create({ name, is_npc: true, hp_max: hpMax, hp_current: patch.hp_current ?? hpMax, race: patch.race || 'Humanoide', class: patch.class || 'NPC', npc_type: patch.npc_type || 'neutral', level: patch.level || 1, ac_base: patch.ac_base || 10, speed: patch.speed || 30, notes: patch.notes || '', abilities_text: patch.abilities_text || '', image_url: patch.image_url || null });
+    const actionCount = await replaceNpcActions(npc.id, fields.actions);
     await emitNpcRefresh(io, getCalculatedPartyStats);
-    return buildReply('result', `Creé a ${npc.name}: ${npc.hp_current}/${npc.hp_max} PG, CA ${npc.ac_base}, ${npc.npc_type}.`, { tool: 'npc.create', suggestions: ['editar ' + npc.name, 'activar ' + npc.name] });
+    return buildReply('result', `Creé a ${npc.name}: ${npc.hp_current}/${npc.hp_max} PG, CA ${npc.ac_base}, ${npc.npc_type}${actionCount ? ` y ${actionCount} acción(es)` : ''}.`, { tool: 'npc.create', suggestions: ['editar ' + npc.name, 'activar ' + npc.name] });
 }
 
 async function updateNpcFromAssistant({ target, fields, io, getCalculatedPartyStats }) {
     const resolved = await resolveCharacter(target);
     if (!resolved.ok || !resolved.character.is_npc) return buildReply('error', resolved.ok ? `${resolved.character.name} no es un NPC.` : resolved.error, resolved.ambiguous ? { suggestions: resolved.matches } : {});
     const patch = safeNpcPatch(fields);
-    if (!Object.keys(patch).length) return buildReply('error', 'No detecté campos válidos para cambiar en el NPC.');
+    if (!Object.keys(patch).length && !Array.isArray(fields.actions)) return buildReply('error', 'No detecté campos válidos para cambiar en el NPC.');
     const npc = await Character.findByPk(resolved.character.id);
     Object.assign(npc, patch); if (npc.hp_current > npc.hp_max) npc.hp_current = npc.hp_max; await npc.save();
+    const actionCount = await replaceNpcActions(npc.id, fields.actions);
     await emitNpcRefresh(io, getCalculatedPartyStats);
-    return buildReply('result', `Actualicé ${npc.name}.`, { tool: 'npc.update', suggestions: ['deshacer'] });
+    return buildReply('result', `Actualicé ${npc.name}${Array.isArray(fields.actions) ? ` con ${actionCount} acción(es)` : ''}.`, { tool: 'npc.update', suggestions: ['deshacer'] });
 }
 
 async function createItemFromAssistant({ fields, io }) {

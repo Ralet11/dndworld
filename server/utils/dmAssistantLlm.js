@@ -67,6 +67,7 @@ function buildSystemPrompt() {
         'Puedes usar el historial reciente para resolver referencias como "quitale 5", "hacelo", "lo mismo", "ese goblin".',
         'Si el usuario viene hablando de un NPC y luego dice "pasalo a compañero de la party", debes inferir ese mismo NPC del historial y usar la tool correspondiente.',
         'No inventes personajes, quests, escenas ni numeros fuera del contexto y resultados de tools.',
+        'Al crear o editar un NPC, si el DM describe ataques, acciones, reacciones o rasgos, debes incluirlos en actions; si describe habilidades narrativas, inclúyelas en abilitiesText. No los resumas sólo en notes.',
         'Si el usuario pide descripcion, ideas, recap, dialogo, improvisacion o humor, responde normal sin tools salvo que tambien pida cambiar estado.',
         'Despues de ejecutar tools, responde de forma natural resumiendo lo que hiciste y el resultado.',
         'Si una tool devuelve error o ambiguedad, transforma eso en una pregunta o explicacion util para el DM.',
@@ -98,6 +99,15 @@ function historyToMessages(history) {
             };
         });
 }
+
+const NPC_ACTION_SCHEMA = {
+    type: 'object',
+    properties: {
+        name: { type: 'string' }, type: { type: 'string', enum: ['acción', 'bonus', 'reacción', 'rasgo'] }, description: { type: 'string' },
+        attackBonus: { type: 'number' }, damage: { type: 'string' }, damageBonus: { type: 'number' }, damageType: { type: 'string' },
+        reach: { type: 'string' }, saveAbility: { type: 'string' }, saveDc: { type: 'number' }, recharge: { type: 'string' }, maxUses: { type: 'number' }, isPublic: { type: 'boolean' },
+    }, required: ['name'], additionalProperties: false,
+};
 
 const TOOL_SPECS = [
     {
@@ -302,14 +312,14 @@ const TOOL_SPECS = [
         type: 'function',
         function: {
             name: 'create_npc', description: 'Crea un NPC o criatura con sus estadísticas básicas.',
-            parameters: { type: 'object', properties: { name: { type: 'string' }, race: { type: 'string' }, className: { type: 'string' }, npcType: { type: 'string', enum: ['neutral', 'amigo', 'compañero', 'enemigo'] }, hpMax: { type: 'number' }, hpCurrent: { type: 'number' }, ac: { type: 'number' }, level: { type: 'number' }, speed: { type: 'number' }, notes: { type: 'string' }, imageUrl: { type: 'string' } }, required: ['name'], additionalProperties: false },
+            parameters: { type: 'object', properties: { name: { type: 'string' }, race: { type: 'string' }, className: { type: 'string' }, npcType: { type: 'string', enum: ['neutral', 'amigo', 'compañero', 'enemigo'] }, hpMax: { type: 'number' }, hpCurrent: { type: 'number' }, ac: { type: 'number' }, level: { type: 'number' }, speed: { type: 'number' }, notes: { type: 'string' }, abilitiesText: { type: 'string' }, actions: { type: 'array', items: NPC_ACTION_SCHEMA }, imageUrl: { type: 'string' } }, required: ['name'], additionalProperties: false },
         },
     },
     {
         type: 'function',
         function: {
             name: 'update_npc', description: 'Actualiza los campos básicos de un NPC existente.',
-            parameters: { type: 'object', properties: { target: { type: 'string' }, fields: { type: 'object', properties: { race: { type: 'string' }, className: { type: 'string' }, npcType: { type: 'string', enum: ['neutral', 'amigo', 'compañero', 'enemigo'] }, hpMax: { type: 'number' }, hpCurrent: { type: 'number' }, ac: { type: 'number' }, level: { type: 'number' }, speed: { type: 'number' }, notes: { type: 'string' }, imageUrl: { type: 'string' } }, additionalProperties: false } }, required: ['target', 'fields'], additionalProperties: false },
+            parameters: { type: 'object', properties: { target: { type: 'string' }, fields: { type: 'object', properties: { race: { type: 'string' }, className: { type: 'string' }, npcType: { type: 'string', enum: ['neutral', 'amigo', 'compañero', 'enemigo'] }, hpMax: { type: 'number' }, hpCurrent: { type: 'number' }, ac: { type: 'number' }, level: { type: 'number' }, speed: { type: 'number' }, notes: { type: 'string' }, abilitiesText: { type: 'string' }, actions: { type: 'array', items: NPC_ACTION_SCHEMA }, imageUrl: { type: 'string' } }, additionalProperties: false } }, required: ['target', 'fields'], additionalProperties: false },
         },
     },
     {
