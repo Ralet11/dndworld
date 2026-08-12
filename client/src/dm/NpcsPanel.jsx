@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Plus, Save, Search, Shield, Skull, Swords, UserRound, X } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
+import API_URL from '../config';
 
 const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 const emptyAction = () => ({ name: '', action_type: 'acción', description: '', attack_bonus: '', damage_dice: '', damage_bonus: '', damage_type: '', reach: '', save_ability: '', save_dc: '', recharge: '', max_uses: '', is_public: false });
@@ -15,12 +16,44 @@ function cleanedList(value) { return String(value || '').split(',').map(item => 
 
 export default function NpcsPanel() {
   const { socket } = useSocket();
-  const [npcs, setNpcs] = useState([]); const [query, setQuery] = useState(''); const [selectedId, setSelectedId] = useState(null); const [form, setForm] = useState(baseNpc); const [saving, setSaving] = useState(false); const [message, setMessage] = useState('');
+  const [npcs, setNpcs] = useState([]); const [query, setQuery] = useState(''); const [selectedId, setSelectedId] = useState(null); const [form, setForm] = useState(baseNpc); const [saving, setSaving] = useState(false); const [message, setMessage] = useState(''); const [uploadingImage, setUploadingImage] = useState(false); const [draggingImage, setDraggingImage] = useState(false);
   useEffect(() => { if (!socket) return undefined; const receive = data => setNpcs(data || []); socket.on('all-npcs', receive); socket.emit('get-all-npcs'); return () => socket.off('all-npcs', receive); }, [socket]);
   const selected = npcs.find(npc => Number(npc.id) === Number(selectedId));
   useEffect(() => { setForm(toForm(selected)); setMessage(''); }, [selectedId, selected]);
   const filtered = useMemo(() => npcs.filter(npc => `${npc.name} ${npc.race} ${npc.npc_type}`.toLowerCase().includes(query.toLowerCase())), [npcs, query]);
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
+  const uploadImage = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return setMessage('Elegí una imagen válida (JPG, PNG, WEBP o GIF).');
+    if (file.size > 20 * 1024 * 1024) return setMessage('La imagen no puede superar 20 MB.');
+    setUploadingImage(true); setMessage('');
+    try {
+      const body = new FormData(); body.append('image', file);
+      const response = await fetch(`${API_URL}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` }, body });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.message || 'No se pudo subir la imagen.');
+      set('image_url', data.url);
+      setMessage('Imagen cargada. Guardá el NPC para aplicar el cambio.');
+    } catch (error) { setMessage(error.message || 'No se pudo subir la imagen.'); }
+    finally { setUploadingImage(false); setDraggingImage(false); }
+  };
+  useEffect(() => {
+    const target = document.querySelector('.npc-director-image');
+    if (!target) return undefined;
+    const prevent = event => event.preventDefault();
+    const enter = event => { prevent(event); target.classList.add('is-dragging'); setDraggingImage(true); };
+    const leave = event => { if (!target.contains(event.relatedTarget)) { target.classList.remove('is-dragging'); setDraggingImage(false); } };
+    const drop = event => { prevent(event); uploadImage(event.dataTransfer.files?.[0]); };
+    const chooseFile = event => {
+      if (event.target.closest('input')) return;
+      const picker = document.createElement('input');
+      picker.type = 'file'; picker.accept = 'image/jpeg,image/png,image/webp,image/gif';
+      picker.onchange = () => uploadImage(picker.files?.[0]);
+      picker.click();
+    };
+    target.addEventListener('dragenter', enter); target.addEventListener('dragover', prevent); target.addEventListener('dragleave', leave); target.addEventListener('drop', drop); target.addEventListener('click', chooseFile);
+    return () => { target.classList.remove('is-dragging'); target.removeEventListener('dragenter', enter); target.removeEventListener('dragover', prevent); target.removeEventListener('dragleave', leave); target.removeEventListener('drop', drop); target.removeEventListener('click', chooseFile); };
+  }, [form.image_url, uploadingImage]);
   const save = () => {
     if (!form.name.trim()) return setMessage('El NPC necesita nombre.'); setSaving(true); setMessage('');
     const core = { ...form, hp_current: Number(form.hp_current), hp_max: Number(form.hp_max), ac_base: Number(form.ac_base), level: Number(form.level), initiative_bonus: Number(form.initiative_bonus), speed: Number(form.speed), proficiency_bonus: Number(form.proficiency_bonus), passive_perception: Number(form.passive_perception), saving_throws: Object.fromEntries(Object.entries(form.saving_throws || {}).filter(([, value]) => value !== '').map(([key, value]) => [key, Number(value)])), damage_resistances: cleanedList(form.damage_resistances), damage_immunities: cleanedList(form.damage_immunities), damage_vulnerabilities: cleanedList(form.damage_vulnerabilities), condition_immunities: cleanedList(form.condition_immunities), senses: cleanedList(form.senses), languages: cleanedList(form.languages) };
