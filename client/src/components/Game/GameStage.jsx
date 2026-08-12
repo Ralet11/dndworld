@@ -1266,12 +1266,6 @@ export default function GameStage({
                 openTokenMenu(event, token);
                 return;
               }
-              if (isDm && Number(token.character_id) === Number(activeCharacterId)) {
-                event.preventDefault();
-                setSelectedIds([token.id]);
-                onActiveTokenClick?.(token);
-                return;
-              }
               if (!movable) return;
               event.preventDefault();
               setContextMenu(null);
