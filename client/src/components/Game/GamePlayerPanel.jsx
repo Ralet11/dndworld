@@ -38,6 +38,9 @@ export default function GamePlayerPanel() {
           rolls: (next.rolls || []).map(roll => dismissingIds.has(String(roll.id)) ? { ...roll, dismissing: true } : roll),
         };
       });
+      const participantCharacterId = next?.participants?.find(item => String(item.user_id) === String(user.id))?.character_id;
+      const pendingInitiative = (next?.combat_state?.pendingInitiative || []).map(Number);
+      setInitiativePrompt(Boolean(next?.combat_state?.awaitingInitiative && pendingInitiative.includes(Number(participantCharacterId))));
       setLoading(false);
     };
     const onError = payload => {

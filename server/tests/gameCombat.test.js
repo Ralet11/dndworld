@@ -9,6 +9,28 @@ const {
     spellProfile,
     weaponProfile,
 } = require('../services/gameCombat');
+const { initiativeBonus, initiativeEntry, orderByInitiative } = require('../services/gameInitiative');
+
+test('initiative mixes combatants by rolled total and resolves ties consistently', () => {
+    const rogue = { id: 1, is_npc: false, initiative_bonus: 1, abilityScores: [{ ability: 'DEX', base_value: 16, bonus_value: 0 }] };
+    const goblin = { id: 2, is_npc: true, initiative_bonus: 4, abilityScores: [{ ability: 'DEX', base_value: 14, bonus_value: 0 }] };
+    const guard = { id: 3, is_npc: true, initiative_bonus: 1, abilityScores: [{ ability: 'DEX', base_value: 12, bonus_value: 0 }] };
+    assert.equal(initiativeBonus(rogue), 4);
+    assert.equal(initiativeBonus(goblin), 4);
+    const entries = {
+        1: initiativeEntry(rogue, 12, 'player'),
+        2: initiativeEntry(goblin, 12, 'npc'),
+        3: initiativeEntry(guard, 18, 'npc'),
+    };
+    assert.deepEqual(orderByInitiative(entries), [3, 1, 2]);
+});
+
+test('initiative keeps characters without a result at the end until they roll', () => {
+    const entries = {
+        9: { characterId: 9, roll: 14, bonus: 2, total: 16, dexterity: 12 },
+    };
+    assert.deepEqual(orderByInitiative(entries, [4, 9, 7]), [9, 4, 7]);
+});
 
 test('parseDiceExpression accepts safe combat formulas', () => {
     assert.deepEqual(parseDiceExpression('2d8+3'), { quantity: 2, sides: 8, modifier: 3, formula: '2d8+3' });

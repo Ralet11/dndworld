@@ -16,6 +16,7 @@ const {
     User,
 } = require('../models');
 const { resolveCharacterImage } = require('../utils/npcImages');
+const { initiativeBonus, initiativeEntry, orderByInitiative } = require('../services/gameInitiative');
 const {
     abilityModifier,
     buildActionCatalog,
@@ -85,6 +86,10 @@ function validAnnotationColor(value) {
 
 function fail(socket, message) {
     socket.emit('game:error', { message });
+}
+
+function isInitiativeLabel(label) {
+    return String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'iniciativa';
 }
 
 async function makeCode() {
@@ -216,6 +221,85 @@ async function loadSession(sessionId) {
     return session;
 }
 
+function combatantIds(participants, tokens) {
+    return [...new Set([
+        ...(participants || []).map(item => Number(item.character_id)),
+        ...(tokens || []).map(item => Number(item.character_id)),
+    ].filter(Number.isInteger))];
+}
+
+async function initializeInitiative(session, participants, tokens) {
+    const ids = combatantIds(participants, tokens);
+    const participantIds = new Set((participants || []).map(item => Number(item.character_id)).filter(Number.isInteger));
+    const characters = await Character.findAll({
+        where: { id: ids },
+        attributes: ['id', 'is_npc', 'initiative_bonus'],
+        include: [{ model: AbilityScore, as: 'abilityScores', separate: true }],
+    });
+    const entries = {};
+    for (const character of characters) {
+        if (participantIds.has(Number(character.id))) continue;
+        entries[character.id] = initiativeEntry(character, randomInt(1, 21), 'npc');
+    }
+    const pending = ids.filter(id => participantIds.has(id));
+    session.turn_order = orderByInitiative(entries, ids);
+    session.turn_index = 0;
+    session.round = 1;
+    session.combat_state = {
+        resources: {},
+        reactions: {},
+        mode: 'COMBAT',
+        awaitingInitiative: pending.length > 0,
+        initiative: entries,
+        pendingInitiative: pending,
+    };
+    session.changed('combat_state', true);
+}
+
+async function recordInitiativeResult(session, character, roll, source = 'player') {
+    const state = { ...(session.combat_state || {}) };
+    const entries = { ...(state.initiative || {}) };
+    const id = Number(character.id);
+    if (entries[id]) return false;
+    entries[id] = initiativeEntry(character, roll.results[0], source, roll.modifier);
+    const pending = (state.pendingInitiative || []).map(Number).filter(characterId => characterId !== id);
+    session.turn_order = orderByInitiative(entries, session.turn_order);
+    session.turn_index = 0;
+    session.combat_state = {
+        ...state,
+        initiative: entries,
+        pendingInitiative: pending,
+        awaitingInitiative: pending.length > 0,
+    };
+    session.changed('combat_state', true);
+    await session.save();
+    return true;
+}
+
+async function addAutomaticInitiative(session, character, source = 'npc') {
+    if (session.combat_state?.mode !== 'COMBAT') return false;
+    const id = Number(character?.id);
+    const state = { ...(session.combat_state || {}) };
+    const entries = { ...(state.initiative || {}) };
+    const pending = (state.pendingInitiative || []).map(Number);
+    if (!Number.isInteger(id) || entries[id] || pending.includes(id)) return false;
+    const withAbilities = character.abilityScores
+        ? character
+        : await Character.findByPk(id, {
+            attributes: ['id', 'is_npc', 'initiative_bonus'],
+            include: [{ model: AbilityScore, as: 'abilityScores', separate: true }],
+        });
+    if (!withAbilities) return false;
+    const activeCharacterId = state.awaitingInitiative ? null : session.turn_order?.[session.turn_index];
+    entries[id] = initiativeEntry(withAbilities, randomInt(1, 21), source);
+    session.turn_order = orderByInitiative(entries, [...session.turn_order, id]);
+    session.turn_index = activeCharacterId == null ? 0 : Math.max(0, session.turn_order.map(Number).indexOf(Number(activeCharacterId)));
+    session.combat_state = { ...state, initiative: entries };
+    session.changed('combat_state', true);
+    await session.save();
+    return true;
+}
+
 function serializeSession(session, viewer) {
     if (!session) return null;
     const payload = session.toJSON();
@@ -252,7 +336,9 @@ function serializeSession(session, viewer) {
         return { ...token, character };
     });
     payload.dm_connected = Boolean(onlineUsers?.get(payload.dm_user_id)?.size);
-    payload.active_character_id = payload.turn_order?.[payload.turn_index] ?? null;
+    payload.active_character_id = payload.combat_state?.awaitingInitiative
+        ? null
+        : payload.turn_order?.[payload.turn_index] ?? null;
     payload.combat_actions = (payload.combatActions || []).map(action => ({
         id: action.id,
         actor_user_id: action.actor_user_id,
@@ -1214,6 +1300,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:next-turn', async ({ sessionId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !session.turn_order?.length) return;
+        if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
         if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
         const nextIndex = session.turn_index + 1;
         if (nextIndex >= session.turn_order.length) {
@@ -1236,6 +1323,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:previous-turn', async ({ sessionId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !session.turn_order?.length) return;
+        if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
         if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
         if (session.turn_index <= 0) {
             session.turn_index = session.turn_order.length - 1;
@@ -1257,6 +1345,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:set-turn', async ({ sessionId, characterId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
+        if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
         if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
         const normalizedId = Number(characterId);
         let turnIndex = session.turn_order.map(Number).indexOf(normalizedId);
@@ -1284,6 +1373,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:update-turn-order', async ({ sessionId, turnOrder } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !Array.isArray(turnOrder)) return;
+        if (session.combat_state?.awaitingInitiative) return fail(socket, 'Espera a que termine la fase de iniciativa.');
         const participants = await GameParticipant.findAll({ where: { session_id: session.id }, attributes: ['character_id'] });
         const tokens = await GameToken.findAll({ where: { session_id: session.id, visible: true }, attributes: ['character_id'] });
         const availableIds = [...new Set([
@@ -1332,10 +1422,7 @@ function registerGameSessionSocket(io, socket) {
             token.image_url = resolveCharacterImage(character);
             await token.save();
         }
-        if (session.status !== 'WAITING' && !session.turn_order.map(Number).includes(Number(character.id))) {
-            session.turn_order = [...session.turn_order, character.id];
-            await session.save();
-        }
+        await addAutomaticInitiative(session, character);
         await broadcastSession(io, session.id);
     });
 
@@ -1370,10 +1457,7 @@ function registerGameSessionSocket(io, socket) {
                 x: 50,
                 y: 50,
             });
-            if (session.status !== 'WAITING' && !session.turn_order.map(Number).includes(Number(character.id))) {
-                session.turn_order = [...session.turn_order, character.id];
-                await session.save();
-            }
+            await addAutomaticInitiative(session, character);
             await broadcastSession(io, session.id);
             reply({ ok: true, character: character.toJSON(), token: token.toJSON() });
         } catch (error) {
@@ -1476,6 +1560,7 @@ function registerGameSessionSocket(io, socket) {
         if (!source) return;
 
         let characterId = source.character_id;
+        let initiativeCharacter = source.character;
         if (source.character?.is_npc) {
             const data = source.character.toJSON();
             delete data.id;
@@ -1484,6 +1569,7 @@ function registerGameSessionSocket(io, socket) {
             delete data.UserId;
             const clone = await Character.create({ ...data, UserId: null });
             characterId = clone.id;
+            initiativeCharacter = clone;
         }
 
         await GameToken.create({
@@ -1500,6 +1586,7 @@ function registerGameSessionSocket(io, socket) {
             visible: source.visible,
             conditions: Array.isArray(source.conditions) ? source.conditions : [],
         });
+        await addAutomaticInitiative(session, initiativeCharacter);
         await broadcastSession(io, session.id);
     });
 
@@ -1517,6 +1604,16 @@ function registerGameSessionSocket(io, socket) {
                 const activeCharacterId = session.turn_order[session.turn_index] ?? null;
                 session.turn_order = session.turn_order.filter(id => Number(id) !== Number(token.character_id));
                 session.turn_index = Math.max(0, session.turn_order.map(Number).indexOf(Number(activeCharacterId)));
+                const state = { ...(session.combat_state || {}) };
+                const entries = { ...(state.initiative || {}) };
+                delete entries[token.character_id];
+                session.combat_state = {
+                    ...state,
+                    initiative: entries,
+                    pendingInitiative: (state.pendingInitiative || []).map(Number).filter(id => id !== Number(token.character_id)),
+                };
+                session.combat_state.awaitingInitiative = session.combat_state.pendingInitiative.length > 0;
+                session.changed('combat_state', true);
                 await session.save();
             }
         }
@@ -1536,13 +1633,8 @@ function registerGameSessionSocket(io, socket) {
                     GameParticipant.findAll({ where: { session_id: session.id }, attributes: ['character_id'] }),
                     GameToken.findAll({ where: { session_id: session.id, visible: true }, attributes: ['character_id'] }),
                 ]);
-                const order = [...new Set([...participants.map(item => Number(item.character_id)), ...tokens.map(item => Number(item.character_id))].filter(Number.isInteger))];
-                if (!order.length) return reply({ ok: false, message: 'Agrega al menos un token o jugador antes de iniciar combate.' });
-                session.turn_order = order;
-                session.turn_index = 0;
-                session.round = 1;
-                session.combat_state = { resources: {}, reactions: {}, mode: 'COMBAT', awaitingInitiative: true };
-                session.changed('combat_state', true);
+                if (!combatantIds(participants, tokens).length) return reply({ ok: false, message: 'Agrega al menos un token o jugador antes de iniciar combate.' });
+                await initializeInitiative(session, participants, tokens);
                 await session.save();
                 io.to(roomName(session.id)).emit('game:initiative-requested', { sessionId: session.id, round: session.round });
             } else {
@@ -1561,10 +1653,46 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
+    socket.on('game:complete-initiative', async ({ sessionId } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'No tienes permiso para controlar esta sala.' });
+            if (session.combat_state?.mode !== 'COMBAT' || !session.combat_state?.awaitingInitiative) {
+                return reply({ ok: false, message: 'No hay tiradas de iniciativa pendientes.' });
+            }
+            const pending = [...new Set((session.combat_state.pendingInitiative || []).map(Number).filter(Number.isInteger))];
+            const characters = await Character.findAll({
+                where: { id: pending },
+                attributes: ['id', 'is_npc', 'initiative_bonus'],
+                include: [{ model: AbilityScore, as: 'abilityScores', separate: true }],
+            });
+            const entries = { ...(session.combat_state.initiative || {}) };
+            for (const character of characters) {
+                entries[character.id] = initiativeEntry(character, randomInt(1, 21), 'dm');
+            }
+            session.turn_order = orderByInitiative(entries, session.turn_order);
+            session.turn_index = 0;
+            session.combat_state = {
+                ...(session.combat_state || {}),
+                initiative: entries,
+                pendingInitiative: [],
+                awaitingInitiative: false,
+            };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true, turnOrder: session.turn_order });
+        } catch (error) {
+            console.error('game:complete-initiative error:', error);
+            reply({ ok: false, message: 'No se pudieron completar las iniciativas pendientes.' });
+        }
+    });
+
     socket.on('game:get-actions', async ({ sessionId } = {}, reply = () => {}) => {
         try {
             const session = await GameSession.findByPk(sessionId);
             if (!session) return reply({ ok: false, message: 'La mesa ya no está disponible.' });
+            if (session.combat_state?.awaitingInitiative) return reply({ ok: false, message: 'Aún faltan tiradas de iniciativa.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
             const actorCharacterId = isDm(socket)
                 ? Number(session.turn_order?.[session.turn_index])
@@ -1611,6 +1739,7 @@ function registerGameSessionSocket(io, socket) {
             const session = await loadSession(sessionId);
             if (!session || session.status !== 'LIVE') return reply({ ok: false, message: 'La partida no está en vivo.' });
             if (session.combat_state?.mode !== 'COMBAT') return reply({ ok: false, message: 'Las acciones de combate se habilitan al iniciar combate.' });
+            if (session.combat_state?.awaitingInitiative) return reply({ ok: false, message: 'Aún faltan tiradas de iniciativa.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
             const activeCharacterId = Number(session.turn_order?.[session.turn_index]);
             const actorCharacterId = isDm(socket) ? activeCharacterId : Number(participant?.character_id);
@@ -1929,7 +2058,7 @@ function registerGameSessionSocket(io, socket) {
 
             const parsedSides = Number.parseInt(sides, 10);
             const parsedQuantity = Math.max(1, Math.min(20, Number.parseInt(quantity, 10) || 1));
-            const parsedModifier = Math.max(-100, Math.min(100, Number.parseInt(modifier, 10) || 0));
+            let parsedModifier = Math.max(-100, Math.min(100, Number.parseInt(modifier, 10) || 0));
             const participants = dmRoll ? [] : await GameParticipant.findAll({
                 where: { session_id: session.id },
                 attributes: ['user_id'],
@@ -1947,6 +2076,21 @@ function registerGameSessionSocket(io, socket) {
                 if (!actorToken) return reply({ ok: false, message: 'Ese combatiente no tiene un token visible en esta mesa.' });
                 character = await loadCombatCharacter(Number(characterId));
                 if (!character) return reply({ ok: false, message: 'No se encontró el combatiente para la tirada.' });
+            }
+            const initiativeRoll = !dmRoll && isInitiativeLabel(label);
+            if (initiativeRoll) {
+                const pending = (session.combat_state?.pendingInitiative || []).map(Number);
+                if (session.combat_state?.mode !== 'COMBAT' || !session.combat_state?.awaitingInitiative || !pending.includes(Number(character?.id))) {
+                    return reply({ ok: false, message: 'Ese personaje no tiene una iniciativa pendiente.' });
+                }
+                if (parsedSides !== 20 || parsedQuantity !== 1) {
+                    return reply({ ok: false, message: 'La iniciativa debe tirarse con 1d20.' });
+                }
+                const initiativeCharacter = await Character.findByPk(character.id, {
+                    attributes: ['id', 'is_npc', 'initiative_bonus'],
+                    include: [{ model: AbilityScore, as: 'abilityScores', separate: true }],
+                });
+                parsedModifier = initiativeBonus(initiativeCharacter);
             }
             const roll = await GameRoll.create({
                 session_id: session.id,
@@ -1990,6 +2134,20 @@ function registerGameSessionSocket(io, socket) {
             roll.resolved = true;
             await roll.save();
             io.to(roomName(roll.session_id)).emit('game:roll-upsert', roll.toJSON());
+            if (isInitiativeLabel(roll.label) && Number(roll.sides) === 20 && Number(roll.quantity) === 1 && roll.character_id) {
+                const session = await GameSession.findByPk(roll.session_id);
+                const participant = await GameParticipant.findOne({
+                    where: { session_id: roll.session_id, character_id: roll.character_id, user_id: socket.user.id },
+                });
+                if (session?.combat_state?.mode === 'COMBAT' && participant) {
+                    const character = await Character.findByPk(roll.character_id, {
+                        attributes: ['id', 'is_npc', 'initiative_bonus'],
+                        include: [{ model: AbilityScore, as: 'abilityScores', separate: true }],
+                    });
+                    const changed = character && await recordInitiativeResult(session, character, roll, 'player');
+                    if (changed) await broadcastSession(io, session.id);
+                }
+            }
             dismissRollForEveryone(io, roll.session_id, roll.id);
             const combatAction = await GameCombatAction.findOne({
                 where: {

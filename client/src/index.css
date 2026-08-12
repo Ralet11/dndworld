@@ -3843,6 +3843,7 @@ a:focus-visible {
 .game-initiative-card > header strong { display: block; margin-top: 3px; overflow: hidden; color: #e5dbc9; font-family: var(--font-display); font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .game-initiative-card > header > small { flex: 0 0 auto; padding: 4px 6px; color: #c5a45f; border: 1px solid #57462b; background: #11140e; font-size: 6px; font-weight: 900; text-transform: uppercase; }
 .game-initiative-order { max-height: 238px; margin-top: 7px; display: grid; gap: 3px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #66512e #09100d; }
+.game-initiative-complete { width: 100%; min-height: 30px; margin-top: 7px; color: #e0c37c; border: 1px solid #775c2e; background: linear-gradient(180deg, #211a0e, #12130d); font-size: 7px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .game-initiative-order > article { min-width: 0; min-height: 42px; display: grid; grid-template-columns: 13px minmax(0, 1fr) 22px; align-items: center; gap: 5px; padding: 3px 4px; border: 1px solid #2d3832; background: #09110e; transition: opacity 120ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease; }
 .game-initiative-order > article.is-active { border-color: #9b793c; background: linear-gradient(90deg, rgba(190, 145, 62, .17), #0b1310 58%); box-shadow: inset 3px 0 #d2aa59, 0 0 14px rgba(184, 139, 54, .09); }
 .game-initiative-order > article.is-dragging { opacity: .38; transform: scale(.985); }

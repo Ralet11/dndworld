@@ -553,6 +553,9 @@ export default function GameMasterPanel() {
   const allReady = session.participants.length > 0 && session.participants.every(participant => participant.is_ready);
   const activeCharacter = players.find(character => character.id === session.active_character_id)
     || session.tokens.find(token => token.character_id === session.active_character_id)?.character;
+  const initiativeState = session.combat_state?.initiative || {};
+  const awaitingInitiative = Boolean(session.combat_state?.awaitingInitiative);
+  const pendingInitiative = new Set((session.combat_state?.pendingInitiative || []).map(Number));
   const initiativeOrder = [...new Set([
     ...(session.turn_order || []),
     ...session.participants.map(item => item.character_id),
@@ -563,12 +566,16 @@ export default function GameMasterPanel() {
     const token = session.tokens.find(item => Number(item.character_id) === normalizedId);
     const participant = session.participants.find(item => Number(item.character_id) === normalizedId);
     const character = token?.character || participant?.character || players.find(item => Number(item.id) === normalizedId);
+    const result = initiativeState[normalizedId] || initiativeState[String(normalizedId)] || null;
     return character ? {
       id: normalizedId,
       index,
       name: character.name || token?.label || 'Personaje',
       image: token?.image_url || character.rendered_url || character.image_url || character.base_body_url,
-      initiative: Number(character.initiative_bonus) || 0,
+      initiative: result ? Number(result.total) : null,
+      initiativeBonus: result ? Number(result.bonus) : Number(character.initiative_bonus) || 0,
+      initiativeRoll: result ? Number(result.roll) : null,
+      pending: pendingInitiative.has(normalizedId),
     } : null;
   }).filter(Boolean);
   const connectedPlayers = session.participants.filter(item => item.connected).length;
@@ -913,7 +920,8 @@ export default function GameMasterPanel() {
                     />
                   )}
                 <div className="game-turn-card game-initiative-card">
-                  <header><div><span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong></div>{session.combat_state?.mode === 'COMBAT' ? <button className="game-combat-end-button" onClick={() => setCombatMode('NARRATIVE')}>Finalizar combate</button> : <small>Narrativa</small>}</header>
+                  <header><div><span>Control de iniciativa</span><strong>{awaitingInitiative ? `Esperando ${pendingInitiative.size} tirada(s)` : activeCharacter?.name || 'Sin iniciativa'}</strong></div>{session.combat_state?.mode === 'COMBAT' ? <button className="game-combat-end-button" onClick={() => setCombatMode('NARRATIVE')}>Finalizar combate</button> : <small>Narrativa</small>}</header>
+                  {awaitingInitiative && <button className="game-initiative-complete" onClick={() => socket.emit('game:complete-initiative', { sessionId: session.id }, response => { if (!response?.ok) setError(response?.message || 'No se pudo completar la iniciativa.'); })}>Tirar automáticamente las pendientes</button>}
                   <div className="game-initiative-order" aria-label="Orden de iniciativa">
                     {initiativeEntries.map((entry, index) => {
                       const active = entry.id === Number(session.active_character_id);
@@ -921,20 +929,20 @@ export default function GameMasterPanel() {
                         <article
                           key={entry.id}
                           className={`${active ? 'is-active' : ''}${draggedTurnId === entry.id ? ' is-dragging' : ''}`}
-                          draggable
+                          draggable={!awaitingInitiative}
                           onDragStart={event => { setDraggedTurnId(entry.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(entry.id)); }}
                           onDragEnd={() => setDraggedTurnId(null)}
                           onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
                           onDrop={event => { event.preventDefault(); const sourceId = Number(event.dataTransfer.getData('text/plain') || draggedTurnId); setDraggedTurnId(null); reorderInitiative(sourceId, index); }}
                         >
                           <GripVertical size={12} className="game-initiative-grip" />
-                          <button type="button" className="game-initiative-person" onClick={() => emit('game:set-turn', { sessionId: session.id, characterId: entry.id })} title={`Dar el turno a ${entry.name}`}>
+                          <button type="button" className="game-initiative-person" disabled={awaitingInitiative} onClick={() => emit('game:set-turn', { sessionId: session.id, characterId: entry.id })} title={`Dar el turno a ${entry.name}`}>
                             <span className="game-initiative-avatar">{entry.image ? <img src={resolveMediaUrl(entry.image)} alt="" /> : entry.name.slice(0, 1).toUpperCase()}</span>
-                            <span><strong>{entry.name}</strong><small>{active ? 'Turno actual' : `Posición ${index + 1}`} · Inic. {entry.initiative >= 0 ? '+' : ''}{entry.initiative}</small></span>
+                            <span><strong>{entry.name}</strong><small>{entry.pending ? 'Esperando tirada' : `${active ? 'Turno actual' : `Posición ${index + 1}`} · ${entry.initiativeRoll} ${entry.initiativeBonus >= 0 ? '+' : '−'} ${Math.abs(entry.initiativeBonus)} = ${entry.initiative}`}</small></span>
                           </button>
                           <div className="game-initiative-move">
-                            <button type="button" disabled={index === 0} onClick={() => reorderInitiative(entry.id, index - 1)} aria-label={`Subir a ${entry.name}`}><ChevronUp size={11} /></button>
-                            <button type="button" disabled={index === initiativeEntries.length - 1} onClick={() => reorderInitiative(entry.id, index + 1)} aria-label={`Bajar a ${entry.name}`}><ChevronDown size={11} /></button>
+                            <button type="button" disabled={awaitingInitiative || index === 0} onClick={() => reorderInitiative(entry.id, index - 1)} aria-label={`Subir a ${entry.name}`}><ChevronUp size={11} /></button>
+                            <button type="button" disabled={awaitingInitiative || index === initiativeEntries.length - 1} onClick={() => reorderInitiative(entry.id, index + 1)} aria-label={`Bajar a ${entry.name}`}><ChevronDown size={11} /></button>
                           </div>
                         </article>
                       );
@@ -942,8 +950,8 @@ export default function GameMasterPanel() {
                     {!initiativeEntries.length && <p>{session.status === 'WAITING' ? 'La iniciativa se genera al iniciar la partida.' : 'No hay personajes en la iniciativa.'}</p>}
                   </div>
                   <div className="game-initiative-navigation">
-                    <button disabled={session.status === 'WAITING' || !initiativeEntries.length} onClick={() => emit('game:previous-turn', { sessionId: session.id })}><SkipBack size={13} /> Anterior</button>
-                    <button disabled={session.status === 'WAITING' || !initiativeEntries.length} onClick={() => emit('game:next-turn', { sessionId: session.id })}>Siguiente <SkipForward size={13} /></button>
+                    <button disabled={session.status === 'WAITING' || awaitingInitiative || !initiativeEntries.length} onClick={() => emit('game:previous-turn', { sessionId: session.id })}><SkipBack size={13} /> Anterior</button>
+                    <button disabled={session.status === 'WAITING' || awaitingInitiative || !initiativeEntries.length} onClick={() => emit('game:next-turn', { sessionId: session.id })}>Siguiente <SkipForward size={13} /></button>
                   </div>
                   {activeCharacter && session.status !== 'WAITING' && (
                     <div className="game-rest-controls">
