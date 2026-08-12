@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Sparkles, Send, RotateCcw, Clock3, MapPin, HeartPulse, Users, Mic, MicOff } from 'lucide-react';
+import { Sparkles, Send, RotateCcw, Clock3, MapPin, HeartPulse, Users, Mic, MicOff, Plus } from 'lucide-react';
 import API_URL from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -120,22 +120,13 @@ function MessageBubble({ msg, onUndo }) {
   );
 }
 
-function serializeHistory(messages) {
-  return messages
-    .filter((msg) => msg.id !== 'welcome')
-    .slice(-8)
-    .map((msg) => ({
-      role: msg.role,
-      kind: msg.kind,
-      text: msg.text,
-      tool: msg.tool,
-    }));
-}
-
 export default function AssistantPanel({ embedded = false }) {
   const { token, user } = useAuth();
   const { connected } = useSocket();
   const [context, setContext] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [conversationId, setConversationId] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
@@ -273,9 +264,68 @@ export default function AssistantPanel({ embedded = false }) {
     }
   }, [token]);
 
+  const loadConversation = useCallback(async (id) => {
+    if (!token || !id) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/dm-assistant/conversations/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('No se pudo abrir la conversación.');
+      const data = await res.json();
+      setConversationId(data.conversation.id);
+      setMessages(data.messages.length ? data.messages : [{
+        id: 'welcome', role: 'assistant', kind: 'help',
+        text: 'Conversación nueva. Decime qué querés preparar, narrar o modificar en la partida.',
+        tool: 'assistant.ready', suggestions: DEFAULT_SUGGESTIONS, undoAvailable: false,
+      }]);
+    } catch (err) {
+      console.error('Assistant history error:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [token]);
+
+  const fetchConversations = useCallback(async (selectLatest = false) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/dm-assistant/conversations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('No se pudo cargar las conversaciones.');
+      const data = await res.json();
+      setConversations(data);
+      if (data.length && (selectLatest || !conversationId)) loadConversation(data[0].id);
+      if (!data.length) setHistoryLoading(false);
+    } catch (err) {
+      console.error('Assistant conversations error:', err);
+      setHistoryLoading(false);
+    }
+  }, [conversationId, loadConversation, token]);
+
+  const createConversation = useCallback(async () => {
+    if (!token || loading) return;
+    try {
+      const res = await fetch(`${API_URL}/api/dm-assistant/conversations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: 'Nueva conversación' }),
+      });
+      if (!res.ok) throw new Error('No se pudo crear la conversación.');
+      const conversation = await res.json();
+      setConversations((prev) => [conversation, ...prev]);
+      await loadConversation(conversation.id);
+    } catch (err) {
+      console.error('Assistant new conversation error:', err);
+    }
+  }, [loadConversation, loading, token]);
+
   useEffect(() => {
     fetchContext();
   }, [fetchContext]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -310,8 +360,6 @@ export default function AssistantPanel({ embedded = false }) {
   const sendCommand = async (rawMessage) => {
     const message = rawMessage.trim();
     if (!message || !token || loading) return;
-    const history = serializeHistory(messages);
-
     setMessages((prev) => [...prev, {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -329,7 +377,7 @@ export default function AssistantPanel({ embedded = false }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({ message, conversationId }),
       });
 
       const data = await res.json();
@@ -339,7 +387,9 @@ export default function AssistantPanel({ embedded = false }) {
 
       pushAssistantReply(data.reply);
       if (res.ok) {
+        setConversationId(data.conversationId || conversationId);
         fetchContext();
+        fetchConversations(true);
       }
     } catch (err) {
       console.error('Assistant command error:', err);
@@ -377,6 +427,20 @@ export default function AssistantPanel({ embedded = false }) {
 
       <div className="oracle-grid">
         <div className="oracle-context-rail">
+          <div className="oracle-history-panel">
+            <div className="oracle-history-title">
+              <span>Conversaciones</span>
+              <button onClick={createConversation} title="Nueva conversación" disabled={loading}><Plus size={14} /></button>
+            </div>
+            <div className="oracle-history-list">
+              {conversations.map((conversation) => (
+                <button key={conversation.id} onClick={() => loadConversation(conversation.id)} className={conversation.id === conversationId ? 'is-active' : ''} title={conversation.title}>
+                  {conversation.title}
+                </button>
+              ))}
+              {!conversations.length && !historyLoading && <p>Todavía no hay conversaciones.</p>}
+            </div>
+          </div>
           <div className="panel p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Sparkles size={16} style={{ color: '#38bdf8' }} />
@@ -416,11 +480,19 @@ export default function AssistantPanel({ embedded = false }) {
                 <h2>Asistente del Director</h2>
                 <p>Consulta contexto y ejecuta acciones en vivo.</p>
               </div>
-              <div className={`oracle-thread-status${connected ? ' is-online' : ''}`}><i />{connected ? 'En línea' : 'Sin conexión'}</div>
+              <div className="oracle-thread-actions">
+                <select aria-label="Conversación activa" value={conversationId || ''} onChange={(event) => loadConversation(event.target.value)} disabled={historyLoading || !conversations.length}>
+                  {!conversations.length && <option>Sin conversaciones</option>}
+                  {conversations.map((conversation) => <option key={conversation.id} value={conversation.id}>{conversation.title}</option>)}
+                </select>
+                <button onClick={createConversation} title="Nueva conversación" disabled={loading}><Plus size={14} /></button>
+                <div className={`oracle-thread-status${connected ? ' is-online' : ''}`}><i />{connected ? 'En línea' : 'Sin conexión'}</div>
+              </div>
             </div>
 
             <div className="oracle-messages">
-              {messages.map((msg) => (
+              {historyLoading && <div className="oracle-history-loading">Cargando conversación…</div>}
+              {!historyLoading && messages.map((msg) => (
                 <MessageBubble key={msg.id} msg={msg} onUndo={() => sendCommand('deshacer')} />
               ))}
               {loading && (

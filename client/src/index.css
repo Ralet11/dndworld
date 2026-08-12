@@ -324,6 +324,14 @@ a:focus-visible {
 .oracle-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(230px, 0.28fr) minmax(480px, 1fr); gap: 10px; }
 .oracle-context-rail { min-height: 0; padding-right: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; border-right: 1px solid rgba(63, 169, 201, 0.16); }
 .oracle-context-rail .panel { padding: 14px !important; border-color: rgba(63, 169, 201, 0.16); border-radius: 4px; background: rgba(11, 20, 19, 0.82); }
+.oracle-history-panel { padding: 11px; border: 1px solid rgba(63, 169, 201, .2); background: rgba(9, 18, 16, .8); }
+.oracle-history-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #67c5df; font-size: 7px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+.oracle-history-title button, .oracle-thread-actions > button { width: 25px; height: 25px; display: grid; place-items: center; color: #8fdbef; border: 1px solid rgba(63, 169, 201, .34); background: rgba(63, 169, 201, .08); }
+.oracle-history-title button:hover, .oracle-thread-actions > button:hover { background: rgba(63, 169, 201, .18); }
+.oracle-history-list { max-height: 176px; display: grid; gap: 4px; margin-top: 9px; overflow-y: auto; }
+.oracle-history-list button { width: 100%; padding: 7px 8px; overflow: hidden; color: #9ba8a0; border: 1px solid transparent; background: rgba(255,255,255,.018); font-size: 8px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.oracle-history-list button:hover, .oracle-history-list button.is-active { color: #d7e4dc; border-color: rgba(63, 169, 201, .34); background: rgba(63, 169, 201, .1); }
+.oracle-history-list p { padding: 6px 2px; color: #64716c; font-size: 8px; line-height: 1.5; }
 .oracle-conversation { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .oracle-chat-panel { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border-color: rgba(63, 169, 201, 0.26); border-radius: 5px; box-shadow: none; }
 .oracle-messages { min-height: 0; flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; background: linear-gradient(180deg, #09110f, #080d0c); }
@@ -339,6 +347,9 @@ a:focus-visible {
 .oracle-thread-status i { width: 5px; height: 5px; border-radius: 50%; background: #9a4438; box-shadow: 0 0 7px rgba(194, 69, 47, .45); }
 .oracle-thread-status.is-online { color: #638a6b; }
 .oracle-thread-status.is-online i { background: #57a96a; box-shadow: 0 0 8px rgba(87, 169, 106, .6); }
+.oracle-thread-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
+.oracle-thread-actions select { max-width: 210px; height: 27px; padding: 0 23px 0 8px; overflow: hidden; color: #b5c5bc; border: 1px solid rgba(63, 169, 201, .24); outline: none; background: #0a1512; font-size: 7px; text-overflow: ellipsis; }
+.oracle-history-loading { padding: 18px; color: #6bc9e2; font-size: 9px; text-align: center; }
 .oracle-message-row { display: flex; }
 .oracle-message-row.is-user { justify-content: flex-end; }
 .oracle-message-row.is-assistant { justify-content: flex-start; }
@@ -1198,6 +1209,13 @@ a:focus-visible {
 .game-console-oracle .oracle-workspace { height: 100%; padding: 9px !important; gap: 0; }
 .game-console-oracle .oracle-header,
 .game-console-oracle .oracle-context-rail { display: none; }
+.game-console-oracle .oracle-thread-header { grid-template-columns: 28px minmax(0, 1fr) auto; min-height: 60px; padding: 9px; }
+.game-console-oracle .oracle-thread-emblem { width: 28px; height: 28px; }
+.game-console-oracle .oracle-thread-header h2 { font-size: 13px; }
+.game-console-oracle .oracle-thread-header p { display: none; }
+.game-console-oracle .oracle-thread-actions select { max-width: 102px; height: 25px; font-size: 6px; }
+.game-console-oracle .oracle-thread-actions > button { width: 25px; height: 25px; }
+.game-console-oracle .oracle-thread-status { display: none; }
 .game-console-oracle .oracle-grid { height: 100%; display: block; }
 .game-console-oracle .oracle-conversation,
 .game-console-oracle .oracle-chat-panel { height: 100%; min-height: 0; border: 1px solid rgba(63, 169, 201, .3); border-radius: 2px; background: #07100d; box-shadow: inset 0 0 40px rgba(21, 61, 67, .04); }

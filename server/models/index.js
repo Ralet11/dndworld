@@ -29,6 +29,8 @@ const NpcAction = require('./NpcAction');
 const CharacterAuditLog = require('./CharacterAuditLog');
 const CharacterInventory = require('./CharacterInventory');
 const AudioTrack = require('./AudioTrack');
+const AssistantConversation = require('./AssistantConversation');
+const AssistantMessage = require('./AssistantMessage');
 
 // Character Relationships
 Character.belongsTo(Class, { foreignKey: 'class_slug', targetKey: 'slug', as: 'classData' });
@@ -122,6 +124,11 @@ GameSession.belongsTo(AudioTrack, { foreignKey: 'audio_track_id', as: 'audioTrac
 AudioTrack.hasMany(GameSession, { foreignKey: 'audio_track_id', as: 'gameSessions' });
 AudioTrack.belongsTo(User, { foreignKey: 'uploaded_by', as: 'uploader' });
 
+User.hasMany(AssistantConversation, { foreignKey: 'user_id', as: 'assistantConversations', onDelete: 'CASCADE' });
+AssistantConversation.belongsTo(User, { foreignKey: 'user_id', as: 'owner' });
+AssistantConversation.hasMany(AssistantMessage, { foreignKey: 'conversation_id', as: 'messages', onDelete: 'CASCADE' });
+AssistantMessage.belongsTo(AssistantConversation, { foreignKey: 'conversation_id', as: 'conversation' });
+
 module.exports = {
     Character,
     AbilityScore,
@@ -152,5 +159,7 @@ module.exports = {
     NpcAction,
     CharacterAuditLog,
     CharacterInventory,
-    AudioTrack
+    AudioTrack,
+    AssistantConversation,
+    AssistantMessage
 };

@@ -11,7 +11,7 @@ if (!JWT_SECRET) throw new Error('JWT_SECRET debe estar configurado.');
 
 const { Op } = require('sequelize');
 const sequelize = require('./config/database');
-const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, Blueprint, NpcAction, CharacterAuditLog, CharacterInventory, AudioTrack, GameSession } = require('./models');
+const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, Media, TimelineEvent, Scene, Class, Race, Spell, Blueprint, NpcAction, CharacterAuditLog, CharacterInventory, AudioTrack, GameSession, AssistantConversation, AssistantMessage } = require('./models');
 const StatEngine = require('./utils/statEngine');
 const { resolveSlotColumn, deriveSlot } = require('./utils/itemSlots');
 const seedDatabase = require('./utils/seeder');
@@ -270,20 +270,101 @@ app.get('/api/dm-assistant/context', verifyToken, isDm, async (req, res) => {
     }
 });
 
+const assistantMessageJson = (message) => ({
+    id: String(message.id),
+    role: message.role,
+    kind: message.kind,
+    text: message.text,
+    tool: message.tool,
+    suggestions: message.suggestions || [],
+    undoAvailable: !!message.undo_available,
+    createdAt: message.createdAt,
+});
+
+app.get('/api/dm-assistant/conversations', verifyToken, isDm, async (req, res) => {
+    try {
+        const conversations = await AssistantConversation.findAll({
+            where: { user_id: req.user.id }, order: [['updatedAt', 'DESC']], limit: 60,
+        });
+        res.json(conversations);
+    } catch (err) {
+        console.error('DM Assistant conversations error:', err);
+        res.status(500).json({ message: 'No se pudo cargar el historial del asistente.' });
+    }
+});
+
+app.post('/api/dm-assistant/conversations', verifyToken, isDm, async (req, res) => {
+    try {
+        const requestedTitle = String(req.body?.title || 'Nueva conversación').trim();
+        const conversation = await AssistantConversation.create({
+            user_id: req.user.id,
+            title: requestedTitle.slice(0, 120) || 'Nueva conversación',
+            scene_id: Number.isInteger(req.body?.sceneId) ? req.body.sceneId : null,
+        });
+        res.status(201).json(conversation);
+    } catch (err) {
+        console.error('DM Assistant create conversation error:', err);
+        res.status(500).json({ message: 'No se pudo crear la conversación.' });
+    }
+});
+
+app.get('/api/dm-assistant/conversations/:id', verifyToken, isDm, async (req, res) => {
+    try {
+        const conversation = await AssistantConversation.findOne({ where: { id: req.params.id, user_id: req.user.id } });
+        if (!conversation) return res.status(404).json({ message: 'Conversación no encontrada.' });
+        const messages = await AssistantMessage.findAll({
+            where: { conversation_id: conversation.id }, order: [['createdAt', 'ASC']], limit: 200,
+        });
+        res.json({ conversation, messages: messages.map(assistantMessageJson) });
+    } catch (err) {
+        console.error('DM Assistant conversation detail error:', err);
+        res.status(500).json({ message: 'No se pudo abrir la conversación.' });
+    }
+});
+
 app.post('/api/dm-assistant/command', verifyToken, isDm, async (req, res) => {
     try {
-        const { message, history, sceneId } = req.body || {};
+        const { message, conversationId, sceneId } = req.body || {};
+        let conversation;
+        if (conversationId) {
+            conversation = await AssistantConversation.findOne({ where: { id: conversationId, user_id: req.user.id } });
+            if (!conversation) return res.status(404).json({ message: 'Conversación no encontrada.' });
+        } else {
+            conversation = await AssistantConversation.create({ user_id: req.user.id, title: 'Nueva conversación' });
+        }
+        const historyRows = await AssistantMessage.findAll({
+            where: { conversation_id: conversation.id }, order: [['createdAt', 'DESC']], limit: 8,
+        });
+        const history = historyRows.reverse().map(assistantMessageJson);
+        const cleanMessage = String(message || '').trim();
+        if (conversation.title === 'Nueva conversación' && cleanMessage) {
+            await conversation.update({ title: cleanMessage.replace(/\s+/g, ' ').slice(0, 72) });
+        }
+        await AssistantMessage.create({
+            conversation_id: conversation.id, role: 'user', kind: 'user', text: cleanMessage,
+        });
         const result = await executeAssistantCommand({
-            message,
+            message: cleanMessage,
             history,
             sceneId: sceneId ? parseInt(sceneId, 10) : null,
             user: req.user,
             io,
             getCalculatedPartyStats,
         });
+        const reply = result?.reply || { kind: 'error', text: 'El asistente no devolvió una respuesta.' };
+        const storedReply = await AssistantMessage.create({
+            conversation_id: conversation.id,
+            role: 'assistant',
+            kind: reply.kind || 'help',
+            text: reply.text || '',
+            tool: reply.tool || null,
+            suggestions: reply.suggestions || [],
+            undo_available: !!reply.undoAvailable,
+        });
+        await conversation.update({ updatedAt: new Date() });
         // Los errores de interpretación o validación son respuestas normales del
         // asistente: el cliente debe mostrarlas, no tratarlas como un fallo HTTP.
-        res.status(200).json(result);
+        res.status(200).json({ ...result, conversationId: conversation.id, reply: assistantMessageJson(storedReply) });
     } catch (err) {
         console.error('DM Assistant command error:', err);
         res.status(500).json({
