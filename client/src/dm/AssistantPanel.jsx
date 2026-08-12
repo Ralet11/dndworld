@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Sparkles, Send, RotateCcw, Clock3, MapPin, HeartPulse, Users, Mic, MicOff, Plus } from 'lucide-react';
+import { Sparkles, Send, RotateCcw, Clock3, MapPin, HeartPulse, Users, Mic, MicOff, Plus, Trash2 } from 'lucide-react';
 import API_URL from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -319,6 +319,30 @@ export default function AssistantPanel({ embedded = false }) {
     }
   }, [loadConversation, loading, token]);
 
+  const deleteConversation = useCallback(async (id) => {
+    if (!token || loading || !id) return;
+    const conversation = conversations.find((item) => item.id === id);
+    if (!window.confirm(`¿Eliminar la conversación “${conversation?.title || 'sin título'}”? Esta acción no se puede deshacer.`)) return;
+    try {
+      const res = await fetch(`${API_URL}/api/dm-assistant/conversations/${id}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('No se pudo eliminar la conversación.');
+      const remaining = conversations.filter((item) => item.id !== id);
+      setConversations(remaining);
+      if (String(conversationId) === String(id)) {
+        if (remaining.length) await loadConversation(remaining[0].id);
+        else {
+          setConversationId(null);
+          setMessages([{ id: 'welcome', role: 'assistant', kind: 'help', text: 'No hay una conversación abierta. Creá una nueva para empezar.', tool: 'assistant.ready', suggestions: DEFAULT_SUGGESTIONS, undoAvailable: false }]);
+        }
+      }
+    } catch (err) {
+      console.error('Assistant delete conversation error:', err);
+      window.alert('No se pudo eliminar la conversación. Intentá de nuevo.');
+    }
+  }, [conversationId, conversations, loadConversation, loading, token]);
+
   useEffect(() => {
     fetchContext();
   }, [fetchContext]);
@@ -434,9 +458,10 @@ export default function AssistantPanel({ embedded = false }) {
             </div>
             <div className="oracle-history-list">
               {conversations.map((conversation) => (
-                <button key={conversation.id} onClick={() => loadConversation(conversation.id)} className={conversation.id === conversationId ? 'is-active' : ''} title={conversation.title}>
-                  {conversation.title}
-                </button>
+                <div className={`oracle-history-item${conversation.id === conversationId ? ' is-active' : ''}`} key={conversation.id}>
+                  <button onClick={() => loadConversation(conversation.id)} title={conversation.title}>{conversation.title}</button>
+                  <button className="oracle-delete-conversation" onClick={() => deleteConversation(conversation.id)} title="Eliminar conversación" disabled={loading}><Trash2 size={12} /></button>
+                </div>
               ))}
               {!conversations.length && !historyLoading && <p>Todavía no hay conversaciones.</p>}
             </div>
@@ -486,6 +511,7 @@ export default function AssistantPanel({ embedded = false }) {
                   {conversations.map((conversation) => <option key={conversation.id} value={conversation.id}>{conversation.title}</option>)}
                 </select>
                 <button onClick={createConversation} title="Nueva conversación" disabled={loading}><Plus size={14} /></button>
+                <button onClick={() => deleteConversation(conversationId)} title="Eliminar conversación actual" disabled={loading || !conversationId}><Trash2 size={13} /></button>
                 <div className={`oracle-thread-status${connected ? ' is-online' : ''}`}><i />{connected ? 'En línea' : 'Sin conexión'}</div>
               </div>
             </div>

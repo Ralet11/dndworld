@@ -322,6 +322,21 @@ app.get('/api/dm-assistant/conversations/:id', verifyToken, isDm, async (req, re
     }
 });
 
+app.delete('/api/dm-assistant/conversations/:id', verifyToken, isDm, async (req, res) => {
+    try {
+        const conversation = await AssistantConversation.findOne({ where: { id: req.params.id, user_id: req.user.id } });
+        if (!conversation) return res.status(404).json({ message: 'Conversación no encontrada.' });
+        // Explicitly remove its messages as well, even on installations where the
+        // foreign-key cascade was created before this model existed.
+        await AssistantMessage.destroy({ where: { conversation_id: conversation.id } });
+        await conversation.destroy();
+        res.json({ ok: true, id: String(conversation.id) });
+    } catch (err) {
+        console.error('DM Assistant delete conversation error:', err);
+        res.status(500).json({ message: 'No se pudo eliminar la conversación.' });
+    }
+});
+
 app.post('/api/dm-assistant/command', verifyToken, isDm, async (req, res) => {
     try {
         const { message, conversationId, sceneId } = req.body || {};

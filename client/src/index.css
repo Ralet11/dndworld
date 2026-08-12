@@ -329,8 +329,12 @@ a:focus-visible {
 .oracle-history-title button, .oracle-thread-actions > button { width: 25px; height: 25px; display: grid; place-items: center; color: #8fdbef; border: 1px solid rgba(63, 169, 201, .34); background: rgba(63, 169, 201, .08); }
 .oracle-history-title button:hover, .oracle-thread-actions > button:hover { background: rgba(63, 169, 201, .18); }
 .oracle-history-list { max-height: 176px; display: grid; gap: 4px; margin-top: 9px; overflow-y: auto; }
-.oracle-history-list button { width: 100%; padding: 7px 8px; overflow: hidden; color: #9ba8a0; border: 1px solid transparent; background: rgba(255,255,255,.018); font-size: 8px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.oracle-history-list button:hover, .oracle-history-list button.is-active { color: #d7e4dc; border-color: rgba(63, 169, 201, .34); background: rgba(63, 169, 201, .1); }
+.oracle-history-item { display: flex; min-width: 0; border: 1px solid transparent; background: rgba(255,255,255,.018); }
+.oracle-history-item > button:first-child { min-width: 0; flex: 1; padding: 7px 8px; overflow: hidden; color: #9ba8a0; font-size: 8px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.oracle-history-item:hover, .oracle-history-item.is-active { border-color: rgba(63, 169, 201, .34); background: rgba(63, 169, 201, .1); }
+.oracle-history-item:hover > button:first-child, .oracle-history-item.is-active > button:first-child { color: #d7e4dc; }
+.oracle-delete-conversation { width: 28px; display: grid; place-items: center; flex: none; color: #7b625b; opacity: .55; }
+.oracle-delete-conversation:hover:not(:disabled) { color: #e07a6d; background: rgba(194, 69, 47, .12); opacity: 1; }
 .oracle-history-list p { padding: 6px 2px; color: #64716c; font-size: 8px; line-height: 1.5; }
 .oracle-conversation { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .oracle-chat-panel { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border-color: rgba(63, 169, 201, 0.26); border-radius: 5px; box-shadow: none; }
