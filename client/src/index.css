@@ -5329,6 +5329,194 @@ a:focus-visible {
   .npc-ability-editor input[type=number] { min-height: 29px; }
 }
 
+/* NPC director readability pass: human-scale controls and clear information hierarchy. */
+.dm-surface.dm-surface-npcs > .npc-director {
+  grid-template-columns: clamp(278px, 22vw, 318px) minmax(0, 1fr);
+  color: #e7e0d3;
+  background:
+    radial-gradient(circle at 68% -15%, rgba(181, 139, 60, .09), transparent 34rem),
+    #07100c;
+}
+.npc-director-list {
+  padding: 22px 15px;
+  background: linear-gradient(180deg, #0d1712, #08100d 55%, #070d0b);
+}
+.npc-director-list > header { align-items: center; }
+.npc-director-list span,
+.npc-director-editor > header span { color: #b69a62; font-size: 9px; line-height: 1.2; }
+.npc-director-list h1 { font-size: 30px; }
+.npc-director-list > header > button,
+.npc-editor-section > header > button,
+.npc-save { min-height: 39px; padding-inline: 13px; font-size: 10px; }
+.npc-director-list > label {
+  height: 44px;
+  margin: 19px 0 14px;
+  padding-inline: 12px;
+  border-color: #405047;
+  background: #09120e;
+}
+.npc-director-list input { font-size: 13px; }
+.npc-director-cards { gap: 8px; }
+.npc-director-cards > button {
+  min-height: 67px;
+  padding: 11px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 11px;
+  border-color: rgba(67, 82, 71, .55);
+  background: rgba(10, 19, 15, .52);
+}
+.npc-director-cards > button:hover,
+.npc-director-cards > button.is-selected {
+  border-color: #8a6c36;
+  background: linear-gradient(90deg, rgba(190, 145, 55, .18), rgba(13, 24, 18, .76));
+  box-shadow: inset 3px 0 #b48b43;
+}
+.npc-director-cards img,
+.npc-director-cards svg { width: 42px; height: 42px; }
+.npc-director-cards strong { color: #f0e2c4; font-size: 15px; }
+.npc-director-cards small,
+.npc-director-cards em { margin-top: 4px; font-size: 9px; line-height: 1.3; }
+
+.npc-director-editor {
+  display: flex;
+  flex-direction: column;
+  padding: 24px clamp(24px, 3vw, 52px) 80px;
+  scrollbar-color: #4a5a4e #08100d;
+}
+.npc-director-editor > header {
+  top: -24px;
+  min-height: 76px;
+  margin-top: -24px;
+  padding: 15px 0 13px;
+  border-bottom-color: #3d4b41;
+  background: rgba(7, 16, 12, .97);
+}
+.npc-director-editor > header h2 { color: #f0e2c4; font-size: clamp(31px, 3vw, 42px); }
+.npc-back { width: 36px; height: 36px; }
+.npc-save { min-width: 132px; }
+.npc-director-message { font-size: 12px; line-height: 1.5; }
+
+.npc-director-grid {
+  max-width: none;
+  margin-top: 20px;
+  padding: 18px;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 20px;
+  border: 1px solid #3d4b41;
+  background: linear-gradient(135deg, rgba(15, 27, 21, .96), rgba(8, 15, 12, .96));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .16);
+}
+.npc-director-image { min-height: 220px; padding: 11px; background: radial-gradient(circle at 50% 24%, #233529, #09100d 72%); }
+.npc-director-image label,
+.npc-fields label,
+.npc-stat-row label { gap: 7px; color: #bdc3b8; font-size: 10px; line-height: 1.25; }
+.npc-fields { gap: 13px; }
+.npc-fields input,
+.npc-fields select,
+.npc-fields textarea,
+.npc-director-image input,
+.npc-stat-row input {
+  min-height: 44px;
+  padding: 10px 12px;
+  color: #f0eadf;
+  border-color: #46584c;
+  background: #08110d;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.npc-fields input:focus,
+.npc-fields select:focus,
+.npc-fields textarea:focus,
+.npc-director-image input:focus,
+.npc-stat-row input:focus {
+  border-color: #b38a43;
+  box-shadow: 0 0 0 2px rgba(179, 138, 67, .12);
+}
+.npc-fields textarea { min-height: 112px; }
+.npc-identity { grid-template-columns: minmax(190px, 1.2fr) repeat(2, minmax(140px, 1fr)); }
+
+.npc-stat-row {
+  max-width: none;
+  margin: 16px 0 2px;
+  padding: 14px;
+  grid-template-columns: repeat(7, minmax(92px, 1fr));
+  gap: 9px;
+  border-color: #405047;
+  background: #0b1510;
+}
+.npc-stat-row label {
+  padding: 8px;
+  border: 1px solid rgba(72, 91, 78, .52);
+  background: #09110e;
+}
+.npc-stat-row input { min-height: 38px; color: #f2dfb7; font-size: 15px; font-weight: 700; }
+
+.npc-editor-section {
+  max-width: none;
+  margin-top: 16px;
+  padding: 20px 21px;
+  border-color: #405047;
+  background: linear-gradient(145deg, #101c16, #09110d 78%);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .14);
+}
+.npc-editor-section:nth-of-type(3) { order: 3; }
+.npc-editor-section:nth-of-type(5) { order: 4; }
+.npc-editor-section:nth-of-type(4) { order: 5; }
+.npc-director-grid { order: 1; }
+.npc-stat-row { order: 2; }
+.npc-editor-section > header { min-height: 42px; margin-bottom: 17px; gap: 11px; }
+.npc-editor-section > header > svg { width: 19px; height: 19px; }
+.npc-editor-section header strong { color: #f0dfbd; font-size: 19px; }
+.npc-editor-section header small { margin-top: 4px; color: #9ba69d; font-size: 11px; line-height: 1.45; }
+
+.npc-ability-editor { gap: 8px; border: 0; }
+.npc-ability-editor > label {
+  min-height: 116px;
+  padding: 12px 10px;
+  gap: 9px;
+  color: #d3ae63;
+  border: 1px solid #46564a;
+  background: #09120e;
+  font-size: 11px;
+}
+.npc-ability-editor > label:last-child { border: 1px solid #46564a; }
+.npc-ability-editor input[type=number] { min-height: 39px; color: #f3dfb6; font-size: 16px; font-weight: 700; }
+.npc-ability-editor span { color: #a5afa6; font-size: 10px; }
+.npc-ability-editor span input[type=number] { width: 51px; min-height: 30px; font-size: 11px; }
+
+.npc-wide-fields { gap: 15px; }
+.npc-action-editor { gap: 14px; }
+.npc-action-editor article {
+  padding: 20px;
+  border-color: #4b5a4d;
+  background: linear-gradient(135deg, #0c1712, #08100d);
+}
+.npc-action-editor article:hover { border-color: #78643d; }
+.npc-action-editor .npc-fields { grid-template-columns: repeat(5, minmax(115px, 1fr)); padding-right: 38px; }
+.npc-action-editor .npc-fields label:first-child { grid-column: span 2; }
+.npc-action-editor .wide { grid-column: 1 / -1; }
+.npc-action-editor .wide textarea { min-height: 92px; }
+.npc-action-remove { width: 31px; height: 31px; color: #e08373; }
+
+@media (max-width: 1280px) {
+  .dm-surface.dm-surface-npcs > .npc-director { grid-template-columns: 270px minmax(0, 1fr); }
+  .npc-director-editor { padding-inline: 28px; }
+  .npc-director-grid { grid-template-columns: 165px minmax(0, 1fr); }
+  .npc-identity { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .npc-identity label:first-child { grid-column: 1 / -1; }
+  .npc-stat-row { grid-template-columns: repeat(4, minmax(105px, 1fr)); }
+  .npc-action-editor .npc-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .npc-director-editor { display: block; }
+  .npc-editor-section:nth-of-type(3),
+  .npc-editor-section:nth-of-type(4),
+  .npc-editor-section:nth-of-type(5) { order: initial; }
+  .npc-director-grid { padding: 14px; }
+  .npc-action-editor .npc-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* Compact desktop table: remove duplicated chrome and keep the whole play surface above the fold. */
 @media (min-width: 768px) {
   .app-frame.is-game-mode .app-topbar { display: none; }
