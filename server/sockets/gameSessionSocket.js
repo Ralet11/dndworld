@@ -1338,7 +1338,7 @@ function registerGameSessionSocket(io, socket) {
         const activeCharacterId = session.turn_order?.[session.turn_index] ?? null;
         const playerControl = session.status === 'LIVE'
             && token.owner_user_id === socket.user.id
-            && token.character_id === activeCharacterId;
+            && (session.combat_state?.mode !== 'COMBAT' || token.character_id === activeCharacterId);
         if (!dmControl && !playerControl) return fail(socket, 'Sólo puedes mover tu token durante tu turno.');
 
         token.x = clamp(x);
@@ -1471,6 +1471,44 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, session.id);
     });
 
+    socket.on('game:set-combat-mode', async ({ sessionId, mode } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'No tienes permiso para controlar esta sala.' });
+            const nextMode = String(mode || '').toUpperCase();
+            if (!['NARRATIVE', 'COMBAT'].includes(nextMode)) return reply({ ok: false, message: 'Modo de partida inválido.' });
+            if (await hasPendingCombatAction(session.id)) return reply({ ok: false, message: 'Hay una acción resolviéndose. Termínala o cancélala antes de cambiar de modo.' });
+
+            if (nextMode === 'COMBAT') {
+                const [participants, tokens] = await Promise.all([
+                    GameParticipant.findAll({ where: { session_id: session.id }, attributes: ['character_id'] }),
+                    GameToken.findAll({ where: { session_id: session.id, visible: true }, attributes: ['character_id'] }),
+                ]);
+                const order = [...new Set([...participants.map(item => Number(item.character_id)), ...tokens.map(item => Number(item.character_id))].filter(Number.isInteger))];
+                if (!order.length) return reply({ ok: false, message: 'Agrega al menos un token o jugador antes de iniciar combate.' });
+                session.turn_order = order;
+                session.turn_index = 0;
+                session.round = 1;
+                session.combat_state = { resources: {}, reactions: {}, mode: 'COMBAT', awaitingInitiative: true };
+                session.changed('combat_state', true);
+                await session.save();
+                io.to(roomName(session.id)).emit('game:initiative-requested', { sessionId: session.id, round: session.round });
+            } else {
+                session.turn_order = [];
+                session.turn_index = 0;
+                session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, mode: 'NARRATIVE' };
+                session.changed('combat_state', true);
+                await session.save();
+                io.to(roomName(session.id)).emit('game:combat-ended', { sessionId: session.id });
+            }
+            await broadcastSession(io, session.id);
+            reply({ ok: true, mode: nextMode });
+        } catch (error) {
+            console.error('game:set-combat-mode error:', error);
+            reply({ ok: false, message: 'No se pudo cambiar el modo de partida.' });
+        }
+    });
+
     socket.on('game:get-actions', async ({ sessionId } = {}, reply = () => {}) => {
         try {
             const session = await GameSession.findByPk(sessionId);
@@ -1496,12 +1534,13 @@ function registerGameSessionSocket(io, socket) {
             const session = await GameSession.findByPk(sessionId);
             if (!session) return reply({ ok: false, message: 'La mesa ya no está disponible.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
-            if (!participant) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
-            const catalog = await buildActionCatalog(participant.character_id);
+            const characterId = isDm(socket) ? Number(session.turn_order?.[session.turn_index]) : Number(participant?.character_id);
+            if (!characterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            const catalog = await buildActionCatalog(characterId);
             const tracker = customTrackers(catalog.character, session).find(item => item.key === trackerKey);
             if (!tracker) return reply({ ok: false, message: 'Ese rastreador no está configurado.' });
             const adjustment = Math.max(-99, Math.min(99, Number(delta) || 0));
-            const resourceKey = `${participant.character_id}:tracker:${tracker.key}`;
+            const resourceKey = `${characterId}:tracker:${tracker.key}`;
             const resources = { ...(session.combat_state?.resources || {}) };
             resources[resourceKey] = Math.max(0, Math.min(tracker.max, tracker.value + adjustment));
             session.combat_state = { ...(session.combat_state || {}), resources };
@@ -1519,6 +1558,7 @@ function registerGameSessionSocket(io, socket) {
         try {
             const session = await loadSession(sessionId);
             if (!session || session.status !== 'LIVE') return reply({ ok: false, message: 'La partida no está en vivo.' });
+            if (session.combat_state?.mode !== 'COMBAT') return reply({ ok: false, message: 'Las acciones de combate se habilitan al iniciar combate.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
             const activeCharacterId = Number(session.turn_order?.[session.turn_index]);
             const actorCharacterId = isDm(socket) ? activeCharacterId : Number(participant?.character_id);
@@ -1668,8 +1708,9 @@ function registerGameSessionSocket(io, socket) {
                         }
                     }
                     combatAction.status = 'COMPLETED';
-                    combatAction.result = { targets: targets.map(token => ({ tokenId: token.id, name: token.label, outcome: action.temporaryHp ? 'temporary-hp' : 'used', amount: action.temporaryHp || 0 })), summary: action.temporaryHp ? `${action.name}: ${action.temporaryHp} PG temporales.` : `${action.name} fue utilizada.` };
+                    combatAction.result = { targets: targets.map(token => ({ tokenId: token.id, name: token.label, outcome: action.temporaryHp ? 'temporary-hp' : 'used', amount: action.temporaryHp || 0 })), summary: action.temporaryHp ? `${action.name}: ${action.temporaryHp} PG temporales.` : `${catalog.character.name} usa ${action.name}.` };
                     await combatAction.save();
+                    io.to(roomName(session.id)).emit('game:combat-action-used', { actorName: catalog.character.name, actionName: action.name, summary: `${catalog.character.name} usa ${action.name}.` });
                 }
             }
             await broadcastSession(io, session.id);

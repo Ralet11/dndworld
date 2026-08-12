@@ -43,6 +43,7 @@ import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';
 import DiceTray from '../components/Game/DiceTray';
 import GameAudioControl from './GameAudioControl';
+import TurnActionPanel from '../components/Game/TurnActionPanel';
 import { deriveWorldConditions } from '../utils/worldTime';
 
 function resolveMediaUrl(value) {
@@ -89,6 +90,8 @@ export default function GameMasterPanel() {
   const [creatingNpcToken, setCreatingNpcToken] = useState(false);
   const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
   const [stageToolbarHost, setStageToolbarHost] = useState(null);
+  const [combatTargeting, setCombatTargeting] = useState(null);
+  const [selectedActiveTokenId, setSelectedActiveTokenId] = useState(null);
   const [worldState, setWorldState] = useState({ global_time: '12:00', day_period: 'Día', temperature_c: 24 });
   const deferredAssetSearch = useDeferredValue(assetSearch);
 
@@ -599,6 +602,12 @@ export default function GameMasterPanel() {
     order.splice(boundedTarget, 0, moved);
     emit('game:update-turn-order', { sessionId: session.id, turnOrder: order });
   };
+
+  const setCombatMode = mode => {
+    socket?.emit('game:set-combat-mode', { sessionId: session.id, mode }, response => {
+      if (!response?.ok) setError(response?.message || 'No se pudo cambiar el modo de partida.');
+    });
+  };
   const WorldPeriodIcon = worldState.day_period === 'Día' ? Sun : worldState.day_period === 'Tarde' ? Sunset : Moon;
 
   return (
@@ -674,6 +683,10 @@ export default function GameMasterPanel() {
                 session={session}
                 userId={user.id}
                 isDm
+                combatTargeting={combatTargeting}
+                onCombatTokenTarget={token => combatTargeting?.execute?.(combatTargeting.action, [token.id])}
+                onCombatAreaTarget={area => combatTargeting?.execute?.(combatTargeting.action, [], area)}
+                onActiveTokenClick={token => setSelectedActiveTokenId(token.id)}
                 onMoveToken={(tokenId, x, y) => emit('game:move-token', { sessionId: session.id, tokenId, x, y })}
                 onMoveTokens={moves => emit('game:move-tokens', { sessionId: session.id, moves })}
                 onAdjustHp={(tokenId, delta) => emit('game:adjust-token-hp', { sessionId: session.id, tokenId, delta })}
@@ -702,8 +715,8 @@ export default function GameMasterPanel() {
               <button onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><Upload size={14} /> Reemplazar</button>
               <button onClick={() => emit('game:share', { sessionId: session.id, type: 'NONE' })}><EyeOff size={14} /> Ocultar</button>
               <div className="game-scene-mode">
-                <button className={session.shared_type !== 'MAP' ? 'is-active' : ''} onClick={() => switchViewMode('IMAGE')}><ImageIcon size={14} /> Narrativa</button>
-                <button className={session.shared_type === 'MAP' ? 'is-active' : ''} onClick={() => switchViewMode('MAP')}><Swords size={14} /> Combate</button>
+                <button className={session.combat_state?.mode !== 'COMBAT' ? 'is-active' : ''} onClick={() => setCombatMode('NARRATIVE')}><ImageIcon size={14} /> Narrativa</button>
+                <button className={session.combat_state?.mode === 'COMBAT' ? 'is-active' : ''} onClick={() => setCombatMode('COMBAT')}><Swords size={14} /> Combate</button>
               </div>
             </div>
           </section>
@@ -883,6 +896,21 @@ export default function GameMasterPanel() {
                   <div><span>Tokens</span><strong>{session.tokens.length}</strong></div>
                 </div>
                 <DiceTray onRoll={rollDice} />
+                {session.status === 'LIVE'
+                  && selectedActiveTokenId
+                  && Number(session.tokens.find(token => token.id === selectedActiveTokenId)?.character_id) === Number(session.active_character_id)
+                  && !session.tokens.find(token => token.id === selectedActiveTokenId)?.owner_user_id && (
+                    <TurnActionPanel
+                      session={session}
+                      socket={socket}
+                      isMyTurn
+                      targeting={combatTargeting}
+                      onTargetingChange={setCombatTargeting}
+                      onError={setError}
+                      actorName={activeCharacter?.name}
+                      mode="dm"
+                    />
+                  )}
                 <div className="game-turn-card game-initiative-card">
                   <header><div><span>Control de iniciativa</span><strong>{activeCharacter?.name || 'Sin iniciativa'}</strong></div><small>Ronda {session.round}</small></header>
                   <div className="game-initiative-order" aria-label="Orden de iniciativa">

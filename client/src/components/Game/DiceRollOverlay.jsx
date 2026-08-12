@@ -28,8 +28,14 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
   const hideTimerRef = useRef(null);
   const [activeRoll, setActiveRoll] = useState(null);
   const [fallback, setFallback] = useState(false);
+  const [retiringRolls, setRetiringRolls] = useState([]);
+  const visibleStackRef = useRef([]);
+  const retirementTimersRef = useRef(new Map());
 
-  useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
+  useEffect(() => () => {
+    window.clearTimeout(hideTimerRef.current);
+    retirementTimersRef.current.forEach(timer => window.clearTimeout(timer));
+  }, []);
 
   useEffect(() => {
     if (!boxRef.current || initializedRef.current) return;
@@ -127,18 +133,40 @@ export default function DiceRollOverlay({ rolls = [], userId, isDm = false, onDi
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     .slice(-3);
 
+  useEffect(() => {
+    const desiredIds = new Set(orderedRolls.map(roll => String(roll.id)));
+    const departing = visibleStackRef.current.filter(roll => !desiredIds.has(String(roll.id)));
+    if (departing.length) {
+      setRetiringRolls(current => [
+        ...current.filter(roll => !desiredIds.has(String(roll.id))),
+        ...departing.filter(roll => !current.some(item => String(item.id) === String(roll.id))).map(roll => ({ ...roll, stackRetiring: true })),
+      ]);
+      departing.forEach(roll => {
+        const id = String(roll.id);
+        window.clearTimeout(retirementTimersRef.current.get(id));
+        retirementTimersRef.current.set(id, window.setTimeout(() => {
+          setRetiringRolls(current => current.filter(item => String(item.id) !== id));
+          retirementTimersRef.current.delete(id);
+        }, 720));
+      });
+    }
+    visibleStackRef.current = orderedRolls;
+  }, [orderedRolls]);
+
+  const stackRolls = [...retiringRolls, ...orderedRolls];
+
   return (
     <>
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
         <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
       </div>
-      {!!orderedRolls.length && (
+      {!!stackRolls.length && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">
-          {orderedRolls.map(roll => {
+          {stackRolls.map(roll => {
             const naturalTwenty = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20;
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
             return (
-              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}`}>
+              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring ? ' is-stack-retiring' : ''}`}>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>

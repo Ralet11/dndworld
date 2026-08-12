@@ -23,6 +23,7 @@ export default function GamePlayerPanel() {
   const [playerSessions, setPlayerSessions] = useState([]);
   const [switchingSession, setSwitchingSession] = useState(false);
   const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
+  const [initiativePrompt, setInitiativePrompt] = useState(false);
   const sessionDashboardRef = useRef(false);
 
   useEffect(() => {
@@ -120,6 +121,8 @@ export default function GamePlayerPanel() {
       const ids = new Set(rollIds.map(String));
       return { ...current, rolls: (current.rolls || []).filter(roll => !ids.has(String(roll.id))) };
     });
+    const onInitiativeRequested = () => setInitiativePrompt(true);
+    const onCombatEnded = () => setInitiativePrompt(false);
 
     socket.on('game:state', onState);
     socket.on('game:error', onError);
@@ -141,6 +144,8 @@ export default function GamePlayerPanel() {
     socket.on('game:roll-upsert', onRollUpsert);
     socket.on('game:roll-dismissing', onRollDismissing);
     socket.on('game:roll-dismissed', onRollDismissed);
+    socket.on('game:initiative-requested', onInitiativeRequested);
+    socket.on('game:combat-ended', onCombatEnded);
     const syncGame = () => {
       if (!sessionDashboardRef.current) socket.emit('game:get-current');
       else setLoading(false);
@@ -172,6 +177,8 @@ export default function GamePlayerPanel() {
     socket.off('game:roll-upsert', onRollUpsert);
     socket.off('game:roll-dismissing', onRollDismissing);
     socket.off('game:roll-dismissed', onRollDismissed);
+      socket.off('game:initiative-requested', onInitiativeRequested);
+      socket.off('game:combat-ended', onCombatEnded);
       socket.off('connect', syncGame);
     };
   }, [socket, user.id]);
@@ -293,7 +300,7 @@ export default function GamePlayerPanel() {
 
   const participant = session.participants.find(item => item.user_id === user.id);
   const activeParticipant = session.participants.find(item => item.character_id === session.active_character_id);
-  const isMyTurn = participant?.character_id === session.active_character_id;
+  const isMyTurn = session.combat_state?.mode === 'COMBAT' && participant?.character_id === session.active_character_id;
 
   if (session.status === 'WAITING') {
     return (
@@ -353,6 +360,11 @@ export default function GamePlayerPanel() {
           </div>
         </div>
       )}
+      {initiativePrompt && (
+        <div className="game-combat-result-prompt is-initiative" role="dialog" aria-live="assertive">
+          <div><span>El combate comienza</span><h2>¡Iniciativa!</h2><p>Prepará el orden del enfrentamiento antes de actuar.</p><button onClick={() => { rollDice({ sides: 20, quantity: 1, modifier: character?.initiative ?? 0, label: 'Iniciativa' }); setInitiativePrompt(false); }}>Tirar iniciativa</button></div>
+        </div>
+      )}
 
       <div className="game-player-workspace">
         <section className="game-player-stage-wrap">
@@ -367,8 +379,8 @@ export default function GamePlayerPanel() {
         />
         <div className="game-player-stage-note">
           <DiceTray onRoll={rollDice} compact />
-          <span>{session.shared_type === 'MAP' ? 'Mapa de combate' : 'Escena compartida'}</span>
-          <p>{isMyTurn ? 'Puedes mover tu token arrastrándolo sobre el mapa.' : 'Observa la escena; el movimiento se habilitará durante tu turno.'}</p>
+          <span>{session.combat_state?.mode === 'COMBAT' ? 'Mapa de combate' : 'Escena narrativa'}</span>
+          <p>{session.combat_state?.mode === 'COMBAT' ? (isMyTurn ? 'Puedes mover tu token durante tu turno.' : 'Espera tu turno para moverte.') : 'Puedes mover libremente tu token por la escena.'}</p>
         </div>
         </section>
 

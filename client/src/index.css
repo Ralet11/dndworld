@@ -4895,6 +4895,11 @@ a:focus-visible {
 .game-roll-dismiss:hover { color: #f0d39a; border-color: #9d7533; }
 .game-roll-dismiss:disabled { opacity: .25; cursor: default; }
 .game-roll-card.is-exiting { pointer-events: none; animation: game-roll-card-departure 1.08s cubic-bezier(.55, .04, .78, .3) forwards; }
+.game-roll-card.is-stack-retiring { pointer-events: none; animation: game-roll-card-stack-departure .72s cubic-bezier(.35, .02, .46, 1) forwards; }
+.game-roll-card.is-stack-retiring::after { animation: none; }
+.game-roll-card.is-stack-retiring .game-roll-card-portrait { animation: game-roll-panel-portrait-stack-exit .48s cubic-bezier(.38, .02, .55, 1) forwards; }
+.game-roll-card.is-stack-retiring .game-roll-card-copy { animation: game-roll-panel-body-stack-exit .46s cubic-bezier(.38, .02, .55, 1) 35ms forwards; }
+.game-roll-card.is-stack-retiring .game-roll-total { animation: game-roll-panel-total-stack-exit .42s cubic-bezier(.38, .02, .55, 1) 65ms forwards; }
 .game-roll-card.is-exiting::after { animation: none; }
 .game-roll-card.is-exiting .game-roll-card-portrait { animation: game-roll-panel-portrait-exit .7s cubic-bezier(.55, .05, .75, .35) forwards; }
 .game-roll-card.is-exiting .game-roll-card-copy { animation: game-roll-panel-body-exit .68s cubic-bezier(.55, .05, .75, .35) 55ms forwards; }
@@ -4912,9 +4917,13 @@ a:focus-visible {
 @keyframes game-roll-panel-total { 0%, 30% { opacity: 0; transform: translate3d(0, -14px, 25px) rotateX(-112deg); } 63% { opacity: 1; transform: translate3d(0, 2px, 5px) rotateX(13deg); } 80% { transform: translate3d(0, -1px, 1px) rotateX(-4deg); } 100% { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0); } }
 @keyframes game-roll-card-glint { 0%, 42% { background-position: -240px 0; opacity: 0; } 53% { opacity: .7; } 82%, 100% { background-position: 260px 0; opacity: .22; } }
 @keyframes game-roll-card-departure { 0%, 43% { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) rotateZ(0) scale(1); } 57% { transform: translate3d(5px, -2px, 20px) rotateX(-3deg) rotateY(9deg) rotateZ(1deg) scale(.96); } 100% { opacity: 0; filter: blur(8px); transform: translate3d(275px, -82px, 310px) rotateX(-29deg) rotateY(87deg) rotateZ(15deg) scale(.48); } }
+@keyframes game-roll-card-stack-departure { 0% { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) scale(1); max-height: 100px; margin-bottom: 0; } 35% { opacity: 1; transform: translate3d(-4px, -15px, 24px) rotateX(5deg) rotateY(-7deg) scale(.98); } 100% { opacity: 0; filter: blur(6px); transform: translate3d(12px, -90px, 150px) rotateX(21deg) rotateY(-30deg) scale(.7); max-height: 0; margin-bottom: -10px; } }
 @keyframes game-roll-panel-portrait-exit { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0); } 100% { opacity: 0; transform: translate3d(24px, 0, 28px) rotateY(118deg); } }
 @keyframes game-roll-panel-body-exit { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0); } 100% { opacity: 0; transform: translate3d(-20px, 0, 24px) rotateY(-96deg); } }
 @keyframes game-roll-panel-total-exit { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0); } 100% { opacity: 0; transform: translate3d(0, -13px, 22px) rotateX(-112deg); } }
+@keyframes game-roll-panel-portrait-stack-exit { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0); } 100% { opacity: 0; transform: translate3d(-18px, -24px, 32px) rotateY(-76deg); } }
+@keyframes game-roll-panel-body-stack-exit { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0); } 100% { opacity: 0; transform: translate3d(18px, -20px, 28px) rotateY(68deg); } }
+@keyframes game-roll-panel-total-stack-exit { 0% { opacity: 1; transform: translate3d(0, 0, 0) rotateX(0); } 100% { opacity: 0; transform: translate3d(0, -22px, 28px) rotateX(78deg); } }
 
 @media (max-width: 900px) {
   .game-roll-stack { right: 8px; left: 8px; max-width: none; }

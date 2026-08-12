@@ -57,7 +57,7 @@ function canMoveToken(token, isDm, session, userId) {
   return isDm || (
     session?.status === 'LIVE'
     && token.owner_user_id === userId
-    && token.character_id === session?.active_character_id
+    && (session?.combat_state?.mode !== 'COMBAT' || token.character_id === session?.active_character_id)
     && !token.locked
   );
 }
@@ -90,6 +90,7 @@ export default function GameStage({
   combatTargeting,
   onCombatTokenTarget,
   onCombatAreaTarget,
+  onActiveTokenClick,
   toolbarHost,
 }) {
   const stageRef = useRef(null);
@@ -1196,7 +1197,7 @@ export default function GameStage({
       })()}
       {selectionBox && <div className="game-token-selection-box" style={boxStyle} />}
 
-      {session?.shared_type === 'MAP' && tokens.map(token => {
+      {session?.shared_type !== 'NONE' && tokens.map(token => {
         const movable = canMove(token);
         const ownedByPlayer = !isDm && token.owner_user_id === userId;
         const selected = selectedIds.includes(token.id);
@@ -1262,6 +1263,12 @@ export default function GameStage({
               if (event.button !== 0) return;
               if (!isDm && !ownedByPlayer) {
                 openTokenMenu(event, token);
+                return;
+              }
+              if (isDm && Number(token.character_id) === Number(activeCharacterId)) {
+                event.preventDefault();
+                setSelectedIds([token.id]);
+                onActiveTokenClick?.(token);
                 return;
               }
               if (!movable) return;

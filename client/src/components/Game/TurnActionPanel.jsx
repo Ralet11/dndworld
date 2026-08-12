@@ -11,7 +11,7 @@ function actionIcon(action) {
   return <Swords size={14} />;
 }
 
-export default function TurnActionPanel({ session, socket, isMyTurn, targeting, onTargetingChange, onError }) {
+export default function TurnActionPanel({ session, socket, isMyTurn, targeting, onTargetingChange, onError, actorName = null, mode = 'player' }) {
   const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(null);
@@ -80,7 +80,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
     else refresh();
   });
 
-  if (session.status !== 'LIVE') return null;
+  if (session.status !== 'LIVE' || session.combat_state?.mode !== 'COMBAT') return null;
 
   if (!isMyTurn) {
     if (!reactions.length) return null;
@@ -95,7 +95,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   return (
     <section className={`turn-action-panel${targeting ? ' is-targeting' : ''}${collapsed ? ' is-collapsed' : ''}`} aria-label="Acciones del turno">
       <header>
-        <div><span>Tu turno</span><strong>{targeting ? 'Elige un objetivo' : 'Panel de acción'}</strong></div>
+        <div><span>{mode === 'dm' ? 'Turno del NPC' : 'Tu turno'}</span><strong>{targeting ? 'Elige un objetivo' : actorName ? `Acciones de ${actorName}` : 'Panel de acción'}</strong></div>
         <button type="button" onClick={() => setCollapsed(current => !current)} aria-label={collapsed ? 'Abrir acciones' : 'Contraer acciones'}>{collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</button>
       </header>
       {!collapsed && (
