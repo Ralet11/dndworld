@@ -5017,9 +5017,10 @@ a:focus-visible {
   border-right: 1px solid var(--npc-border);
   background: radial-gradient(circle at 20% 0, rgba(201, 157, 77, .08), transparent 22rem), #0a1410;
 }
-.npc-studio-roster > header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.npc-studio-roster > header { display: flex; flex: none; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.npc-studio-roster > header > div { min-width: 0; }
 .npc-studio-roster > header span { color: #a98c56; font-size: 9px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
-.dm-surface .npc-studio-roster h1 { margin-top: 5px; color: #efe0c1 !important; font-size: 30px !important; line-height: 1; }
+.dm-surface .npc-studio-roster h1 { margin-top: 5px; overflow: hidden; color: #efe0c1 !important; font-size: clamp(25px, 2.1vw, 30px) !important; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .npc-studio-roster > header p { margin-top: 7px; color: var(--npc-muted); font-size: 11px; }
 .npc-studio-roster > header button,
 .npc-studio-add,
@@ -5028,24 +5029,25 @@ a:focus-visible {
   color: #f2d99f; border: 1px solid #806536; background: linear-gradient(180deg, #2b2112, #17130c);
   font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
 }
+.npc-studio-roster > header button { flex: none; padding-inline: 10px; }
 .npc-studio-roster > header button:hover,
 .npc-studio-add:hover,
 .npc-studio-empty button:hover { border-color: #c39a4e; background: #322613; }
 .npc-studio-search {
-  height: 44px; margin-top: 20px; padding: 0 12px; display: flex; align-items: center; gap: 9px;
+  height: 44px; min-height: 44px; margin-top: 20px; padding: 0 12px; display: flex; flex: none; align-items: center; gap: 9px;
   color: #799187; border: 1px solid var(--npc-border); background: #07100d;
 }
 .npc-studio-search:focus-within { color: var(--npc-cyan); border-color: #4b8190; box-shadow: 0 0 0 2px rgba(96, 197, 223, .08); }
 .npc-studio-search input { width: 100%; min-width: 0; color: var(--npc-text); border: 0; outline: 0; background: transparent; font-size: 13px; }
 .npc-studio-search input::placeholder { color: #607068; }
-.npc-studio-filters { margin: 10px 0 14px; display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.npc-studio-filters { min-height: 31px; margin: 10px 0 14px; display: flex; flex: none; gap: 5px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .npc-studio-filters button {
   min-height: 29px; padding: 0 9px; flex: none; color: #809087; border: 1px solid #283b32; background: transparent;
   font-size: 9px; font-weight: 700;
 }
 .npc-studio-filters button:hover { color: #c9d4cd; border-color: #53695b; }
 .npc-studio-filters button.is-active { color: #f0d89f; border-color: #765d32; background: rgba(185, 141, 62, .12); }
-.npc-studio-list { min-height: 0; display: grid; align-content: start; gap: 7px; overflow-y: auto; scrollbar-color: #415448 transparent; }
+.npc-studio-list { min-height: 0; display: grid; flex: 1 1 0; align-content: start; gap: 7px; overflow-y: auto; scrollbar-color: #415448 transparent; }
 .npc-studio-list > button {
   min-width: 0; min-height: 64px; padding: 9px; display: grid; grid-template-columns: 43px minmax(0, 1fr) auto;
   align-items: center; gap: 10px; color: var(--npc-text); border: 1px solid #2d4036; background: rgba(9, 18, 14, .72); text-align: left;
