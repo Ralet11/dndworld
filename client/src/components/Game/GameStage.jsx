@@ -1226,7 +1226,8 @@ export default function GameStage({
         const targetingArea = String(combatTargeting?.action?.target || '').startsWith('area-');
         const targetingAlly = String(combatTargeting?.action?.target || '').includes('ally');
         const combatActor = tokens.find(item => Number(item.character_id) === Number(activeCharacterId));
-        const rangePct = Math.max(6, Math.min(100, (Number(combatTargeting?.action?.range) || 5) * 0.8));
+        const actionRange = Number(combatTargeting?.action?.range) || 5;
+        const rangePct = actionRange <= 5 ? 8 : Math.max(8, Math.min(100, actionRange * 0.8));
         const withinCombatRange = !combatActor || Math.hypot(Number(token.x) - Number(combatActor.x), Number(token.y) - Number(combatActor.y)) <= rangePct;
         const validCombatTarget = !combatTargeting || targetingArea || (withinCombatRange && (targetingAlly ? ['player', 'ally'].includes(tokenRole) : ['enemy', 'neutral'].includes(tokenRole)));
         return (

@@ -374,6 +374,15 @@ function pointDistance(left, right) {
     return Math.hypot(Number(left.x) - Number(right.x), Number(left.y) - Number(right.y));
 }
 
+// Las posiciones del tablero se guardan como porcentajes. Una casilla visible
+// mide aproximadamente 5% y una diagonal contigua cerca de 7.1%; 8% cubre
+// correctamente todo el perímetro cuerpo a cuerpo sin saltar una casilla.
+function combatRangePct(rangeFeet) {
+    const feet = Number(rangeFeet) || 5;
+    if (feet <= 5) return 8;
+    return Math.max(8, Math.min(100, feet * 0.8));
+}
+
 function areaContains(shape, origin, center, point, size) {
     const radius = Math.max(2, Number(size) || 10);
     if (shape === 'square') return Math.abs(point.x - center.x) <= radius / 2 && Math.abs(point.y - center.y) <= radius / 2;
@@ -399,7 +408,7 @@ function areaContains(shape, origin, center, point, size) {
 function resolveTargetTokens(action, actorToken, allTokens, requestedIds = [], area = null) {
     const visible = allTokens.filter(token => token.visible && token.character);
     if (action.target === 'self') return [actorToken];
-    const rangePct = Math.max(6, Math.min(100, (Number(action.range) || 5) * 0.8));
+    const rangePct = combatRangePct(action.range);
     if (String(action.target).startsWith('area-')) {
         if (!area || !Number.isFinite(Number(area.x)) || !Number.isFinite(Number(area.y))) return [];
         const center = { x: Number(area.x), y: Number(area.y) };
@@ -455,6 +464,7 @@ function hpAfterHealing(character, amount) {
 module.exports = {
     abilityModifier,
     buildActionCatalog,
+    combatRangePct,
     customFeatureProfiles,
     hpAfterDamage,
     hpAfterHealing,

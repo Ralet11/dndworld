@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
     customFeatureProfiles,
+    combatRangePct,
     hpAfterDamage,
     hpAfterHealing,
     parseDiceExpression,
@@ -66,6 +67,15 @@ test('single and circular area targeting enforce relationships', () => {
     assert.deepEqual(resolveTargetTokens({ target: 'ally', range: 30 }, actor, [actor, ally, enemyNear], ['b']).map(item => item.id), ['b']);
     assert.deepEqual(resolveTargetTokens({ target: 'enemy', range: 30 }, actor, [actor, ally, enemyNear], ['b']), []);
     assert.deepEqual(resolveTargetTokens({ target: 'area-enemy', range: 120, area: { shape: 'circle', sizePct: 12 } }, actor, [actor, ally, enemyNear, enemyFar], [], { x: 50, y: 50 }).map(item => item.id), ['c']);
+});
+
+test('melee range reaches every contiguous grid square, including diagonals', () => {
+    assert.equal(combatRangePct(5), 8);
+    const actor = { id: 'a', character_id: 1, owner_user_id: null, x: 50, y: 50, visible: true, character: { id: 1, npc_type: 'enemigo' } };
+    const diagonalAlly = { id: 'b', character_id: 2, owner_user_id: 'u2', x: 55.5, y: 55.5, visible: true, character: { id: 2 } };
+    const distantAlly = { id: 'c', character_id: 3, owner_user_id: 'u3', x: 61, y: 50, visible: true, character: { id: 3 } };
+    assert.deepEqual(resolveTargetTokens({ target: 'enemy', range: 5 }, actor, [actor, diagonalAlly, distantAlly], ['b']).map(item => item.id), ['b']);
+    assert.deepEqual(resolveTargetTokens({ target: 'enemy', range: 5 }, actor, [actor, diagonalAlly, distantAlly], ['c']), []);
 });
 
 test('homebrew text becomes structured attacks and areas', () => {
