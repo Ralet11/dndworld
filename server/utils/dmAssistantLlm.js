@@ -70,6 +70,7 @@ function buildSystemPrompt() {
         'No inventes personajes, quests, escenas ni numeros fuera del contexto y resultados de tools.',
         'Al crear o editar un NPC, toda habilidad, poder, ataque, pasiva, resistencia, reacción o rasgo jugable debe ser una entrada individual en actions. Usa type "rasgo" para pasivas y poderes sin tirada; abilitiesText queda reservado sólo para biografía, personalidad o lore que no se usa en combate.',
         'Si el DM dice "agregá/añadí estas habilidades", usa actionMode "append" para conservar las acciones existentes. Usa "replace" sólo si pide explícitamente reemplazar o rehacer la lista completa. Nunca pegues una lista de habilidades mecánicas dentro de abilitiesText.',
+        'Si el DM pide generar, crear o inventar una imagen o retrato para un NPC, usa generate_npc_image. Nunca inventes una URL de imagen ni uses update_npc para simular que fue generada.',
         'Si el usuario pide descripcion, ideas, recap, dialogo, improvisacion o humor, responde normal sin tools salvo que tambien pida cambiar estado.',
         'Despues de ejecutar tools, responde de forma natural resumiendo lo que hiciste y el resultado.',
         'Si una tool devuelve error o ambiguedad, transforma eso en una pregunta o explicacion util para el DM.',
@@ -327,6 +328,23 @@ const TOOL_SPECS = [
     {
         type: 'function',
         function: {
+            name: 'generate_npc_image',
+            description: 'Genera con IA un retrato original, lo sube al almacenamiento y lo asigna a un NPC existente.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    target: { type: 'string', description: 'Nombre del NPC que recibirá la imagen.' },
+                    prompt: { type: 'string', description: 'Dirección visual adicional pedida por el DM. Puede omitirse para usar sólo la ficha y habilidades.' },
+                    quality: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Calidad solicitada. Usa medium salvo pedido expreso.' },
+                },
+                required: ['target'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'create_item', description: 'Crea un objeto de campaña.',
             parameters: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['Arma', 'Armadura', 'Consumible', 'Objeto Mágico', 'Otro'] }, rarity: { type: 'string', enum: ['Común', 'Poco Común', 'Raro', 'Muy Raro', 'Legendario'] }, level: { type: 'number' }, description: { type: 'string' }, damage: { type: 'string' }, damageType: { type: 'string' }, imageUrl: { type: 'string' } }, required: ['name'], additionalProperties: false },
         },
@@ -444,6 +462,13 @@ function normalizeToolCall(toolCall) {
             return args.name ? { tool: 'npc.create', fields: args } : null;
         case 'update_npc':
             return args.target && args.fields ? { tool: 'npc.update', target: clampText(args.target, 120), fields: args.fields } : null;
+        case 'generate_npc_image':
+            return args.target ? {
+                tool: 'npc.image.generate',
+                target: clampText(args.target, 120),
+                prompt: clampText(args.prompt, 1500),
+                quality: ['low', 'medium', 'high'].includes(args.quality) ? args.quality : 'medium',
+            } : null;
         case 'create_item':
             return args.name ? { tool: 'item.create', fields: args } : null;
         case 'update_item':

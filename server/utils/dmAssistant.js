@@ -1,5 +1,6 @@
 const { Character, CharacterInventory, Item, MapState, NpcAction, Quest, Scene, TimelineEvent } = require('../models');
 const { runAssistantConversation } = require('./dmAssistantLlm');
+const { generateNpcPortrait } = require('./npcImageGenerator');
 const { deriveWorldConditions, normalizeWorldTime } = require('./worldTime');
 
 const undoStackByUser = new Map();
@@ -253,6 +254,67 @@ async function updateNpcFromAssistant({ target, fields, io, getCalculatedPartySt
     const actionCount = await saveNpcActions(npc.id, fields.actions, fields.actionMode);
     await emitNpcRefresh(io, getCalculatedPartyStats);
     return buildReply('result', `Actualicé ${npc.name}${Array.isArray(fields.actions) ? ` con ${actionCount} acción(es)` : ''}.`, { tool: 'npc.update', suggestions: ['deshacer'] });
+}
+
+async function generateNpcImageFromAssistant({ target, prompt, quality, userId, io, getCalculatedPartyStats }) {
+    const resolved = await resolveCharacter(target);
+    if (!resolved.ok || !resolved.character.is_npc) {
+        return buildReply(
+            'error',
+            resolved.ok ? `${resolved.character.name} no es un NPC.` : resolved.error,
+            resolved.ambiguous ? { suggestions: resolved.matches } : {}
+        );
+    }
+
+    const npc = await Character.findByPk(resolved.character.id);
+    const actions = await NpcAction.findAll({
+        where: { character_id: npc.id },
+        order: [['sort_order', 'ASC'], ['id', 'ASC']],
+    });
+    const previousValues = {
+        image_url: npc.image_url,
+        rendered_url: npc.rendered_url,
+        rendered_signature: npc.rendered_signature,
+    };
+
+    let generated;
+    try {
+        generated = await generateNpcPortrait({ npc, actions, direction: prompt, quality });
+    } catch (error) {
+        const detail = error?.code === 'NO_API_KEY'
+            ? 'La clave de OpenAI no esta configurada en el servidor.'
+            : error?.code === 'S3_NOT_CONFIGURED'
+                ? 'El almacenamiento de imagenes no esta configurado en el servidor.'
+                : `No pude generar la imagen: ${String(error?.message || 'error desconocido').slice(0, 240)}`;
+        return buildReply('error', detail, { tool: 'npc.image.generate' });
+    }
+
+    npc.image_url = generated.url;
+    npc.rendered_url = null;
+    npc.rendered_signature = null;
+    await npc.save();
+
+    rememberUndo(userId, {
+        kind: 'npc_image',
+        npcId: npc.id,
+        previousValues,
+        undoText: `Listo, restauré la imagen anterior de ${npc.name}.`,
+    });
+
+    io.emit('npc:image-updated', { characterId: npc.id, imageUrl: generated.url });
+    if (npc.is_active) {
+        const updatedStats = await getCalculatedPartyStats();
+        io.emit('players-data', updatedStats);
+        io.emit('stats-updated', updatedStats);
+    }
+    io.emit('notification', { text: `Se generó y asignó un nuevo retrato a ${npc.name}.`, type: 'dm_assistant' });
+
+    return buildReply('result', `Generé y asigné un nuevo retrato a ${npc.name}.`, {
+        tool: 'npc.image.generate',
+        data: { characterId: npc.id, imageUrl: generated.url },
+        undoAvailable: true,
+        suggestions: ['deshacer', `ver a ${npc.name}`],
+    });
 }
 
 async function createItemFromAssistant({ fields, io }) {
@@ -527,6 +589,26 @@ async function applyUndo({ userId, io, getCalculatedPartyStats }) {
         io.emit('notification', { text: payload.notificationText || `Se deshizo el ultimo cambio de rol sobre ${npc.name}.`, type: 'dm_assistant' });
 
         return buildReply('result', payload.undoText || `Listo, reverti el ultimo cambio de rol sobre ${npc.name}.`, {
+            tool: 'action.undo',
+            undoAvailable: false,
+        });
+    }
+
+    if (payload.kind === 'npc_image') {
+        const npc = await Character.findByPk(payload.npcId);
+        if (!npc) return buildReply('error', 'No pude deshacer porque el NPC ya no existe.');
+        Object.assign(npc, payload.previousValues || {});
+        await npc.save();
+        io.emit('npc:image-updated', {
+            characterId: npc.id,
+            imageUrl: npc.rendered_url || npc.image_url || null,
+        });
+        if (npc.is_active) {
+            const updatedStats = await getCalculatedPartyStats();
+            io.emit('players-data', updatedStats);
+            io.emit('stats-updated', updatedStats);
+        }
+        return buildReply('result', payload.undoText || `Listo, restauré la imagen anterior de ${npc.name}.`, {
             tool: 'action.undo',
             undoAvailable: false,
         });
@@ -1343,6 +1425,15 @@ async function executeStructuredToolCall({
             return createNpcFromAssistant({ fields: toolCall.fields || {}, io, getCalculatedPartyStats });
         case 'npc.update':
             return updateNpcFromAssistant({ target: toolCall.target, fields: toolCall.fields || {}, io, getCalculatedPartyStats });
+        case 'npc.image.generate':
+            return generateNpcImageFromAssistant({
+                target: toolCall.target,
+                prompt: toolCall.prompt,
+                quality: toolCall.quality,
+                userId: user.id,
+                io,
+                getCalculatedPartyStats,
+            });
         case 'npc.delete.request':
             return requestDeletion({ entity: 'npc', target: toolCall.target, userId: user.id });
         case 'item.create':

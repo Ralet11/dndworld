@@ -78,9 +78,19 @@ export default function NpcsPanel() {
   useEffect(() => {
     if (!socket) return undefined;
     const receive = data => setNpcs(data || []);
+    const receiveImage = ({ characterId, imageUrl } = {}) => {
+      if (!characterId) return;
+      setNpcs(current => current.map(npc => Number(npc.id) === Number(characterId)
+        ? { ...npc, image_url: imageUrl || '', rendered_url: '' }
+        : npc));
+    };
     socket.on('all-npcs', receive);
+    socket.on('npc:image-updated', receiveImage);
     socket.emit('get-all-npcs');
-    return () => socket.off('all-npcs', receive);
+    return () => {
+      socket.off('all-npcs', receive);
+      socket.off('npc:image-updated', receiveImage);
+    };
   }, [socket]);
 
   const selected = npcs.find(npc => Number(npc.id) === Number(selectedId));
