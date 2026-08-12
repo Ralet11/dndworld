@@ -22,6 +22,7 @@ const {
     buildActionCatalog,
     hpAfterDamage,
     hpAfterHealing,
+    loadCombatCharacter,
     parseDiceExpression,
     resolveTargetTokens,
 } = require('../services/gameCombat');

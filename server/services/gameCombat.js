@@ -458,6 +458,7 @@ module.exports = {
     customFeatureProfiles,
     hpAfterDamage,
     hpAfterHealing,
+    loadCombatCharacter,
     parseDiceExpression,
     proficiencyBonus,
     resolveTargetTokens,
