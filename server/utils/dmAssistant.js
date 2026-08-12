@@ -1346,6 +1346,12 @@ async function executeAiAssistantFallback({
         });
     } catch (err) {
         console.error('DM Assistant LLM fallback error:', err);
+        if (err?.status === 429 && err?.error?.code === 'insufficient_quota') {
+            return buildReply('info', 'El Oráculo no puede consultar la IA porque la clave de OpenAI no tiene créditos disponibles. Recargá la cuenta o configurá una clave con facturación activa; las herramientas de lenguaje natural se habilitarán automáticamente.', {
+                tool: 'assistant.billing',
+                suggestions: ['contexto', 'ayuda'],
+            });
+        }
         return null;
     }
 }

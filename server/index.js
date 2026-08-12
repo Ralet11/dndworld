@@ -281,7 +281,9 @@ app.post('/api/dm-assistant/command', verifyToken, isDm, async (req, res) => {
             io,
             getCalculatedPartyStats,
         });
-        res.status(result.ok ? 200 : 400).json(result);
+        // Los errores de interpretación o validación son respuestas normales del
+        // asistente: el cliente debe mostrarlas, no tratarlas como un fallo HTTP.
+        res.status(200).json(result);
     } catch (err) {
         console.error('DM Assistant command error:', err);
         res.status(500).json({
