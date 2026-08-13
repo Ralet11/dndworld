@@ -368,6 +368,7 @@ function serializeSession(session, viewer) {
         action_name: action.action_name,
         status: action.status,
         attack: action.result?.attack || null,
+        reaction: action.result?.reaction || null,
         damage_formula: action.action_snapshot?.damage || action.action_snapshot?.healing || null,
         targets: action.result?.targets || [],
         summary: action.result?.summary || null,
@@ -679,8 +680,23 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
         if (parentAction) await parentAction.save();
     } else if (parentAction) {
         parentAction.status = window.resumeStatus;
-        parentAction.result = { ...(parentAction.result || {}), summary: window.context?.resumeSummary || parentAction.result?.summary };
+        parentAction.result = {
+            ...(parentAction.result || {}),
+            reaction: { name: null, effect: 'PASSED', passed: true, reactorName: window.reactorName },
+            summary: window.context?.resumeSummary || parentAction.result?.summary,
+        };
         await parentAction.save();
+    }
+    if (parentAction?.attack_roll_id && parentAction.result?.attack) {
+        const attackRoll = await GameRoll.findByPk(parentAction.attack_roll_id);
+        if (attackRoll) {
+            const finalHit = Boolean(parentAction.result.attack.hit);
+            const targetName = parentAction.result.attack.targetName || window.reactorName;
+            const reactionName = parentAction.result.reaction?.passed ? null : parentAction.result.reaction?.name;
+            attackRoll.label = `${parentAction.action_name}: ${finalHit ? `impacta a ${targetName}` : `falla contra ${targetName}`}${reactionName ? ` tras ${reactionName}` : ''}`.slice(0, 120);
+            await attackRoll.save();
+            io.to(roomName(session.id)).emit('game:roll-upsert', attackRoll.toJSON());
+        }
     }
     const timer = reactionWindowTimers.get(window.id);
     if (timer) clearTimeout(timer);
@@ -815,7 +831,7 @@ async function finalizeCombatAction(io, combatAction, roll) {
         const hit = natural === 20 || (natural !== 1 && Number(roll.total) >= targetAc);
         combatAction.result = {
             ...previousResult,
-            attack: { total: roll.total, natural, targetAc, hit, critical: natural === 20 },
+            attack: { total: roll.total, natural, targetAc, hit, critical: natural === 20, targetName: target.label },
         };
         roll.label = `${combatAction.action_name}: ${hit ? `impacta a ${target.label}` : `falla contra ${target.label}`}`.slice(0, 120);
         await roll.save();
@@ -836,7 +852,12 @@ async function finalizeCombatAction(io, combatAction, roll) {
             resumeStatus: expression ? 'DAMAGE_READY' : 'COMPLETED',
             context: { resumeSummary: `${combatAction.action_name}: impacto confirmado.` },
         });
-        if (reactionOpened) return broadcastSession(io, session.id);
+        if (reactionOpened) {
+            roll.label = `${combatAction.action_name}: ${roll.total} · esperando reacción de ${target.label}`.slice(0, 120);
+            await roll.save();
+            io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
+            return broadcastSession(io, session.id);
+        }
         if (!expression) {
             combatAction.status = 'COMPLETED';
             combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'hit' }], summary: `${combatAction.action_name}: impacta a ${target.label}.` };

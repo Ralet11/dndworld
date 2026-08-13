@@ -236,6 +236,12 @@ export default function GamePlayerPanel() {
     });
   };
 
+  const ownsCombatAction = action => {
+    const ownerCharacterId = session?.participants?.find(item => String(item.user_id) === String(user.id))?.character_id;
+    return String(action.actor_user_id) === String(user.id)
+      || Number(action.actor_character_id) === Number(ownerCharacterId)
+      || Number(action.actor_character_id) === Number(character?.id);
+  };
   const pendingCombatNotice = (session?.combat_actions || []).find(action => {
     // Los IDs de usuario son UUIDs. Convertirlos con Number() los vuelve NaN y
     // hace que una acción propia no pueda identificarse después de recargar.
@@ -243,12 +249,17 @@ export default function GamePlayerPanel() {
     const belongsToPlayer = String(action.actor_user_id) === String(user.id)
       || Number(action.actor_character_id) === Number(ownerCharacterId)
       || Number(action.actor_character_id) === Number(character?.id);
-    if (!belongsToPlayer || dismissedCombatNotices.includes(String(action.id))) return false;
+    const reactionOutcome = Boolean(action.reaction) && ['DAMAGE_READY', 'COMPLETED'].includes(action.status);
+    if ((!belongsToPlayer && !reactionOutcome) || dismissedCombatNotices.includes(String(action.id))) return false;
     const isNewMiss = action.status === 'COMPLETED'
       && action.attack?.hit === false
       && new Date(action.updatedAt || action.createdAt).getTime() >= combatNoticeStartedAt;
-    return action.status === 'DAMAGE_READY' || isNewMiss;
+    const isNewReactionOutcome = reactionOutcome
+      && new Date(action.updatedAt || action.createdAt).getTime() >= combatNoticeStartedAt;
+    return (belongsToPlayer && action.status === 'DAMAGE_READY') || isNewMiss || isNewReactionOutcome;
   });
+  const pendingCombatHit = pendingCombatNotice?.attack?.hit !== false;
+  const canRollPendingDamage = pendingCombatNotice?.status === 'DAMAGE_READY' && ownsCombatAction(pendingCombatNotice);
 
   const rollPendingDamage = action => {
     socket?.emit('game:roll-action-damage', { sessionId: session.id, combatActionId: action.id }, response => {
@@ -358,12 +369,12 @@ export default function GamePlayerPanel() {
       <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       {pendingCombatNotice && (
-        <div className={`game-combat-result-prompt${pendingCombatNotice.status === 'DAMAGE_READY' ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">
+        <div className={`game-combat-result-prompt${pendingCombatHit ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">
           <div>
-            <span>{pendingCombatNotice.status === 'DAMAGE_READY' ? 'Impacto confirmado' : 'El ataque no impacta'}</span>
-            <h2>{pendingCombatNotice.status === 'DAMAGE_READY' ? '¡Éxito!' : 'Fallo'}</h2>
+            <span>{pendingCombatNotice.reaction?.name ? `${pendingCombatNotice.reaction.name} resuelve el ataque` : pendingCombatNotice.reaction?.passed ? 'La reacción se deja pasar' : pendingCombatHit ? 'Impacto confirmado' : 'El ataque no impacta'}</span>
+            <h2>{pendingCombatHit ? '¡Éxito!' : 'Fallo'}</h2>
             <p>{pendingCombatNotice.action_name}{pendingCombatNotice.attack ? ` · ${pendingCombatNotice.attack.total} contra CA ${pendingCombatNotice.attack.targetAc}` : ''}</p>
-            {pendingCombatNotice.status === 'DAMAGE_READY' ? (
+            {canRollPendingDamage ? (
               <button onClick={() => rollPendingDamage(pendingCombatNotice)}>Tirar daño ({pendingCombatNotice.damage_formula || 'daño'})</button>
             ) : (
               <button onClick={() => setDismissedCombatNotices(current => [...current, String(pendingCombatNotice.id)])}>Continuar</button>
