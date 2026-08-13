@@ -3700,6 +3700,19 @@ a:focus-visible {
 .game-combat-result-prompt.is-failure > div { border-color: #874139; background: radial-gradient(circle at 50% 0%, rgba(185, 58, 45, .14), transparent 13rem), #15100f; }
 .game-combat-result-prompt.is-failure h2 { color: #e89b88; }
 .game-combat-result-prompt.is-failure button { border-color: #793b34; background: #251310; }
+.game-combat-result-prompt.is-reaction > div, .game-combat-result-prompt.is-enemy > div { border-color: #7958aa; background: radial-gradient(circle at 50% 0%, rgba(138, 88, 202, .24), transparent 14rem), linear-gradient(155deg, #15101e, #0e0b15 68%); box-shadow: 0 26px 90px rgba(0, 0, 0, .68), 0 0 38px rgba(130, 76, 200, .24); }
+.game-combat-result-prompt.is-reaction > div > span, .game-combat-result-prompt.is-enemy > div > span { color: #b995e5; }
+.game-combat-result-prompt.is-reaction h2, .game-combat-result-prompt.is-enemy h2 { margin-top: 9px; color: #dcc4ff; font-size: 32px; }
+.game-combat-result-prompt.is-reaction p, .game-combat-result-prompt.is-enemy p { max-width: 310px; margin: 0 auto 20px; color: #beb1ca; font-size: 10px; line-height: 1.65; }
+.game-combat-result-prompt.is-reaction button, .game-combat-result-prompt.is-enemy button { color: #eadcff; border-color: #73539c; background: linear-gradient(180deg, #4d3370, #291c3c); }
+.game-combat-result-prompt.is-reaction-no-effect > div { border-color: #644f7d; filter: saturate(.82); }
+.game-combat-reaction-identity { width: max-content; max-width: 100%; margin: 0 auto 14px; display: flex; align-items: center; gap: 10px; text-align: left; }
+.game-combat-reaction-avatar { width: 42px; height: 42px; flex: 0 0 42px; overflow: hidden; display: grid; place-items: center; color: #e7d8fb; border: 1px solid #8e69bb; border-radius: 50%; background: #241733; box-shadow: 0 0 16px rgba(142, 92, 203, .28); }
+.game-combat-reaction-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.game-combat-result-prompt .game-combat-reaction-avatar span { color: #e7d8fb; font-family: var(--font-display); font-size: 18px; letter-spacing: 0; }
+.game-combat-reaction-identity > div:last-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.game-combat-reaction-identity small { color: #a57acb; font-size: 7px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+.game-combat-reaction-identity strong { overflow: hidden; color: #eee5f7; font-family: var(--font-display); font-size: 15px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes combat-result-enter { from { opacity: 0; transform: translateY(20px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 .game-dm-shell {

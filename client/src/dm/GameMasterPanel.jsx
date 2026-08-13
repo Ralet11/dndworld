@@ -43,6 +43,7 @@ import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';
 import DiceTray from '../components/Game/DiceTray';
 import GameAudioControl from './GameAudioControl';
+import CombatResultPrompt from '../components/Game/CombatResultPrompt';
 import ReactionPrompt from '../components/Game/ReactionPrompt';
 import { deriveWorldConditions } from '../utils/worldTime';
 
@@ -608,7 +609,7 @@ export default function GameMasterPanel() {
   const pendingCombatNotice = (session.combat_actions || []).find(action => {
     const belongsToDm = String(action.actor_user_id) === String(user.id)
       || dmControlledCharacterIds.has(Number(action.actor_character_id));
-    const reactionOutcome = Boolean(action.reaction) && ['DAMAGE_READY', 'COMPLETED'].includes(action.status);
+    const reactionOutcome = Boolean(action.reaction) && !action.reaction.savePending && ['DAMAGE_READY', 'COMPLETED'].includes(action.status);
     if ((!belongsToDm && !reactionOutcome) || dismissedCombatNotices.includes(String(action.id))) return false;
     const isNewMiss = action.status === 'COMPLETED'
       && action.attack?.hit === false
@@ -617,7 +618,6 @@ export default function GameMasterPanel() {
       && new Date(action.updatedAt || action.createdAt).getTime() >= combatNoticeStartedAt;
     return (belongsToDm && action.status === 'DAMAGE_READY') || isNewMiss || isNewReactionOutcome;
   });
-  const pendingCombatHit = pendingCombatNotice?.attack?.hit !== false;
   const canRollPendingDamage = pendingCombatNotice?.status === 'DAMAGE_READY' && ownsCombatAction(pendingCombatNotice);
 
   const reorderInitiative = (characterId, targetIndex) => {
@@ -677,20 +677,13 @@ export default function GameMasterPanel() {
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
       <ReactionPrompt session={session} socket={socket} onError={setError} />
 
-      {pendingCombatNotice && (
-        <div className={`game-combat-result-prompt${pendingCombatHit ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">
-          <div>
-            <span>{pendingCombatNotice.reaction?.name ? `${pendingCombatNotice.reaction.name} resuelve el ataque` : pendingCombatNotice.reaction?.passed ? 'La reacción se deja pasar' : pendingCombatHit ? 'Impacto confirmado' : 'El ataque no impacta'}</span>
-            <h2>{pendingCombatHit ? '¡Éxito!' : 'Fallo'}</h2>
-            <p>{pendingCombatNotice.actor_name} · {pendingCombatNotice.action_name}{pendingCombatNotice.attack ? ` · ${pendingCombatNotice.attack.total} contra CA ${pendingCombatNotice.attack.targetAc}` : ''}</p>
-            {canRollPendingDamage ? (
-              <button onClick={() => rollPendingDamage(pendingCombatNotice)}>Tirar daño ({pendingCombatNotice.damage_formula || 'daño'})</button>
-            ) : (
-              <button onClick={() => setDismissedCombatNotices(current => [...current, String(pendingCombatNotice.id)])}>Continuar</button>
-            )}
-          </div>
-        </div>
-      )}
+      <CombatResultPrompt
+        notice={pendingCombatNotice}
+        canRollDamage={canRollPendingDamage}
+        onRollDamage={rollPendingDamage}
+        onDismiss={notice => setDismissedCombatNotices(current => [...current, String(notice.id)])}
+        showActor
+      />
 
         <main className="game-scene-workspace">
           <section className="game-scene-frame">

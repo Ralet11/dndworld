@@ -365,6 +365,7 @@ function serializeSession(session, viewer) {
         actor_character_id: action.actor_character_id,
         actor_name: action.actorCharacter?.name || action.actor?.username || 'Combatiente',
         actor_image: resolveCharacterImage(action.actorCharacter),
+        actor_is_npc: Boolean(action.actorCharacter?.is_npc),
         action_name: action.action_name,
         status: action.status,
         attack: action.result?.attack || null,
@@ -719,6 +720,14 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
         }
         state.reactions = { ...(state.reactions || {}), [window.reactorCharacterId]: true };
         const effect = option.action?.reactionEffect || { type: 'CUSTOM' };
+        const reactionIdentity = {
+            name: option.name,
+            effect: effect.type,
+            reactorName: window.reactorName,
+            reactorImage: resolveCharacterImage(reactorToken.character),
+            reactorIsNpc: !reactorToken.owner_user_id,
+            targetName: window.sourceName,
+        };
         if (effect.type === 'AC_BONUS') {
             state.acBonuses = { ...(state.acBonuses || {}), [window.reactorCharacterId]: { bonus: Number(effect.bonus) || 5, source: option.name } };
             if (parentAction?.result?.attack) {
@@ -734,13 +743,13 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
                     state.shields = { ...(state.shields || {}), [window.reactorCharacterId]: { broken, breakThreshold: threshold + 1 } };
                     shieldCheck = { natural, threshold, broken };
                 }
-                parentAction.result = { ...parentAction.result, attack: { ...parentAction.result.attack, targetAc: nextAc, hit }, reaction: { name: option.name, effect: effect.type, shieldCheck } };
+                parentAction.result = { ...parentAction.result, attack: { ...parentAction.result.attack, targetAc: nextAc, hit }, reaction: { ...reactionIdentity, shieldCheck } };
                 parentAction.status = hit ? window.resumeStatus : 'COMPLETED';
                 if (!hit) parentAction.result.summary = `${option.name} eleva la CA a ${nextAc}; ${parentAction.action_name} falla.${shieldCheck ? ` Control de escudo: ${shieldCheck.natural} (${shieldCheck.broken ? 'se rompe' : 'resiste'}).` : ''}`;
             }
         } else if (effect.type === 'HALVE_DAMAGE' || effect.type === 'RESIST_TRIGGERING_DAMAGE') {
             if (parentAction) {
-                parentAction.result = { ...(parentAction.result || {}), reactionModifiers: { ...parentAction.result?.reactionModifiers, damageMultiplier: 0.5 }, reaction: { name: option.name, effect: effect.type } };
+                parentAction.result = { ...(parentAction.result || {}), reactionModifiers: { ...parentAction.result?.reactionModifiers, damageMultiplier: 0.5 }, reaction: reactionIdentity };
                 parentAction.status = window.resumeStatus;
             }
         } else if (effect.type === 'COUNTER_DAMAGE' || effect.type === 'OPPORTUNITY_ATTACK') {
@@ -750,7 +759,7 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
                 parentAction.status = window.resumeStatus;
                 parentAction.result = {
                     ...(parentAction.result || {}),
-                    reaction: { name: option.name, effect: effect.type, savePending: true, ability: effect.saveAbility, dc: effect.saveDc },
+                    reaction: { ...reactionIdentity, savePending: true, ability: effect.saveAbility, dc: effect.saveDc },
                     summary: `${window.reactorName} usa ${option.name}; ${window.sourceName} debe realizar una salvación de ${effect.saveAbility} CD ${effect.saveDc}.`,
                 };
             }
