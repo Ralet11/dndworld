@@ -35,7 +35,7 @@ const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
 const ROLL_CARD_EXIT_MS = 1150;
 
-function dismissRollForEveryone(io, sessionId, rollId, delay = 5000) {
+function dismissRollForEveryone(io, sessionId, rollId, delay = 10000) {
     const timerKey = `${sessionId}:${rollId}`;
     if (rollDismissTimers.has(timerKey)) return;
     const timer = setTimeout(async () => {
@@ -2205,8 +2205,10 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:dismiss-roll', async ({ sessionId, rollId } = {}) => {
         const session = await GameSession.findByPk(sessionId);
         if (!session) return;
-        const participant = isDm(socket) ? null : await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
-        if (!isDm(socket) && !participant) return;
+        // Este evento elimina la card para toda la sala y por eso pertenece
+        // exclusivamente al DM anfitrión. Los jugadores la ocultan sólo en
+        // su cliente y no modifican el estado compartido.
+        if (!isDm(socket) || String(session.dm_user_id) !== String(socket.user.id)) return;
         const roll = await GameRoll.findOne({ where: { id: rollId, session_id: session.id, dismissed: false } });
         if (!roll) return;
 

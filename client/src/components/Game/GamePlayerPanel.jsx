@@ -24,6 +24,7 @@ export default function GamePlayerPanel() {
   const [switchingSession, setSwitchingSession] = useState(false);
   const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
   const [initiativePrompt, setInitiativePrompt] = useState(false);
+  const [hiddenRollIds, setHiddenRollIds] = useState([]);
   const sessionDashboardRef = useRef(false);
   const [combatNoticeStartedAt] = useState(() => Date.now());
 
@@ -383,6 +384,8 @@ export default function GamePlayerPanel() {
           onCombatTokenTarget={token => combatTargeting?.execute?.(combatTargeting.action, [token.id])}
           onCombatAreaTarget={area => combatTargeting?.execute?.(combatTargeting.action, [], area)}
           onMoveToken={(tokenId, x, y) => socket.emit('game:move-token', { sessionId: session.id, tokenId, x, y })}
+          hiddenRollIds={hiddenRollIds}
+          onDismissRoll={rollId => setHiddenRollIds(current => current.includes(String(rollId)) ? current : [...current, String(rollId)])}
           onResolveRoll={resolveDiceRoll}
         />
         <div className="game-player-stage-note">

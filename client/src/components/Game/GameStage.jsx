@@ -110,6 +110,7 @@ export default function GameStage({
   onClearVfx,
   onDismissRoll,
   onResolveRoll,
+  hiddenRollIds = [],
   onRollCharacter,
   combatTargeting,
   onCombatTokenTarget,
@@ -1205,7 +1206,7 @@ export default function GameStage({
           })}
         </div>
       )}
-      <DiceRollOverlay rolls={session?.rolls || []} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} />
+      <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} />
       {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && combatPointer?.actionKey === combatTargeting.action?.key && (() => {
         const action = combatTargeting.action;
         const shape = action.area?.shape || 'circle';
