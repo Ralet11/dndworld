@@ -11,7 +11,7 @@ function actionIcon(action) {
   return <Swords size={14} />;
 }
 
-export default function TurnActionPanel({ session, socket, isMyTurn, targeting, onTargetingChange, onError, actorName = null, actorCharacterId = null, mode = 'player' }) {
+export default function TurnActionPanel({ session, socket, isMyTurn, targeting, onTargetingChange, onError, actorName = null, actorCharacterId = null, mode = 'player', showReadOnlyActions = false }) {
   const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(null);
@@ -84,15 +84,20 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
 
   const visibleActions = actions.filter(action => (action.economy || 'action') === activeEconomy);
   const reactions = actions.filter(action => action.economy === 'reaction');
+  const hasReactions = reactions.length > 0;
   const adjustTracker = (trackerKey, delta) => socket?.emit('game:adjust-tracker', { sessionId: session.id, characterId: actorCharacterId, trackerKey, delta }, response => {
     if (!response?.ok) onError?.(response?.message || 'No se pudo actualizar el rastreador.');
     else refresh();
   });
 
+  useEffect(() => {
+    if (!isMyTurn && showReadOnlyActions && hasReactions) setActiveEconomy('reaction');
+  }, [hasReactions, isMyTurn, showReadOnlyActions]);
+
   const isCombatMode = session.combat_state?.mode === 'COMBAT' || (session.combat_state?.mode == null && (session.turn_order || []).length > 0);
   if (session.status !== 'LIVE' || !isCombatMode) return null;
 
-  if (!isMyTurn) {
+  if (!isMyTurn && !showReadOnlyActions) {
     if (!reactions.length) return null;
     return (
       <section className="turn-reaction-panel" aria-label="Reacciones disponibles">
@@ -105,7 +110,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   return (
     <section className={`turn-action-panel${targeting ? ' is-targeting' : ''}${collapsed ? ' is-collapsed' : ''}`} aria-label="Acciones del turno">
       <header>
-        <div><span>{mode === 'dm' ? 'Turno del NPC' : 'Tu turno'}</span><strong>{targeting ? 'Elige un objetivo' : actorName ? `Acciones de ${actorName}` : 'Panel de acción'}</strong></div>
+        <div><span>{mode === 'dm' ? (isMyTurn ? 'Turno del NPC' : 'Fuera de turno') : 'Tu turno'}</span><strong>{targeting ? 'Elige un objetivo' : actorName ? `Acciones de ${actorName}` : 'Panel de acción'}</strong></div>
         <button type="button" onClick={() => setCollapsed(current => !current)} aria-label={collapsed ? 'Abrir acciones' : 'Contraer acciones'}>{collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</button>
       </header>
       {!collapsed && (

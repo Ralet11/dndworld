@@ -4389,6 +4389,9 @@ a:focus-visible {
 .game-token-actions-list > article small { color: #b28e4d; font-size: 6px; text-transform: uppercase; }
 .game-token-actions-list > article p { margin-top: 4px; color: #bea567; font-size: 7px; }
 .game-token-actions-list > article > span { display: block; margin-top: 4px; color: #7c847d; font-size: 7px; line-height: 1.45; }
+.game-token-actions-list > .turn-action-panel { margin-top: 7px; border: 1px solid #35433b; box-shadow: none; }
+.game-token-actions-list > .turn-action-panel > header { min-height: 40px; }
+.game-token-actions-list > .turn-action-panel .turn-action-list { max-height: none; }
 .game-token-empty-detail { margin: 6px 0 0; padding: 8px; color: #646d66; border: 1px dashed #303a35; font-size: 7px; text-align: center; }
 .game-token-private-notes { background: rgba(138, 94, 34, .06); }
 .game-token-private-notes > p { margin: 7px 0 0; color: #aaa194; font-size: 8px; line-height: 1.6; white-space: pre-line; }

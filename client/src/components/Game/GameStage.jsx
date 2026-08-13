@@ -4,6 +4,7 @@ import { Check, Circle, Copy, Equal, Eraser, Eye, EyeOff, FlaskConical, Flame, H
 import API_URL from '../../config';
 import DiceRollOverlay from './DiceRollOverlay';
 import GameBoardVfx from './GameBoardVfx';
+import TurnActionPanel from './TurnActionPanel';
 
 function normalizedNpcType(token) {
   return String(token?.character?.npc_type || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -115,7 +116,9 @@ export default function GameStage({
   combatTargeting,
   onCombatTokenTarget,
   onCombatAreaTarget,
-  onActiveTokenClick,
+  combatSocket,
+  onCombatTargetingChange,
+  onCombatError,
   toolbarHost,
 }) {
   const stageRef = useRef(null);
@@ -1402,10 +1405,6 @@ export default function GameStage({
             </div>
           )}
 
-          {isDm && !menuToken.owner_user_id && session?.combat_state?.mode === 'COMBAT' && (
-            <button className="game-token-use-actions" onClick={() => { onActiveTokenClick?.(menuToken); setContextMenu(null); }}><Swords size={13} /> {Number(menuToken.character_id) === Number(activeCharacterId) ? 'Abrir acciones de turno' : 'Abrir ficha y reacciones'}</button>
-          )}
-
           {canSeeFullSheet && (
             <>
               <nav className="game-token-detail-tabs">
@@ -1446,7 +1445,23 @@ export default function GameStage({
                 {detailTab === 'actions' && (
                   <section className="game-token-actions-list">
                     <header><span>Acciones y habilidades</span><small>{menuActions.length}</small></header>
-                    {menuActions.map(action => (
+                    {isDm && !menuToken.owner_user_id && session?.combat_state?.mode === 'COMBAT' && combatSocket ? (
+                      <TurnActionPanel
+                        session={session}
+                        socket={combatSocket}
+                        isMyTurn={Number(menuToken.character_id) === Number(activeCharacterId)}
+                        targeting={combatTargeting}
+                        onTargetingChange={next => {
+                          onCombatTargetingChange?.(next);
+                          if (next) setContextMenu(null);
+                        }}
+                        onError={onCombatError}
+                        actorName={menuCharacter?.name || menuToken.label}
+                        actorCharacterId={menuToken.character_id}
+                        mode="dm"
+                        showReadOnlyActions
+                      />
+                    ) : menuActions.map(action => (
                       <article key={action.id}>
                         <div><strong>{action.name}</strong><small>{action.action_type}</small></div>
                         <p>{[
@@ -1458,7 +1473,7 @@ export default function GameStage({
                         {action.description && <span>{action.description}</span>}
                       </article>
                     ))}
-                    {!menuActions.length && <p className="game-token-empty-detail">Sin acciones estructuradas todavía.</p>}
+                    {!menuActions.length && !(isDm && !menuToken.owner_user_id && session?.combat_state?.mode === 'COMBAT') && <p className="game-token-empty-detail">Sin acciones estructuradas todavía.</p>}
                   </section>
                 )}
 

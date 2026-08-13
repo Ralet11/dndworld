@@ -43,7 +43,6 @@ import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';
 import DiceTray from '../components/Game/DiceTray';
 import GameAudioControl from './GameAudioControl';
-import TurnActionPanel from '../components/Game/TurnActionPanel';
 import { deriveWorldConditions } from '../utils/worldTime';
 
 function resolveMediaUrl(value) {
@@ -91,7 +90,6 @@ export default function GameMasterPanel() {
   const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
   const [stageToolbarHost, setStageToolbarHost] = useState(null);
   const [combatTargeting, setCombatTargeting] = useState(null);
-  const [selectedActiveTokenId, setSelectedActiveTokenId] = useState(null);
   const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
   const [combatNoticeStartedAt] = useState(() => Date.now());
   const [worldState, setWorldState] = useState({ global_time: '12:00', day_period: 'Día', temperature_c: 24 });
@@ -555,7 +553,6 @@ export default function GameMasterPanel() {
   const allReady = session.participants.length > 0 && session.participants.every(participant => participant.is_ready);
   const activeCharacter = players.find(character => character.id === session.active_character_id)
     || session.tokens.find(token => token.character_id === session.active_character_id)?.character;
-  const selectedDmToken = session.tokens.find(token => token.id === selectedActiveTokenId && !token.owner_user_id);
   const initiativeState = session.combat_state?.initiative || {};
   const awaitingInitiative = Boolean(session.combat_state?.awaitingInitiative);
   const pendingInitiative = new Set((session.combat_state?.pendingInitiative || []).map(Number));
@@ -729,7 +726,9 @@ export default function GameMasterPanel() {
                 combatTargeting={combatTargeting}
                 onCombatTokenTarget={token => combatTargeting?.execute?.(combatTargeting.action, [token.id])}
                 onCombatAreaTarget={area => combatTargeting?.execute?.(combatTargeting.action, [], area)}
-                onActiveTokenClick={token => setSelectedActiveTokenId(token.id)}
+                combatSocket={socket}
+                onCombatTargetingChange={setCombatTargeting}
+                onCombatError={setError}
                 onMoveToken={(tokenId, x, y) => emit('game:move-token', { sessionId: session.id, tokenId, x, y })}
                 onMoveTokens={moves => emit('game:move-tokens', { sessionId: session.id, moves })}
                 onAdjustHp={(tokenId, delta) => emit('game:adjust-token-hp', { sessionId: session.id, tokenId, delta })}
@@ -940,20 +939,6 @@ export default function GameMasterPanel() {
                   <div><span>Tokens</span><strong>{session.tokens.length}</strong></div>
                 </div>
                 <DiceTray onRoll={rollDice} />
-                {session.status === 'LIVE'
-                  && selectedDmToken && (
-                    <TurnActionPanel
-                      session={session}
-                      socket={socket}
-                      isMyTurn={Number(selectedDmToken.character_id) === Number(session.active_character_id)}
-                      targeting={combatTargeting}
-                      onTargetingChange={setCombatTargeting}
-                      onError={setError}
-                      actorName={selectedDmToken.character?.name || selectedDmToken.label}
-                      actorCharacterId={selectedDmToken.character_id}
-                      mode="dm"
-                    />
-                  )}
                 <div className="game-turn-card game-initiative-card">
                   <header><div><span>Control de iniciativa</span><strong>{awaitingInitiative ? `Esperando ${pendingInitiative.size} tirada(s)` : activeCharacter?.name || 'Sin iniciativa'}</strong></div>{session.combat_state?.mode === 'COMBAT' ? <button className="game-combat-end-button" onClick={() => setCombatMode('NARRATIVE')}>Finalizar combate</button> : <small>Narrativa</small>}</header>
                   {awaitingInitiative && <button className="game-initiative-complete" onClick={() => socket.emit('game:complete-initiative', { sessionId: session.id }, response => { if (!response?.ok) setError(response?.message || 'No se pudo completar la iniciativa.'); })}>Tirar automáticamente las pendientes</button>}
