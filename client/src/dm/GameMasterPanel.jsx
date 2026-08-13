@@ -92,6 +92,7 @@ export default function GameMasterPanel() {
   const [stageToolbarHost, setStageToolbarHost] = useState(null);
   const [combatTargeting, setCombatTargeting] = useState(null);
   const [selectedActiveTokenId, setSelectedActiveTokenId] = useState(null);
+  const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
   const [worldState, setWorldState] = useState({ global_time: '12:00', day_period: 'Día', temperature_c: 24 });
   const deferredAssetSearch = useDeferredValue(assetSearch);
 
@@ -599,6 +600,16 @@ export default function GameMasterPanel() {
       return sceneNpcOrder.get(first.id) - sceneNpcOrder.get(second.id);
     });
   const statusLabel = session.status === 'WAITING' ? 'Sala de espera' : session.status === 'LIVE' ? 'En vivo' : session.status === 'PAUSED' ? 'Pausada' : 'Finalizada';
+  const dmControlledCharacterIds = new Set(
+    session.tokens.filter(token => !token.owner_user_id).map(token => Number(token.character_id)),
+  );
+  const pendingCombatNotice = (session.combat_actions || []).find(action => {
+    const belongsToDm = String(action.actor_user_id) === String(user.id)
+      || dmControlledCharacterIds.has(Number(action.actor_character_id));
+    if (!belongsToDm || dismissedCombatNotices.includes(String(action.id))) return false;
+    return action.status === 'DAMAGE_READY'
+      || (action.status === 'COMPLETED' && action.attack && action.attack.hit === false);
+  });
 
   const reorderInitiative = (characterId, targetIndex) => {
     const order = initiativeEntries.map(entry => entry.id);
@@ -613,6 +624,12 @@ export default function GameMasterPanel() {
   const setCombatMode = mode => {
     socket?.emit('game:set-combat-mode', { sessionId: session.id, mode }, response => {
       if (!response?.ok) setError(response?.message || 'No se pudo cambiar el modo de partida.');
+    });
+  };
+
+  const rollPendingDamage = action => {
+    socket?.emit('game:roll-action-damage', { sessionId: session.id, combatActionId: action.id }, response => {
+      if (!response?.ok) setError(response?.message || 'No se pudo iniciar la tirada de daño.');
     });
   };
   const WorldPeriodIcon = worldState.day_period === 'Día' ? Sun : worldState.day_period === 'Tarde' ? Sunset : Moon;
@@ -649,6 +666,21 @@ export default function GameMasterPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+
+      {pendingCombatNotice && (
+        <div className={`game-combat-result-prompt${pendingCombatNotice.status === 'DAMAGE_READY' ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">
+          <div>
+            <span>{pendingCombatNotice.status === 'DAMAGE_READY' ? 'Impacto confirmado' : 'El ataque no impacta'}</span>
+            <h2>{pendingCombatNotice.status === 'DAMAGE_READY' ? '¡Éxito!' : 'Fallo'}</h2>
+            <p>{pendingCombatNotice.actor_name} · {pendingCombatNotice.action_name}{pendingCombatNotice.attack ? ` · ${pendingCombatNotice.attack.total} contra CA ${pendingCombatNotice.attack.targetAc}` : ''}</p>
+            {pendingCombatNotice.status === 'DAMAGE_READY' ? (
+              <button onClick={() => rollPendingDamage(pendingCombatNotice)}>Tirar daño ({pendingCombatNotice.damage_formula || 'daño'})</button>
+            ) : (
+              <button onClick={() => setDismissedCombatNotices(current => [...current, String(pendingCombatNotice.id)])}>Continuar</button>
+            )}
+          </div>
+        </div>
+      )}
 
         <main className="game-scene-workspace">
           <section className="game-scene-frame">
@@ -971,7 +1003,10 @@ export default function GameMasterPanel() {
                           {index === 0 && action.status === 'COMPLETED' && !action.undone_at && (
                             <button type="button" title="Deshacer última acción" onClick={() => socket.emit('game:undo-action', { sessionId: session.id, combatActionId: action.id }, response => { if (!response?.ok) setError(response?.message || 'No se pudo deshacer la acción.'); })}><Undo2 size={12} /></button>
                           )}
-                          {['PENDING', 'ATTACK_ROLL', 'EFFECT_ROLL'].includes(action.status) && (
+                          {action.status === 'DAMAGE_READY' && (
+                            <button type="button" title="Tirar daño" onClick={() => rollPendingDamage(action)}><Swords size={12} /></button>
+                          )}
+                          {['PENDING', 'ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL'].includes(action.status) && (
                             <button type="button" title="Cancelar acción bloqueada" onClick={() => socket.emit('game:cancel-action', { sessionId: session.id, combatActionId: action.id }, response => { if (!response?.ok) setError(response?.message || 'No se pudo cancelar la acción.'); })}><X size={12} /></button>
                           )}
                         </article>

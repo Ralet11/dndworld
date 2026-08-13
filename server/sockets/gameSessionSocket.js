@@ -1302,7 +1302,7 @@ function registerGameSessionSocket(io, socket) {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !session.turn_order?.length) return;
         if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
-        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
+        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción de combate pendiente. Resuélvela o cancélala desde el registro de combate.');
         const nextIndex = session.turn_index + 1;
         if (nextIndex >= session.turn_order.length) {
             session.turn_index = 0;
@@ -1325,7 +1325,7 @@ function registerGameSessionSocket(io, socket) {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !session.turn_order?.length) return;
         if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
-        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
+        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción de combate pendiente. Resuélvela o cancélala desde el registro de combate.');
         if (session.turn_index <= 0) {
             session.turn_index = session.turn_order.length - 1;
             session.round = Math.max(1, session.round - 1);
@@ -1347,7 +1347,7 @@ function registerGameSessionSocket(io, socket) {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
         if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
-        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción resolviendo dados. Espera o cancélala desde el registro de combate.');
+        if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción de combate pendiente. Resuélvela o cancélala desde el registro de combate.');
         const normalizedId = Number(characterId);
         let turnIndex = session.turn_order.map(Number).indexOf(normalizedId);
         if (turnIndex < 0) {
@@ -1915,7 +1915,9 @@ function registerGameSessionSocket(io, socket) {
             const actorToken = session.tokens.find(token => Number(token.character_id) === Number(combatAction.actor_character_id));
             const expression = parseDiceExpression(combatAction.action_snapshot?.damage || combatAction.action_snapshot?.healing);
             if (!actorToken?.character || !expression) return reply({ ok: false, message: 'No se pudo preparar el daño de esta acción.' });
-            const effectRoll = await createCombatRoll(io, session, combatAction.actor_user_id, actorToken.character, {
+            // La tirada debe mostrarse a quien pulsa "Tirar daño". Para NPCs
+            // normalmente es el DM, aunque la acción conserve otro actor_user_id.
+            const effectRoll = await createCombatRoll(io, session, socket.user.id, actorToken.character, {
                 ...expression,
                 quantity: combatAction.result?.attack?.critical && combatAction.action_snapshot?.damage ? expression.quantity * 2 : expression.quantity,
                 label: `${combatAction.action_name} · ${combatAction.action_snapshot?.healing ? 'curación' : 'daño'}`,
