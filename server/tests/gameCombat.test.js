@@ -5,6 +5,7 @@ const {
     combatRangePct,
     hpAfterDamage,
     hpAfterHealing,
+    npcActionProfile,
     parseDiceExpression,
     resolveTargetTokens,
     spellProfile,
@@ -124,6 +125,21 @@ test('reaction features expose their trigger and mechanical effect', () => {
     assert.equal(actions[0].reactionEffect.type, 'HALVE_DAMAGE');
     assert.equal(actions[1].reactionTrigger, 'DAMAGE_TAKEN');
     assert.equal(actions[1].reactionEffect.type, 'COUNTER_DAMAGE');
+});
+
+test('NPC counter reactions model their save, push and condition', () => {
+    const action = npcActionProfile({
+        id: 44,
+        name: 'Contraataque Arcano',
+        action_type: 'reacción',
+        save_ability: 'DEX',
+        save_dc: 13,
+        description: 'Cuando es alcanzado por un ataque cuerpo a cuerpo, fuerza al atacante a salvar. Si falla, es empujado 10 pies y cae derribado.',
+    });
+    assert.equal(action.reactionTrigger, 'ATTACK_HIT_BEFORE_DAMAGE');
+    assert.deepEqual(action.reactionEffect, {
+        type: 'FORCED_SAVE', saveAbility: 'DEX', saveDc: 13, pushFeet: 10, condition: 'Derribado', meleeOnly: true,
+    });
 });
 
 test('known utility spells do not apply their descriptive damage on cast', () => {

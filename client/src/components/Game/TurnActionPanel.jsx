@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, CircleDot, Crosshair, HeartPulse, LoaderCircle, Minus, MousePointer2, Plus, Sparkles, Swords, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, CircleDot, Crosshair, HeartPulse, LoaderCircle, Minus, MousePointer2, Plus, Sparkles, Swords, X } from 'lucide-react';
 
 const ECONOMY_LABELS = { action: 'Acciones', bonus: 'Bonus', reaction: 'Reacciones' };
+const TRIGGER_LABELS = {
+  ATTACK_HIT_BEFORE_DAMAGE: 'Cuando un ataque impacta, antes del daño',
+  DAMAGE_TAKEN: 'Después de recibir daño',
+  ENEMY_LEAVES_REACH: 'Cuando un enemigo abandona tu alcance',
+  SPELL_CAST_NEARBY: 'Cuando se lanza un conjuro cercano',
+  ALLY_ATTACKED_NEARBY: 'Cuando atacan a un aliado cercano',
+};
 
 function actionIcon(action) {
   if (action.healing) return <HeartPulse size={14} />;
@@ -18,6 +25,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   const [collapsed, setCollapsed] = useState(false);
   const [activeEconomy, setActiveEconomy] = useState('action');
   const [resourceSummary, setResourceSummary] = useState({ spellSlots: {}, trackers: [] });
+  const [expandedActionKey, setExpandedActionKey] = useState(null);
   const submittingRef = useRef(false);
 
   const refresh = () => {
@@ -129,13 +137,36 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
               </nav>
               <div className="turn-action-list">
                 {loading && <div className="turn-action-loading"><LoaderCircle size={16} /> Preparando acciones...</div>}
-                {!loading && visibleActions.map(action => (
-                  <button type="button" key={action.key} className={action.available ? '' : 'is-disabled'} disabled={!action.available || Boolean(submitting)} onClick={() => choose(action)} title={action.unavailableReason || action.description}>
-                    <i>{submitting === action.key ? <LoaderCircle className="is-spinning" size={14} /> : actionIcon(action)}</i>
-                    <span><strong>{action.name}</strong><small>{action.summary || action.description || 'Acción de combate'}</small></span>
-                    <em>{action.target === 'self' ? 'Usar' : String(action.target).startsWith('area-') ? 'Área' : 'Elegir'}</em>
-                  </button>
-                ))}
+                {!loading && visibleActions.map(action => {
+                  const expanded = expandedActionKey === action.key;
+                  return (
+                    <article key={action.key} className={`turn-action-card${action.available ? '' : ' is-disabled'}${expanded ? ' is-expanded' : ''}`}>
+                      <button type="button" className="turn-action-inspect" onClick={() => setExpandedActionKey(current => current === action.key ? null : action.key)} aria-expanded={expanded}>
+                        <i>{actionIcon(action)}</i>
+                        <span><strong>{action.name}</strong><small>{action.summary || action.description || 'Acción de combate'}</small></span>
+                        {expanded ? <ChevronUp size={13} /> : <ChevronRight size={13} />}
+                      </button>
+                      {expanded && (
+                        <div className="turn-action-detail">
+                          <p>{action.description || 'Esta habilidad no tiene una descripción cargada.'}</p>
+                          <dl>
+                            <div><dt>Economía</dt><dd>{action.economy === 'reaction' ? 'Reacción' : action.economy === 'bonus' ? 'Acción bonus' : 'Acción'}</dd></div>
+                            {action.reactionTrigger && <div><dt>Disparador</dt><dd>{TRIGGER_LABELS[action.reactionTrigger] || action.reactionTrigger}</dd></div>}
+                            {action.range != null && <div><dt>Alcance</dt><dd>{Number(action.range) ? `${action.range} pies` : 'Propio'}</dd></div>}
+                            {action.attackBonus != null && <div><dt>Ataque</dt><dd>{Number(action.attackBonus) >= 0 ? '+' : ''}{action.attackBonus}</dd></div>}
+                            {action.damage && <div><dt>Daño</dt><dd>{action.damage} {action.damageType || ''}</dd></div>}
+                            {action.saveDc && <div><dt>Salvación</dt><dd>{action.saveAbility || '—'} CD {action.saveDc}</dd></div>}
+                            {action.resource && <div><dt>Recurso</dt><dd>{action.unavailableReason || action.summary || 'Uso limitado'}</dd></div>}
+                          </dl>
+                          {!action.available && <small className="turn-action-lock-reason">{action.unavailableReason}</small>}
+                          <button type="button" className="turn-action-use" disabled={!action.available || Boolean(submitting)} onClick={() => choose(action)}>
+                            {submitting === action.key ? <LoaderCircle className="is-spinning" size={13} /> : action.target === 'self' ? 'Usar habilidad' : String(action.target).startsWith('area-') ? 'Elegir área' : 'Elegir objetivo'}
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
                 {!loading && !visibleActions.length && <p className="turn-action-empty">No hay acciones configuradas en esta categoría.</p>}
               </div>
               <div className="turn-resource-panel">

@@ -560,7 +560,10 @@ async function openReactionWindow(io, session, {
     context = {},
 }) {
     if (activeReactionWindow(session)) return false;
-    const options = await eligibleReactionOptions(session, reactorToken, trigger);
+    const candidateOptions = await eligibleReactionOptions(session, reactorToken, trigger);
+    const options = candidateOptions.filter(action => !action.reactionEffect?.meleeOnly || (
+        sourceToken && pointDistance(reactorToken, sourceToken) <= 8
+    ));
     if (!options.length) return false;
     const id = randomUUID();
     const expiresAt = new Date(Date.now() + 15000).toISOString();
@@ -676,6 +679,40 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
             }
         } else if (effect.type === 'COUNTER_DAMAGE' || effect.type === 'OPPORTUNITY_ATTACK') {
             if (parentAction) parentAction.status = window.resumeStatus;
+        } else if (effect.type === 'FORCED_SAVE') {
+            const sourceToken = session.tokens.find(token => String(token.id) === String(window.sourceTokenId));
+            const natural = randomInt(1, 21);
+            const bonus = savingThrowBonus(sourceToken?.character, effect.saveAbility);
+            const total = natural + bonus;
+            const success = total >= Number(effect.saveDc || 10);
+            if (sourceToken && !success) {
+                if (effect.condition) {
+                    const conditions = Array.isArray(sourceToken.conditions) ? sourceToken.conditions : [];
+                    sourceToken.conditions = [...new Set([...conditions, effect.condition])];
+                }
+                if (Number(effect.pushFeet) > 0) {
+                    const reactorToken = session.tokens.find(token => String(token.id) === String(window.reactorTokenId));
+                    const dx = Number(sourceToken.x) - Number(reactorToken?.x);
+                    const dy = Number(sourceToken.y) - Number(reactorToken?.y);
+                    const length = Math.hypot(dx, dy) || 1;
+                    const distance = Math.max(4, Number(effect.pushFeet) * 0.8);
+                    sourceToken.x = clamp(Number(sourceToken.x) + (dx / length) * distance);
+                    sourceToken.y = clamp(Number(sourceToken.y) + (dy / length) * distance);
+                }
+                await sourceToken.save();
+                io.to(roomName(session.id)).emit('game:token-moved', { tokenId: sourceToken.id, x: sourceToken.x, y: sourceToken.y });
+                io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: sourceToken.id, conditions: sourceToken.conditions || [] });
+            }
+            if (parentAction) {
+                parentAction.status = window.resumeStatus;
+                parentAction.result = {
+                    ...(parentAction.result || {}),
+                    reaction: { name: option.name, effect: effect.type, save: { ability: effect.saveAbility, dc: effect.saveDc, natural, bonus, total, success }, condition: !success ? effect.condition : null, pushFeet: !success ? effect.pushFeet : 0 },
+                    summary: success
+                        ? `${window.sourceName} supera la salvación de ${option.name}.`
+                        : `${window.sourceName} falla la salvación de ${option.name}${effect.pushFeet ? `, es empujado ${effect.pushFeet} pies` : ''}${effect.condition ? ` y queda ${effect.condition.toLowerCase()}` : ''}.`,
+                };
+            }
         } else if (parentAction) parentAction.status = window.resumeStatus;
         if (parentAction) await parentAction.save();
     } else if (parentAction) {

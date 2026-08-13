@@ -81,6 +81,14 @@ function inferReactionEffect(name, description, override = {}) {
     if (/absorber elementos|absorb elements/.test(text)) return { type: 'RESIST_TRIGGERING_DAMAGE' };
     if (/contrahechizo|counterspell/.test(text)) return { type: 'CANCEL_SPELL' };
     if (/oportunidad/.test(text)) return { type: 'OPPORTUNITY_ATTACK' };
+    if (override.save_dc || override.saveDc) return {
+        type: 'FORCED_SAVE',
+        saveAbility: override.save_ability || override.saveAbility || 'DEX',
+        saveDc: Number(override.save_dc || override.saveDc),
+        pushFeet: Number(text.match(/empujad[oa]\s+(\d+)\s*(?:pies|pie|feet)/)?.[1]) || 0,
+        condition: /derribad|prone/.test(text) ? 'Derribado' : null,
+        meleeOnly: /cuerpo a cuerpo|melee/.test(text),
+    };
     return { type: 'CUSTOM' };
 }
 
@@ -275,7 +283,7 @@ function npcActionProfile(action, allActions = []) {
         description: action.description,
         economy,
         reactionTrigger: economy === 'reaction' ? inferReactionTrigger(action.name, action.description, override) : null,
-        reactionEffect: economy === 'reaction' ? inferReactionEffect(action.name, action.description, override) : null,
+        reactionEffect: economy === 'reaction' ? inferReactionEffect(action.name, action.description, { ...action.toJSON?.(), ...action, ...override }) : null,
         target,
         range: Number(String(source.reach || '').match(/\d+/)?.[0]) || 5,
         attackBonus: source.attack_bonus == null ? null : Number(source.attack_bonus),
@@ -540,6 +548,7 @@ module.exports = {
     hpAfterHealing,
     loadCombatCharacter,
     parseDiceExpression,
+    npcActionProfile,
     REACTION_TRIGGERS,
     validRelationship,
     pointDistance,
