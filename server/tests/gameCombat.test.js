@@ -142,6 +142,39 @@ test('NPC counter reactions model their save, push and condition', () => {
     });
 });
 
+test('Vorcan and Imperial actions become executable profiles', () => {
+    assert.equal(npcActionProfile({ id: 1, name: 'Escudo Arcano', action_type: 'rasgo' }), null);
+    const chain = npcActionProfile({ id: 2, name: 'Cadena Rota', action_type: 'acción', save_ability: 'STR', save_dc: 13, reach: '30 pies', description: 'Si falla queda apresado.' });
+    assert.equal(chain.target, 'enemy');
+    assert.deepEqual(chain.effect.conditions, ['Apresado']);
+    const fire = npcActionProfile({ id: 3, name: 'Fuego Sectorial', action_type: 'acción', damage_dice: '2d6', damage_type: 'Fuego', save_ability: 'DEX', save_dc: 15, recharge: '5–6', description: 'Salvación para mitad.' });
+    assert.equal(fire.target, 'area-enemy');
+    assert.equal(fire.halfOnSave, true);
+    assert.equal(fire.resource.type, 'recharge');
+    const dagger = npcActionProfile({ id: 4, name: 'Daga Ígnea', action_type: 'acción', attack_bonus: 5, damage_dice: '1d4', damage_bonus: 2, damage_type: 'Perforante', description: 'Además 1d6 de fuego.' });
+    assert.deepEqual(dagger.extraDamage, ['1d6']);
+    assert.equal(dagger.extraDamageType, 'fuego');
+});
+
+test('party profiles preserve dual effects, weapon jams and persistent spells', () => {
+    const character = {
+        id: 8, level: 5, proficiency_bonus: 3,
+        abilityScores: [{ ability: 'CHA', base_value: 18 }, { ability: 'DEX', base_value: 16 }],
+        custom_features: [
+            { name: 'Acorde radiante', kind: 'Bonus', resource: '4/Descanso Largo (MOD CAR)', description: 'Causa 1d4 + CAR de daño radiante y cura 1d8 PV a una criatura elegida que esté a 15 pies.' },
+            { name: 'Escupefuego · Munición normal', kind: 'Accion', description: 'Disparo con DES + competencia. Daño: 1d8 + DES.' },
+        ],
+    };
+    const [chord, firearm] = customFeatureProfiles(character);
+    assert.equal(chord.secondaryHealing, '1d8');
+    assert.equal(chord.secondaryHealingRange, 15);
+    assert.equal(firearm.jamOnNaturalBelow, 7);
+    const hex = spellProfile({ id: 5, slug: 'hex', name: 'Hex', level: 1, range: '90 feet', casting_time: '1 Bonus Action', desc: 'Curse a target.' }, character);
+    const agathys = spellProfile({ id: 6, slug: 'armor-of-agathys', name: 'Armor of Agathys', level: 1, range: 'Self', casting_time: '1 Bonus Action', desc: 'Gain temporary hit points.' }, character);
+    assert.equal(hex.effect.type, 'MARK_EXTRA_DAMAGE');
+    assert.equal(agathys.effect.type, 'TEMP_HP_RETALIATION');
+});
+
 test('known utility spells do not apply their descriptive damage on cast', () => {
     const character = { level: 5, class_slug: 'warlock', proficiency_bonus: 3, abilityScores: [{ ability: 'CHA', base_value: 16 }] };
     const hex = spellProfile({ id: 1, slug: 'hex', name: 'Hex', level: 1, range: '90 feet', casting_time: '1 Bonus Action', desc: 'You deal an extra 1d6 Necrotic damage whenever you hit.' }, character);

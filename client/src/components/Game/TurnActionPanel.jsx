@@ -51,7 +51,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
     if (economies.length && !economies.includes(activeEconomy)) setActiveEconomy(economies[0]);
   }, [activeEconomy, economies]);
 
-  const execute = (action, targetTokenIds = [], area = null) => {
+  const execute = (action, targetTokenIds = [], area = null, secondaryTargetTokenId = null) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(action.key);
@@ -60,6 +60,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
       characterId: actorCharacterId,
       actionKey: action.key,
       targetTokenIds,
+      secondaryTargetTokenId,
       area,
       slotLevel: action.selectedSlotLevel,
     }, response => {
@@ -77,6 +78,26 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   const choose = action => {
     if (!action.available || submitting || submittingRef.current) return;
     if (action.economy === 'reaction' && session.combat_state?.reactionWindow?.id) return execute(action);
+    if (action.movement) {
+      onTargetingChange?.({
+        action,
+        instruction: `Marca en el tablero el destino de ${action.name} (máximo ${action.movement.maxFeet} pies).`,
+        execute,
+      });
+      return;
+    }
+    if (action.secondaryHealing) {
+      onTargetingChange?.({
+        action,
+        instruction: `Selecciona primero el objetivo que recibirá el daño de ${action.name}.`,
+        execute: (_selectedAction, primaryTargetIds) => onTargetingChange?.({
+          action,
+          instruction: `Ahora selecciona una criatura aliada a ${action.secondaryHealingRange || 15} pies para recibir ${action.secondaryHealing} de curación.`,
+          execute: (_healingAction, healingTargetIds) => execute(action, primaryTargetIds, null, healingTargetIds[0]),
+        }),
+      });
+      return;
+    }
     if (action.target === 'self') return execute(action);
     if (!['enemy', 'ally'].includes(action.target) && !String(action.target).startsWith('area-')) {
       onError?.('Esta habilidad no tiene un objetivo de combate configurado.');

@@ -32,8 +32,8 @@ const SPELL_PROFILES = {
     'thunderwave': { save: 'CON', damage: '2d8', damageType: 'trueno', target: 'area-enemy', area: { shape: 'square', feet: 15 }, halfOnSave: true, slot: true },
     'magic-missile': { damage: '3d4+3', damageType: 'fuerza', target: 'enemy', range: 120, slot: true },
     'acid-splash': { save: 'DEX', damage: '1d6', damageType: 'acido', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 5 }, cantripScale: true },
-    hex: { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true },
-    'armor-of-agathys': { utility: true, target: 'self', range: 0, economy: 'bonus', slot: true, temporaryHp: 5 },
+    hex: { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true, effect: { type: 'MARK_EXTRA_DAMAGE', damage: '1d6', damageType: 'necrotico' } },
+    'armor-of-agathys': { utility: true, target: 'self', range: 0, economy: 'bonus', slot: true, temporaryHp: 5, effect: { type: 'TEMP_HP_RETALIATION', damage: 5, damageType: 'frio' } },
     shield: { utility: true, target: 'self', range: 0, economy: 'reaction', slot: true, trigger: 'ATTACK_HIT_BEFORE_DAMAGE', reactionEffect: { type: 'AC_BONUS', bonus: 5 } },
     'hellish-rebuke': { save: 'DEX', damage: '2d10', damageType: 'fuego', target: 'enemy', range: 60, economy: 'reaction', slot: true, trigger: 'DAMAGE_TAKEN', reactionEffect: { type: 'COUNTER_DAMAGE' } },
     'absorb-elements': { utility: true, target: 'self', range: 0, economy: 'reaction', slot: true, trigger: 'ATTACK_HIT_BEFORE_DAMAGE', reactionEffect: { type: 'RESIST_TRIGGERING_DAMAGE' } },
@@ -45,6 +45,27 @@ const CUSTOM_SPELL_ALIASES = {
     'ilusion menor': 'minor-illusion',
     maleficio: 'hex',
     'armadura de agathys': 'armor-of-agathys',
+};
+
+const NPC_ACTION_PROFILES = {
+    'cadena rota': { target: 'enemy', range: 30, effect: { type: 'SAVE_CONDITION', conditions: ['Apresado'] } },
+    'daga corta': { extraDamage: ['1d6'], extraDamageType: 'veneno' },
+    'ancla de sombra': { target: 'area-enemy', range: 30, area: { shape: 'circle', feet: 10 }, effect: { type: 'SAVE_CONDITION', conditions: ['Asustado', 'Ralentizado'] } },
+    'grito quebrado': { trigger: 'ENEMY_LEAVES_REACH', reactionEffect: { type: 'FORCED_SAVE', saveAbility: 'CON', saveDc: 13, condition: 'Aturdido' } },
+    'daga ignea': { extraDamage: ['1d6'], extraDamageType: 'fuego' },
+    'fuego sectorial': { target: 'area-enemy', range: 60, area: { shape: 'square', feet: 15 }, halfOnSave: true },
+    'latigazo encadenado': { target: 'enemy', range: 60, halfOnSave: true },
+    'paso entre sombras': { target: 'self', movement: { type: 'TELEPORT', maxFeet: 15 } },
+};
+
+const CUSTOM_ACTION_PROFILES = {
+    'acorde menor': { effect: { type: 'GRANT_NEXT_ATTACK_ADVANTAGE' } },
+    'escupefuego · municion normal': { jamOnNaturalBelow: 7 },
+    'escupefuego · municion runica': { jamOnNaturalBelow: 7 },
+    'escupefuego · municion runica ii': { jamOnNaturalBelow: 7 },
+    'escupefuego · municion de brumante': { jamOnNaturalBelow: 7 },
+    'camara de ventilacion': { jamOnNaturalBelow: 7 },
+    'desatascar escupefuego': { clearWeaponJam: true },
 };
 
 const REACTION_TRIGGERS = Object.freeze({
@@ -105,6 +126,16 @@ function inferDamageType(text) {
         contundente: ['bludgeoning', 'contundente'], perforante: ['piercing', 'perforante'], cortante: ['slashing', 'cortante'],
     };
     return Object.entries(aliases).find(([, names]) => names.some(name => normalized.includes(`${name} damage`) || normalized.includes(`dano ${name}`) || normalized.includes(`dano de ${name}`)))?.[0] || null;
+}
+
+function inferSaveEffect(description) {
+    const text = normalize(description);
+    const conditions = [
+        [/apresad|restrained/, 'Apresado'], [/aturdid|stunned/, 'Aturdido'], [/cegad|blinded/, 'Cegado'],
+        [/asustad|frightened/, 'Asustado'], [/derribad|prone/, 'Derribado'], [/inconsciente|unconscious/, 'Inconsciente'],
+    ].filter(([pattern]) => pattern.test(text)).map(([, condition]) => condition);
+    if (/velocidad.*mitad|speed.*half/.test(text)) conditions.push('Ralentizado');
+    return conditions.length ? { type: 'SAVE_CONDITION', conditions: [...new Set(conditions)] } : null;
 }
 
 function signed(value) {
@@ -215,6 +246,7 @@ function spellProfile(spell, character) {
         damageType: named.damageType || inferDamageType(text),
         halfOnSave: Boolean(named.halfOnSave || /half as much|mitad del dano/.test(text)),
         temporaryHp: Number(named.temporaryHp) || null,
+        effect: named.effect || null,
         spellLevel: level,
         resource: level > 0 ? { type: 'spell-slot', level } : null,
         formula: scaledDamage || finalHealing,
@@ -265,16 +297,19 @@ function weaponProfile(item, character, slot) {
 }
 
 function npcActionProfile(action, allActions = []) {
+    const actionType = normalize(action.action_type || 'action');
+    if (/(rasgo|pasiv|trait)/.test(actionType)) return null;
+    const named = NPC_ACTION_PROFILES[normalize(action.name)] || {};
     const isMultiattack = normalize(action.name) === 'multiataque';
     const referencedAction = isMultiattack
         ? allActions.find(candidate => candidate.id !== action.id && candidate.attack_bonus != null && candidate.damage_dice)
         : null;
     const source = referencedAction || action;
     const sourceDice = parseDiceExpression(source.damage_dice);
-    const target = source.damage_dice || source.attack_bonus != null || source.save_dc ? 'enemy' : 'self';
+    const target = named.target || (source.damage_dice || source.attack_bonus != null || source.save_dc ? 'enemy' : 'self');
     const economyText = normalize(action.action_type || 'action');
     const economy = economyText.includes('reaccion') || economyText.includes('reaction') ? 'reaction' : economyText.includes('bonus') ? 'bonus' : 'action';
-    const override = profileOverride(action) || {};
+    const override = { ...named, ...(profileOverride(action) || {}) };
     return {
         key: `feature:${action.id}`,
         source: 'feature',
@@ -282,17 +317,24 @@ function npcActionProfile(action, allActions = []) {
         name: action.name,
         description: action.description,
         economy,
-        reactionTrigger: economy === 'reaction' ? inferReactionTrigger(action.name, action.description, override) : null,
+        reactionTrigger: economy === 'reaction' ? (override.trigger || inferReactionTrigger(action.name, action.description, override)) : null,
         reactionEffect: economy === 'reaction' ? inferReactionEffect(action.name, action.description, { ...action.toJSON?.(), ...action, ...override }) : null,
         target,
-        range: Number(String(source.reach || '').match(/\d+/)?.[0]) || 5,
+        range: Number(override.range) || Number(String(source.reach || '').match(/\d+/)?.[0]) || 5,
+        area: override.area ? { ...override.area, sizePct: Math.max(5, Math.min(36, Number(override.area.feet) * 0.8)) } : null,
         attackBonus: source.attack_bonus == null ? null : Number(source.attack_bonus),
         saveAbility: source.save_ability || null,
         saveDc: source.save_dc == null ? null : Number(source.save_dc),
         damage: source.damage_dice ? formatDice({ ...(sourceDice || { quantity: 1, sides: 4, modifier: 0 }), modifier: (sourceDice?.modifier || 0) + (Number(source.damage_bonus) || 0) }) : null,
         damageType: source.damage_type,
+        extraDamage: override.extraDamage || [],
+        extraDamageType: override.extraDamageType || null,
+        halfOnSave: Boolean(override.halfOnSave || /mitad del dano|mitad de dano/.test(normalize(action.description))),
+        effect: override.effect || (source.save_dc ? inferSaveEffect(action.description) : null),
+        movement: override.movement || null,
         multiattack: isMultiattack ? 2 : 1,
-        resource: action.max_uses ? { type: 'feature-use', actionId: action.id, max: action.max_uses, used: action.used_uses || 0 } : null,
+        resource: action.max_uses ? { type: 'feature-use', actionId: action.id, max: action.max_uses, used: action.used_uses || 0 }
+            : /5\s*[^0-9]*\s*6/.test(String(action.recharge || '')) ? { type: 'recharge', key: `recharge:${action.id}`, min: 5, max: 1 } : null,
         formula: source.damage_dice,
         summary: [isMultiattack && '2 ataques separados', source.attack_bonus != null && `Ataque ${signed(source.attack_bonus)}`, source.save_dc && `Salv. ${source.save_ability} CD ${source.save_dc}`, source.damage_dice && `${source.damage_dice}${Number(source.damage_bonus) ? signed(source.damage_bonus) : ''} ${source.damage_type || ''}`.trim(), action.max_uses && `${Math.max(0, action.max_uses - action.used_uses)}/${action.max_uses} usos`].filter(Boolean).join(' · '),
     };
@@ -310,8 +352,9 @@ function customFeatureProfiles(character) {
         const description = feature.description || '';
         const parsedDice = allDice(description);
         const actionableKind = /(accion|action|bonus|reaccion|reaction)/.test(normalize(feature.kind));
-        const override = feature.combat_action || feature.combatAction || (feature.damage || feature.healing || feature.attack_bonus != null || actionableKind ? feature : null);
-        if (!override) return [];
+        const rawOverride = feature.combat_action || feature.combatAction || (feature.damage || feature.healing || feature.attack_bonus != null || actionableKind ? feature : null);
+        if (!rawOverride) return [];
+        const override = { ...(CUSTOM_ACTION_PROFILES[normalize(feature.name)] || {}), ...rawOverride };
         const normalizedDescription = normalize(description);
         const ability = /\bdes\b|destreza/.test(normalizedDescription) ? 'DEX'
             : /\bfue\b|fuerza/.test(normalizedDescription) ? 'STR'
@@ -363,11 +406,15 @@ function customFeatureProfiles(character) {
                 ? (Array.isArray(override.extraDamage) ? override.extraDamage : [override.extraDamage])
                 : conditionalSecondaryDamage ? [] : parsedDice.slice(1).filter(expression => expression !== secondaryHealing),
             secondaryHealing,
+            secondaryHealingRange: secondaryHealing ? 15 : null,
             healing: override.healing || null,
             damageType: override.damage_type || override.damageType || inferredDamageType,
+            effect: override.effect || null,
             shield: override.shield || feature.shield || null,
             trackerCost: override.consumes_tracker || override.consumesTracker || feature.consumes_tracker || null,
             trackerRefill: override.refills_tracker || override.refillsTracker || feature.refills_tracker || null,
+            jamOnNaturalBelow: Number(override.jamOnNaturalBelow) || null,
+            clearWeaponJam: Boolean(override.clearWeaponJam),
             resource: override.max_uses
                 ? { type: 'session-use', key: override.key || sharedResourceKey, max: override.max_uses, recovery: override.recovery || null }
                 : formulaResource ? { type: 'session-use', key: sharedResourceKey, ...formulaResource }

@@ -456,6 +456,9 @@ function combatArmorClass(session, character) {
 }
 
 function resourceAvailability(action, character, session) {
+    const jammed = Boolean(session?.combat_state?.weaponJams?.[character?.id]);
+    if (action.jamOnNaturalBelow && jammed) return { available: false, reason: 'El Escupefuego está atascado. Usa Desatascar Escupefuego.' };
+    if (action.clearWeaponJam && !jammed) return { available: false, reason: 'El Escupefuego no está atascado.' };
     if (action.resource?.type === 'spell-slot') {
         const minimumLevel = Number(action.resource.level) || 1;
         const slots = character.spell_slots || {};
@@ -474,7 +477,20 @@ function resourceAvailability(action, character, session) {
         const used = Number(state.resources?.[`${character.id}:${action.resource.key}`] || 0);
         return used < Number(action.resource.max) ? { available: true, used } : { available: false, used, reason: 'No quedan usos disponibles.' };
     }
+    if (action.resource?.type === 'recharge') {
+        const state = currentCombatState(session, character.id);
+        const used = Number(state.resources?.[`${character.id}:${action.resource.key}`] || 0);
+        return used < 1 ? { available: true } : { available: false, reason: `Debe recargar con ${action.resource.min || 5}–6 al comenzar su turno.` };
+    }
     return { available: true };
+}
+
+function mechanicallyExecutable(action) {
+    return action.attackBonus != null || action.damage || action.healing || action.temporaryHp
+        || (action.saveAbility && action.saveDc) || action.movement || action.shield
+        || action.trackerCost || action.trackerRefill || action.clearWeaponJam
+        || (action.effect && action.effect.type !== 'CUSTOM')
+        || (action.reactionEffect && action.reactionEffect.type !== 'CUSTOM');
 }
 
 function reactionControllerUserId(session, token) {
@@ -491,6 +507,7 @@ function decorateActions(actions, character, session) {
     const state = currentCombatState(session, character.id);
     return actions.map(action => {
         const resource = resourceAvailability(action, character, session);
+        const executable = mechanicallyExecutable(action);
         const reactionWindow = activeReactionWindow(session);
         const reactionTriggered = action.economy !== 'reaction' || Boolean(
             reactionWindow
@@ -502,10 +519,12 @@ function decorateActions(actions, character, session) {
             : Boolean(state.used?.[action.economy]);
         return {
             ...action,
-            available: resource.available && !economyUsed && reactionTriggered && session.status === 'LIVE',
+            available: executable && resource.available && !economyUsed && reactionTriggered && session.status === 'LIVE',
             unavailableReason: session.status !== 'LIVE'
                 ? 'La partida debe estar en vivo.'
-                : !reactionTriggered
+                : !executable
+                    ? 'Esta habilidad requiere resolución manual del DM; todavía no se ejecuta automáticamente.'
+                    : !reactionTriggered
                     ? 'Esta reacción se habilita cuando ocurre su disparador.'
                     : economyUsed
                     ? `Ya usaste tu ${action.economy === 'bonus' ? 'acción bonus' : action.economy === 'reaction' ? 'reacción' : 'acción'} este turno.`
@@ -522,7 +541,9 @@ async function eligibleReactionOptions(session, reactorToken, trigger) {
     return catalog.actions.filter(action => (
         action.economy === 'reaction'
         && action.reactionTrigger === trigger
+        && mechanicallyExecutable(action)
         && resourceAvailability(action, catalog.character, session).available
+        && !(action.shield && session.combat_state?.shields?.[reactorToken.character_id]?.broken)
     ));
 }
 
@@ -548,6 +569,10 @@ async function consumeReactionResource(action, character, state) {
         const used = Number(state.resources?.[resourceKey] || 0);
         if (used >= Number(action.resource.max || 0)) throw new Error('No quedan usos de esta reacción.');
         state.resources = { ...(state.resources || {}), [resourceKey]: used + 1 };
+    } else if (action.resource?.type === 'recharge') {
+        const resourceKey = `${character.id}:${action.resource.key}`;
+        if (Number(state.resources?.[resourceKey] || 0) >= 1) throw new Error('Esta habilidad todavía no se recargó.');
+        state.resources = { ...(state.resources || {}), [resourceKey]: 1 };
     }
 }
 
@@ -668,9 +693,18 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
                 const targetToken = session.tokens.find(token => Number(token.character_id) === Number(window.reactorCharacterId));
                 const nextAc = combatArmorClass({ combat_state: state }, targetToken?.character);
                 const hit = Number(parentAction.result.attack.total) >= nextAc && Number(parentAction.result.attack.natural) !== 1;
-                parentAction.result = { ...parentAction.result, attack: { ...parentAction.result.attack, targetAc: nextAc, hit }, reaction: { name: option.name, effect: effect.type } };
+                let shieldCheck = null;
+                if (effect.shield) {
+                    const prior = state.shields?.[window.reactorCharacterId] || {};
+                    const threshold = Number(prior.breakThreshold ?? effect.shield.initial_break_threshold ?? 3);
+                    const natural = randomInt(1, 7);
+                    const broken = natural <= threshold;
+                    state.shields = { ...(state.shields || {}), [window.reactorCharacterId]: { broken, breakThreshold: threshold + 1 } };
+                    shieldCheck = { natural, threshold, broken };
+                }
+                parentAction.result = { ...parentAction.result, attack: { ...parentAction.result.attack, targetAc: nextAc, hit }, reaction: { name: option.name, effect: effect.type, shieldCheck } };
                 parentAction.status = hit ? window.resumeStatus : 'COMPLETED';
-                if (!hit) parentAction.result.summary = `${option.name} eleva la CA a ${nextAc}; ${parentAction.action_name} falla.`;
+                if (!hit) parentAction.result.summary = `${option.name} eleva la CA a ${nextAc}; ${parentAction.action_name} falla.${shieldCheck ? ` Control de escudo: ${shieldCheck.natural} (${shieldCheck.broken ? 'se rompe' : 'resiste'}).` : ''}`;
             }
         } else if (effect.type === 'HALVE_DAMAGE' || effect.type === 'RESIST_TRIGGERING_DAMAGE') {
             if (parentAction) {
@@ -765,6 +799,22 @@ function refreshTurnReaction(state, characterId) {
     delete reactions[characterId];
     delete acBonuses[characterId];
     return { ...state, reactions, acBonuses, resources: { ...(state?.resources || {}) } };
+}
+
+async function rollTurnRecharges(session, characterId) {
+    const catalog = await buildActionCatalog(characterId);
+    if (!catalog) return;
+    const resources = { ...(session.combat_state?.resources || {}) };
+    const rolls = [];
+    for (const action of catalog.actions.filter(item => item.resource?.type === 'recharge')) {
+        const key = `${characterId}:${action.resource.key}`;
+        if (!Number(resources[key] || 0)) continue;
+        const natural = randomInt(1, 7);
+        const recovered = natural >= Number(action.resource.min || 5);
+        if (recovered) resources[key] = 0;
+        rolls.push({ action: action.name, natural, recovered });
+    }
+    session.combat_state = { ...(session.combat_state || {}), resources, rechargeRolls: rolls };
 }
 
 function customTrackers(character, session) {
@@ -863,13 +913,24 @@ async function finalizeCombatAction(io, combatAction, roll) {
     };
     if (String(combatAction.attack_roll_id) === String(roll.id)) {
         const target = targets[0];
-        const natural = Number(roll.results?.[0]);
+        const natural = action.attackRollMode === 'advantage'
+            ? Math.max(...(roll.results || []).map(Number))
+            : Number(roll.results?.[0]);
+        if (action.attackRollMode === 'advantage') {
+            roll.total = natural + Number(roll.modifier || 0);
+        }
         const targetAc = combatArmorClass(session, target.character);
         const hit = natural === 20 || (natural !== 1 && Number(roll.total) >= targetAc);
         combatAction.result = {
             ...previousResult,
             attack: { total: roll.total, natural, targetAc, hit, critical: natural === 20, targetName: target.label },
         };
+        if (action.jamOnNaturalBelow && natural < Number(action.jamOnNaturalBelow)) {
+            session.combat_state = { ...(session.combat_state || {}), weaponJams: { ...(session.combat_state?.weaponJams || {}), [combatAction.actor_character_id]: true } };
+            session.changed('combat_state', true);
+            await session.save();
+            combatAction.result.weaponJam = { jammed: true, natural, threshold: Number(action.jamOnNaturalBelow) };
+        }
         roll.label = `${combatAction.action_name}: ${hit ? `impacta a ${target.label}` : `falla contra ${target.label}`}`.slice(0, 120);
         await roll.save();
         if (!hit) {
@@ -910,6 +971,31 @@ async function finalizeCombatAction(io, combatAction, roll) {
     }
 
     if (String(combatAction.effect_roll_id) !== String(roll.id)) return;
+    if (action.utilitySave) {
+        const target = targets[0];
+        const natural = Number(roll.results?.[0]) || 0;
+        const bonus = Number(roll.modifier) || 0;
+        const total = Number(roll.total) || natural + bonus;
+        const success = total >= Number(action.saveDc);
+        const conditions = success ? [] : (action.effect?.conditions || []).filter(Boolean);
+        if (target && conditions.length) {
+            target.conditions = [...new Set([...(Array.isArray(target.conditions) ? target.conditions : []), ...conditions])];
+            await target.save();
+            io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
+        }
+        combatAction.status = 'COMPLETED';
+        combatAction.result = {
+            ...previousResult,
+            save: { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success },
+            targets: [{ tokenId: target?.id, characterId: target?.character_id, name: target?.label, outcome: success ? 'saved' : 'failed-save', conditions }],
+            summary: success
+                ? `${target?.label} supera ${action.name} (${total} contra CD ${action.saveDc}).`
+                : `${target?.label} falla ${action.name} (${total} contra CD ${action.saveDc})${conditions.length ? ` y queda ${conditions.join(' y ').toLowerCase()}` : ''}.`,
+        };
+        roll.label = combatAction.result.summary.slice(0, 120);
+        await Promise.all([roll.save(), combatAction.save()]);
+        return broadcastSession(io, session.id);
+    }
     if (action.shield) {
         const state = currentCombatState(session, combatAction.actor_character_id);
         const prior = state.shields?.[combatAction.actor_character_id] || {};
@@ -937,11 +1023,16 @@ async function finalizeCombatAction(io, combatAction, roll) {
     }
     const outcomes = [];
     const criticalMultiplier = combatAction.result?.attack?.critical ? 2 : 1;
-    const extraRolls = (action.extraDamage || []).flatMap(expression => {
-        const parsed = parseDiceExpression(expression);
+    const persistentMark = session.combat_state?.effects?.[combatAction.actor_character_id]?.mark;
+    const markedExtraDamage = persistentMark && targets.some(target => String(target.id) === String(persistentMark.targetTokenId))
+        ? [{ expression: persistentMark.damage, damageType: persistentMark.damageType }]
+        : [];
+    const configuredExtraDamage = (action.extraDamage || []).map(expression => ({ expression, damageType: action.extraDamageType || action.damageType }));
+    const extraRolls = [...configuredExtraDamage, ...markedExtraDamage].flatMap(component => {
+        const parsed = parseDiceExpression(component.expression);
         if (!parsed) return [];
         const results = Array.from({ length: parsed.quantity * criticalMultiplier }, () => randomInt(1, parsed.sides + 1));
-        return [{ expression, results, total: results.reduce((sum, value) => sum + value, 0) + parsed.modifier }];
+        return [{ expression: component.expression, damageType: component.damageType, results, total: results.reduce((sum, value) => sum + value, 0) + parsed.modifier }];
     });
     const reactionMultiplier = Number(combatAction.result?.reactionModifiers?.damageMultiplier) || 1;
     const totalEffect = Math.floor(((Number(roll.total) || 0) + extraRolls.reduce((sum, item) => sum + item.total, 0)) * reactionMultiplier);
@@ -957,6 +1048,11 @@ async function finalizeCombatAction(io, combatAction, roll) {
             const success = total >= Number(action.saveDc);
             save = { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success };
             if (success) amount = action.halfOnSave ? Math.floor(amount / 2) : 0;
+            if (!success && action.effect?.conditions?.length) {
+                target.conditions = [...new Set([...(Array.isArray(target.conditions) ? target.conditions : []), ...action.effect.conditions])];
+                await target.save();
+                io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
+            }
         }
 
         if (action.healing) {
@@ -966,11 +1062,35 @@ async function finalizeCombatAction(io, combatAction, roll) {
             await character.save();
             outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: 'healed', amount: next.amount, save });
         } else {
-            const next = hpAfterDamage(character, amount, action.damageType);
-            character.hp_current = next.hp_current;
-            character.hp_temp = next.hp_temp;
+            const retaliation = session.combat_state?.effects?.[character.id]?.retaliation;
+            const hadTemporaryHp = Number(character.hp_temp || 0) > 0;
+            const saveScale = save?.success ? (action.halfOnSave ? 0.5 : 0) : 1;
+            const components = [
+                { amount: Math.floor((Number(roll.total) || 0) * reactionMultiplier * saveScale), damageType: action.damageType },
+                ...extraRolls.map(extra => ({ amount: Math.floor(extra.total * reactionMultiplier * saveScale), damageType: extra.damageType || action.damageType })),
+            ];
+            let inflicted = 0;
+            let absorbed = 0;
+            const mitigations = [];
+            for (const component of components) {
+                if (component.amount <= 0) continue;
+                const next = hpAfterDamage(character, component.amount, component.damageType);
+                character.hp_current = next.hp_current;
+                character.hp_temp = next.hp_temp;
+                inflicted += next.amount;
+                absorbed += next.absorbed;
+                if (next.modifier) mitigations.push({ damageType: component.damageType, modifier: next.modifier });
+            }
             await character.save();
-            outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: amount > 0 ? 'damaged' : 'saved', amount: next.amount, absorbed: next.absorbed, mitigation: next.modifier, save });
+            outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: inflicted > 0 ? 'damaged' : 'saved', amount: inflicted, absorbed, mitigations, save });
+            if (retaliation && hadTemporaryHp && actorToken?.character && pointDistance(actorToken, target) <= 8) {
+                const reflected = hpAfterDamage(actorToken.character, retaliation.damage, retaliation.damageType);
+                actorToken.character.hp_current = reflected.hp_current;
+                actorToken.character.hp_temp = reflected.hp_temp;
+                await actorToken.character.save();
+                outcomes.push({ tokenId: actorToken.id, characterId: actorToken.character_id, name: actorToken.label, outcome: 'retaliation', amount: reflected.amount, damageType: retaliation.damageType });
+                io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: actorToken.id, characterId: actorToken.character_id, hpCurrent: actorToken.character.hp_current, hpMax: actorToken.character.hp_max, hpTemp: actorToken.character.hp_temp });
+            }
         }
         io.to(roomName(session.id)).emit('game:token-hp-updated', {
             tokenId: target.id,
@@ -980,8 +1100,25 @@ async function finalizeCombatAction(io, combatAction, roll) {
             hpTemp: character.hp_temp,
         });
     }
+    if (action.secondaryHealing && action.secondaryTargetTokenId) {
+        const healingTarget = session.tokens.find(token => String(token.id) === String(action.secondaryTargetTokenId));
+        const parsedHealing = parseDiceExpression(action.secondaryHealing);
+        if (healingTarget?.character && parsedHealing) {
+            const healingResults = Array.from({ length: parsedHealing.quantity }, () => randomInt(1, parsedHealing.sides + 1));
+            const healingTotal = healingResults.reduce((sum, value) => sum + value, 0) + parsedHealing.modifier;
+            const healed = hpAfterHealing(healingTarget.character, healingTotal);
+            healingTarget.character.hp_current = healed.hp_current;
+            await healingTarget.character.save();
+            outcomes.push({ tokenId: healingTarget.id, characterId: healingTarget.character_id, name: healingTarget.label, outcome: 'healed', amount: healed.amount, secondary: true, healingResults });
+            io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: healingTarget.id, characterId: healingTarget.character_id, hpCurrent: healingTarget.character.hp_current, hpMax: healingTarget.character.hp_max, hpTemp: healingTarget.character.hp_temp });
+        }
+    }
     const affected = outcomes.filter(item => item.amount > 0).length;
-    const narrative = outcomes.map(item => `${item.name} ${action.healing ? 'recibe' : 'sufre'} ${item.amount} PG${action.healing ? ' de curación' : ' de daño'}`).join(' · ');
+    const narrative = outcomes.map(item => item.outcome === 'healed'
+        ? `${item.name} recibe ${item.amount} PG de curación`
+        : item.outcome === 'retaliation'
+            ? `${item.name} sufre ${item.amount} PG de represalia`
+            : `${item.name} sufre ${item.amount} PG de daño`).join(' · ');
     if (narrative) {
         roll.label = narrative.slice(0, 120);
         await roll.save();
@@ -1632,6 +1769,7 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index = nextIndex;
         }
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
+        await rollTurnRecharges(session, session.turn_order[session.turn_index]);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1654,6 +1792,7 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index -= 1;
         }
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
+        await rollTurnRecharges(session, session.turn_order[session.turn_index]);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1682,6 +1821,7 @@ function registerGameSessionSocket(io, socket) {
         }
         session.turn_index = turnIndex;
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
+        await rollTurnRecharges(session, session.turn_order[session.turn_index]);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -2094,7 +2234,7 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:begin-action', async ({ sessionId, characterId: requestedCharacterId = null, actionKey, targetTokenIds = [], area = null, slotLevel = null } = {}, reply = () => {}) => {
+    socket.on('game:begin-action', async ({ sessionId, characterId: requestedCharacterId = null, actionKey, targetTokenIds = [], secondaryTargetTokenId = null, area = null, slotLevel = null } = {}, reply = () => {}) => {
         try {
             const requestKey = `${socket.id}:${sessionId}:${requestedCharacterId || 'active'}:${actionKey}`;
             const now = Date.now();
@@ -2135,6 +2275,15 @@ function registerGameSessionSocket(io, socket) {
             if (!actorToken) return reply({ ok: false, message: 'Tu personaje necesita un token visible en el tablero.' });
             const targets = resolveTargetTokens(action, actorToken, session.tokens, targetTokenIds, area);
             if (!targets.length) return reply({ ok: false, message: String(action.target).startsWith('area-') ? 'El área no contiene objetivos válidos.' : 'Selecciona un objetivo válido.' });
+            let secondaryTarget = null;
+            if (action.secondaryHealing) {
+                secondaryTarget = resolveTargetTokens({ target: 'ally', range: action.secondaryHealingRange || 15 }, actorToken, session.tokens, [secondaryTargetTokenId], null)[0];
+                if (!secondaryTarget) return reply({ ok: false, message: `Selecciona una criatura aliada a ${action.secondaryHealingRange || 15} pies para recibir la curación.` });
+            }
+            if (action.movement) {
+                if (!area || !Number.isFinite(Number(area.x)) || !Number.isFinite(Number(area.y))) return reply({ ok: false, message: 'Marca un destino válido en el tablero.' });
+                if (pointDistance(actorToken, area) > Math.max(8, Number(action.movement.maxFeet || 5) * 0.8)) return reply({ ok: false, message: `El destino supera los ${action.movement.maxFeet} pies.` });
+            }
 
             const beforeState = {
                 actor: {
@@ -2166,6 +2315,11 @@ function registerGameSessionSocket(io, socket) {
                     shields: { ...(session.combat_state?.shields || {}) },
                 }
                 : currentCombatState(session, actorCharacterId);
+            if (action.attackBonus != null && combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage) {
+                action.attackRollMode = 'advantage';
+                combatState.effectsByTarget = { ...(combatState.effectsByTarget || {}) };
+                delete combatState.effectsByTarget[targets[0].id];
+            }
             if (action.shield && combatState.shields?.[actorCharacterId]?.broken) {
                 return reply({ ok: false, message: 'El escudo retráctil está roto y debe repararse antes de volver a usarlo.' });
             }
@@ -2191,6 +2345,10 @@ function registerGameSessionSocket(io, socket) {
                 const used = Number(combatState.resources?.[resourceKey] || 0);
                 if (used >= Number(action.resource.max)) return reply({ ok: false, message: 'No quedan usos de este rasgo.' });
                 combatState.resources[resourceKey] = used + 1;
+            } else if (action.resource?.type === 'recharge') {
+                const resourceKey = `${actorCharacterId}:${action.resource.key}`;
+                if (Number(combatState.resources?.[resourceKey] || 0) >= 1) return reply({ ok: false, message: 'Esta habilidad todavía no se recargó.' });
+                combatState.resources[resourceKey] = 1;
             }
 
             if (action.trackerCost?.key) {
@@ -2207,6 +2365,22 @@ function registerGameSessionSocket(io, socket) {
 
             if (action.economy === 'reaction') combatState.reactions[actorCharacterId] = true;
             else combatState.used[action.economy] = true;
+            if (action.effect?.type === 'MARK_EXTRA_DAMAGE') {
+                combatState.effects = {
+                    ...(combatState.effects || {}),
+                    [actorCharacterId]: { ...(combatState.effects?.[actorCharacterId] || {}), mark: { targetTokenId: targets[0].id, damage: action.effect.damage, damageType: action.effect.damageType, source: action.name } },
+                };
+            }
+            if (action.effect?.type === 'TEMP_HP_RETALIATION') {
+                combatState.effects = {
+                    ...(combatState.effects || {}),
+                    [actorCharacterId]: { ...(combatState.effects?.[actorCharacterId] || {}), retaliation: { damage: action.effect.damage, damageType: action.effect.damageType, source: action.name } },
+                };
+            }
+            if (action.effect?.type === 'GRANT_NEXT_ATTACK_ADVANTAGE') {
+                combatState.effectsByTarget = { ...(combatState.effectsByTarget || {}), [targets[0].id]: { nextAttackAdvantage: true, source: action.name } };
+            }
+            if (action.clearWeaponJam) combatState.weaponJams = { ...(combatState.weaponJams || {}), [actorCharacterId]: false };
             if (action.shield) {
                 combatState.acBonuses[actorCharacterId] = {
                     bonus: Number(action.shield.bonus) || 5,
@@ -2224,7 +2398,7 @@ function registerGameSessionSocket(io, socket) {
                 action_key: action.key,
                 action_name: action.name,
                 status: 'PENDING',
-                action_snapshot: action,
+                action_snapshot: { ...action, secondaryTargetTokenId: secondaryTarget?.id || null, utilitySave: Boolean(action.saveAbility && action.saveDc && !action.damage && !action.healing) },
                 target_token_ids: targets.map(token => token.id),
                 area,
                 before_state: beforeState,
@@ -2249,7 +2423,7 @@ function registerGameSessionSocket(io, socket) {
             } else if (action.attackBonus != null) {
                 const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
                     sides: 20,
-                    quantity: 1,
+                    quantity: action.attackRollMode === 'advantage' ? 2 : 1,
                     modifier: Number(action.attackBonus),
                     label: `${action.name} · ataque`,
                 });
@@ -2266,7 +2440,24 @@ function registerGameSessionSocket(io, socket) {
                     combatAction.effect_roll_id = roll.id;
                     combatAction.status = 'EFFECT_ROLL';
                     await combatAction.save();
+                } else if (action.saveAbility && action.saveDc) {
+                    const target = targets[0];
+                    const roll = await createCombatRoll(io, session, socket.user.id, target.character, {
+                        sides: 20,
+                        quantity: 1,
+                        modifier: savingThrowBonus(target.character, action.saveAbility),
+                        label: `${target.label} · salvación ${action.saveAbility} contra ${action.name}`,
+                    });
+                    combatAction.effect_roll_id = roll.id;
+                    combatAction.status = 'EFFECT_ROLL';
+                    await combatAction.save();
                 } else {
+                    if (action.movement && area) {
+                        actorToken.x = clamp(area.x);
+                        actorToken.y = clamp(area.y);
+                        await actorToken.save();
+                        io.to(roomName(session.id)).emit('game:token-moved', { tokenId: actorToken.id, x: actorToken.x, y: actorToken.y });
+                    }
                     if (action.temporaryHp) {
                         for (const target of targets) {
                             target.character.hp_temp = Math.max(Number(target.character.hp_temp) || 0, Number(action.temporaryHp));
@@ -2275,7 +2466,7 @@ function registerGameSessionSocket(io, socket) {
                         }
                     }
                     combatAction.status = 'COMPLETED';
-                    combatAction.result = { targets: targets.map(token => ({ tokenId: token.id, name: token.label, outcome: action.temporaryHp ? 'temporary-hp' : 'used', amount: action.temporaryHp || 0 })), summary: action.temporaryHp ? `${action.name}: ${action.temporaryHp} PG temporales.` : `${catalog.character.name} usa ${action.name}.` };
+                    combatAction.result = { targets: targets.map(token => ({ tokenId: token.id, name: token.label, outcome: action.temporaryHp ? 'temporary-hp' : action.movement ? 'moved' : 'used', amount: action.temporaryHp || 0 })), summary: action.temporaryHp ? `${action.name}: ${action.temporaryHp} PG temporales.` : action.movement ? `${catalog.character.name} usa ${action.name} y se reposiciona.` : `${catalog.character.name} usa ${action.name}.` };
                     await combatAction.save();
                     io.to(roomName(session.id)).emit('game:combat-action-used', { actorName: catalog.character.name, actionName: action.name, summary: `${catalog.character.name} usa ${action.name}.` });
                 }
