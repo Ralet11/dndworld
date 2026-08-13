@@ -266,6 +266,7 @@ function customFeatureProfiles(character) {
             : 0;
         const rawDamage = override.damage || parsedDice[0] || null;
         const secondaryHealing = normalizedDescription.match(/(?:cura|recupera).*?(\d{1,2}d(?:4|6|8|10|12|20|100))/)?.[1] || null;
+        const conditionalSecondaryDamage = /\bsi\b[^.]*?(?:recibe|sufre|causa|inflige)[^.]*?\d{1,2}d(?:4|6|8|10|12|20|100)/.test(normalizedDescription);
         const damageParsed = parseDiceExpression(rawDamage);
         const damage = damageParsed ? formatDice({ ...damageParsed, modifier: damageParsed.modifier + abilityBonus }) : rawDamage;
         const attackAbility = ability || 'DEX';
@@ -297,7 +298,9 @@ function customFeatureProfiles(character) {
             saveAbility: override.save_ability || override.saveAbility || null,
             saveDc: override.save_dc ?? override.saveDc ?? null,
             damage,
-            extraDamage: parsedDice.slice(1).filter(expression => expression !== secondaryHealing),
+            extraDamage: override.extraDamage
+                ? (Array.isArray(override.extraDamage) ? override.extraDamage : [override.extraDamage])
+                : conditionalSecondaryDamage ? [] : parsedDice.slice(1).filter(expression => expression !== secondaryHealing),
             secondaryHealing,
             healing: override.healing || null,
             damageType: override.damage_type || override.damageType || inferredDamageType,

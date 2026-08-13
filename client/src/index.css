@@ -4941,9 +4941,9 @@ a:focus-visible {
 .game-roll-total { min-height: 0; position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px; color: var(--roll-accent); border-left: 1px solid #333c36; background: color-mix(in srgb, var(--roll-accent) 9%, #08100d); transform-origin: center top; backface-visibility: hidden; }
 .game-roll-total strong { color: color-mix(in srgb, var(--roll-accent) 72%, #fff1ce); font-family: var(--font-display); font-size: 24px; font-weight: 500; line-height: 1; }
 .game-roll-total-values { min-width: 40px; display: grid; place-items: center; position: relative; }
-.game-roll-total.has-modifier strong.is-modified { animation: none; }
-.game-roll-total.has-modifier strong.is-modified::before { content: none; }
-.game-roll-total b { position: absolute; z-index: 2; top: -14px; right: -5px; padding: 2px 4px; color: #72c88c; border: 1px solid currentColor; border-radius: 9px; background: #0a100d; font-family: var(--font-display); font-size: 10px; font-weight: 600; line-height: 1; box-shadow: 0 3px 9px rgba(0,0,0,.45); }
+.game-roll-total.has-modifier strong.is-modified { animation: game-roll-total-final .34s cubic-bezier(.18,.84,.25,1.05) 2.18s both; }
+.game-roll-total.has-modifier strong.is-modified::before { content: attr(data-base); position: absolute; inset: 0; display: grid; place-items: center; color: color-mix(in srgb, var(--roll-accent) 62%, #e6ddcc); animation: game-roll-base-hold 2.3s ease both; }
+.game-roll-total b { position: absolute; z-index: 2; top: -14px; right: -5px; padding: 2px 4px; color: #72c88c; border: 1px solid currentColor; border-radius: 9px; background: #0a100d; font-family: var(--font-display); font-size: 10px; font-weight: 600; line-height: 1; box-shadow: 0 3px 9px rgba(0,0,0,.45); animation: game-roll-modifier-apply .9s cubic-bezier(.18,.84,.25,1) 1.5s both; }
 .game-roll-total b.is-positive { color: #72c88c; }
 .game-roll-total b.is-negative { color: #df796b; }
 .game-roll-dismiss { width: 21px; height: 21px; position: absolute; top: 5px; right: 5px; z-index: 5; display: grid; place-items: center; color: #8e948e; border: 1px solid #343d37; background: rgba(6, 11, 9, .88); }
@@ -4967,6 +4967,9 @@ a:focus-visible {
 .game-roll-card.is-fumble::before { background: linear-gradient(145deg, #25100d, #060706); }
 .game-roll-card.is-fumble .game-roll-total strong { color: #dc7465; }
 @keyframes game-roll-card-arrival { 0% { opacity: 0; filter: blur(3px); transform: translate3d(-38px, 8px, 0) scale(.95); } 68% { opacity: 1; filter: blur(0); transform: translate3d(4px, 0, 0) scale(1.008); } 100% { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes game-roll-base-hold { 0%, 68% { opacity: 1; transform: translateY(0) scale(1); } 88%, 100% { opacity: 0; transform: translateY(-5px) scale(.86); } }
+@keyframes game-roll-modifier-apply { 0% { opacity: 0; filter: blur(3px); transform: translateY(8px) scale(.65); } 22%, 68% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); } 100% { opacity: 0; filter: blur(2px); transform: translateY(-9px) scale(.8); } }
+@keyframes game-roll-total-final { 0% { color: transparent; filter: blur(3px); transform: translateY(7px) scale(.78); } 72% { color: color-mix(in srgb, var(--roll-accent) 78%, #fff1ce); filter: blur(0); transform: translateY(-1px) scale(1.1); } 100% { color: color-mix(in srgb, var(--roll-accent) 72%, #fff1ce); filter: blur(0); transform: translateY(0) scale(1); } }
 @keyframes game-roll-card-glint { 0%, 42% { background-position: -240px 0; opacity: 0; } 53% { opacity: .7; } 82%, 100% { background-position: 260px 0; opacity: .22; } }
 @keyframes game-roll-card-departure { 0%, 43% { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) rotateZ(0) scale(1); } 57% { transform: translate3d(5px, -2px, 20px) rotateX(-3deg) rotateY(9deg) rotateZ(1deg) scale(.96); } 100% { opacity: 0; filter: blur(8px); transform: translate3d(275px, -82px, 310px) rotateX(-29deg) rotateY(87deg) rotateZ(15deg) scale(.48); } }
 @keyframes game-roll-card-stack-departure { 0% { opacity: 1; filter: blur(0); transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) scale(1); max-height: 100px; margin-bottom: 0; } 35% { opacity: 1; transform: translate3d(-4px, -15px, 24px) rotateX(5deg) rotateY(-7deg) scale(.98); } 100% { opacity: 0; filter: blur(6px); transform: translate3d(12px, -90px, 150px) rotateX(21deg) rotateY(-30deg) scale(.7); max-height: 0; margin-bottom: -10px; } }

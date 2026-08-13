@@ -118,6 +118,23 @@ test('known utility spells do not apply their descriptive damage on cast', () =>
     assert.equal(armor.target, 'self');
 });
 
+test('conditional follow-up damage is not applied to the initial hit', () => {
+    const character = {
+        id: 9,
+        level: 5,
+        proficiency_bonus: 3,
+        abilityScores: [{ ability: 'STR', base_value: 16 }],
+        custom_features: [{
+            name: 'Culatazo empoderado',
+            kind: 'Accion',
+            description: 'Ataque con FUE + competencia. Al impactar causa 2d8 + FUE. Si el objetivo se mueve, recibe 1d8 adicional.',
+        }],
+    };
+    const [action] = customFeatureProfiles(character);
+    assert.equal(action.damage, '2d8+3');
+    assert.deepEqual(action.extraDamage, []);
+});
+
 test('finesse weapons choose the best ability and shared chord uses scale from charisma', () => {
     const character = {
         id: 4,

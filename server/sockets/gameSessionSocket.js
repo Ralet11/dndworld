@@ -29,6 +29,7 @@ const {
 
 const presence = new Map();
 const rollDismissTimers = new Map();
+const recentActionRequests = new Map();
 const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
@@ -1690,16 +1691,20 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:get-actions', async ({ sessionId } = {}, reply = () => {}) => {
+    socket.on('game:get-actions', async ({ sessionId, characterId = null } = {}, reply = () => {}) => {
         try {
             const session = await GameSession.findByPk(sessionId);
             if (!session) return reply({ ok: false, message: 'La mesa ya no está disponible.' });
             if (session.combat_state?.awaitingInitiative) return reply({ ok: false, message: 'Aún faltan tiradas de iniciativa.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
             const actorCharacterId = isDm(socket)
-                ? Number(session.turn_order?.[session.turn_index])
+                ? Number(characterId || session.turn_order?.[session.turn_index])
                 : Number(participant?.character_id);
             if (!actorCharacterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            if (isDm(socket)) {
+                const controlledToken = await GameToken.findOne({ where: { session_id: session.id, character_id: actorCharacterId, owner_user_id: null, visible: true } });
+                if (!controlledToken) return reply({ ok: false, message: 'Ese personaje no está controlado por el DM en esta mesa.' });
+            }
             const catalog = await buildActionCatalog(actorCharacterId);
             if (!catalog) return reply({ ok: false, message: 'No se encontró el combatiente activo.' });
             const active = Number(session.turn_order?.[session.turn_index]) === actorCharacterId;
@@ -1711,13 +1716,17 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:adjust-tracker', async ({ sessionId, trackerKey, delta } = {}, reply = () => {}) => {
+    socket.on('game:adjust-tracker', async ({ sessionId, characterId: requestedCharacterId = null, trackerKey, delta } = {}, reply = () => {}) => {
         try {
             const session = await GameSession.findByPk(sessionId);
             if (!session) return reply({ ok: false, message: 'La mesa ya no está disponible.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
-            const characterId = isDm(socket) ? Number(session.turn_order?.[session.turn_index]) : Number(participant?.character_id);
+            const characterId = isDm(socket) ? Number(requestedCharacterId || session.turn_order?.[session.turn_index]) : Number(participant?.character_id);
             if (!characterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            if (isDm(socket)) {
+                const controlledToken = await GameToken.findOne({ where: { session_id: session.id, character_id: characterId, owner_user_id: null, visible: true } });
+                if (!controlledToken) return reply({ ok: false, message: 'Ese personaje no está controlado por el DM en esta mesa.' });
+            }
             const catalog = await buildActionCatalog(characterId);
             const tracker = customTrackers(catalog.character, session).find(item => item.key === trackerKey);
             if (!tracker) return reply({ ok: false, message: 'Ese rastreador no está configurado.' });
@@ -1736,16 +1745,25 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
-    socket.on('game:begin-action', async ({ sessionId, actionKey, targetTokenIds = [], area = null, slotLevel = null } = {}, reply = () => {}) => {
+    socket.on('game:begin-action', async ({ sessionId, characterId: requestedCharacterId = null, actionKey, targetTokenIds = [], area = null, slotLevel = null } = {}, reply = () => {}) => {
         try {
+            const requestKey = `${socket.id}:${sessionId}:${requestedCharacterId || 'active'}:${actionKey}`;
+            const now = Date.now();
+            if (now - Number(recentActionRequests.get(requestKey) || 0) < 1200) return reply({ ok: false, message: 'La acción ya se está procesando.' });
+            recentActionRequests.set(requestKey, now);
+            setTimeout(() => recentActionRequests.delete(requestKey), 1500);
             const session = await loadSession(sessionId);
             if (!session || session.status !== 'LIVE') return reply({ ok: false, message: 'La partida no está en vivo.' });
             if (session.combat_state?.mode !== 'COMBAT') return reply({ ok: false, message: 'Las acciones de combate se habilitan al iniciar combate.' });
             if (session.combat_state?.awaitingInitiative) return reply({ ok: false, message: 'Aún faltan tiradas de iniciativa.' });
             const participant = await GameParticipant.findOne({ where: { session_id: session.id, user_id: socket.user.id } });
             const activeCharacterId = Number(session.turn_order?.[session.turn_index]);
-            const actorCharacterId = isDm(socket) ? activeCharacterId : Number(participant?.character_id);
+            const actorCharacterId = isDm(socket) ? Number(requestedCharacterId || activeCharacterId) : Number(participant?.character_id);
             if (!actorCharacterId || (!isDm(socket) && !participant)) return reply({ ok: false, message: 'No formas parte de esta mesa.' });
+            if (isDm(socket)) {
+                const controlledToken = session.tokens.find(token => token.visible && !token.owner_user_id && Number(token.character_id) === actorCharacterId);
+                if (!controlledToken) return reply({ ok: false, message: 'Ese personaje no está controlado por el DM en esta mesa.' });
+            }
             const pending = await GameCombatAction.findOne({
                 where: { session_id: session.id, actor_character_id: actorCharacterId, status: { [Op.in]: ['ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL'] } },
             });
@@ -1781,7 +1799,19 @@ function registerGameSessionSocket(io, socket) {
                 combatState: JSON.parse(JSON.stringify(session.combat_state || {})),
             };
 
-            const combatState = currentCombatState(session, actorCharacterId);
+            // Una reacción puede pertenecer a un NPC fuera de turno. En ese
+            // caso no debe reemplazar el actor ni borrar la economía usada por
+            // el combatiente activo; sólo comparte recursos y reacciones.
+            const combatState = actorCharacterId !== activeCharacterId && action.economy === 'reaction'
+                ? {
+                    ...(session.combat_state || {}),
+                    used: { ...(session.combat_state?.used || {}) },
+                    resources: { ...(session.combat_state?.resources || {}) },
+                    reactions: { ...(session.combat_state?.reactions || {}) },
+                    acBonuses: { ...(session.combat_state?.acBonuses || {}) },
+                    shields: { ...(session.combat_state?.shields || {}) },
+                }
+                : currentCombatState(session, actorCharacterId);
             if (action.shield && combatState.shields?.[actorCharacterId]?.broken) {
                 return reply({ ok: false, message: 'El escudo retráctil está roto y debe repararse antes de volver a usarlo.' });
             }

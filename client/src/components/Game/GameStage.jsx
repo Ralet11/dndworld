@@ -1401,8 +1401,8 @@ export default function GameStage({
             </div>
           )}
 
-          {isDm && Number(menuToken.character_id) === Number(activeCharacterId) && session?.combat_state?.mode === 'COMBAT' && (
-            <button className="game-token-use-actions" onClick={() => { onActiveTokenClick?.(menuToken); setContextMenu(null); }}><Swords size={13} /> Abrir acciones de turno</button>
+          {isDm && !menuToken.owner_user_id && session?.combat_state?.mode === 'COMBAT' && (
+            <button className="game-token-use-actions" onClick={() => { onActiveTokenClick?.(menuToken); setContextMenu(null); }}><Swords size={13} /> {Number(menuToken.character_id) === Number(activeCharacterId) ? 'Abrir acciones de turno' : 'Abrir ficha y reacciones'}</button>
           )}
 
           {canSeeFullSheet && (

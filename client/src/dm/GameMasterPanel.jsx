@@ -554,6 +554,7 @@ export default function GameMasterPanel() {
   const allReady = session.participants.length > 0 && session.participants.every(participant => participant.is_ready);
   const activeCharacter = players.find(character => character.id === session.active_character_id)
     || session.tokens.find(token => token.character_id === session.active_character_id)?.character;
+  const selectedDmToken = session.tokens.find(token => token.id === selectedActiveTokenId && !token.owner_user_id);
   const initiativeState = session.combat_state?.initiative || {};
   const awaitingInitiative = Boolean(session.combat_state?.awaitingInitiative);
   const pendingInitiative = new Set((session.combat_state?.pendingInitiative || []).map(Number));
@@ -937,17 +938,16 @@ export default function GameMasterPanel() {
                 </div>
                 <DiceTray onRoll={rollDice} />
                 {session.status === 'LIVE'
-                  && selectedActiveTokenId
-                  && Number(session.tokens.find(token => token.id === selectedActiveTokenId)?.character_id) === Number(session.active_character_id)
-                  && !session.tokens.find(token => token.id === selectedActiveTokenId)?.owner_user_id && (
+                  && selectedDmToken && (
                     <TurnActionPanel
                       session={session}
                       socket={socket}
-                      isMyTurn
+                      isMyTurn={Number(selectedDmToken.character_id) === Number(session.active_character_id)}
                       targeting={combatTargeting}
                       onTargetingChange={setCombatTargeting}
                       onError={setError}
-                      actorName={activeCharacter?.name}
+                      actorName={selectedDmToken.character?.name || selectedDmToken.label}
+                      actorCharacterId={selectedDmToken.character_id}
                       mode="dm"
                     />
                   )}

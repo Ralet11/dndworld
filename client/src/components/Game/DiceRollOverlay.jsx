@@ -168,6 +168,7 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
           {stackRolls.map(roll => {
             const naturalTwenty = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20;
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
+            const diceTotal = (roll.results || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
             const modifier = Number(roll.modifier) || 0;
             const hasModifier = modifier !== 0;
             return (
@@ -184,7 +185,7 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
                   <Dices size={13} />
                   <div className="game-roll-total-values">
                     {hasModifier && <b className={modifier > 0 ? 'is-positive' : 'is-negative'}>{modifier > 0 ? '+' : '−'}{Math.abs(modifier)}</b>}
-                    <strong className={hasModifier ? 'is-modified' : ''}>{roll.total}</strong>
+                    <strong className={hasModifier ? 'is-modified' : ''} data-base={diceTotal}>{roll.total}</strong>
                   </div>
                 </div>
                 <button className="game-roll-dismiss" disabled={roll.dismissing} onClick={() => onDismiss?.(roll.id)} aria-label="Cerrar resultado"><X size={12} /></button>

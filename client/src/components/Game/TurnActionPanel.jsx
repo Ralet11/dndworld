@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, CircleDot, Crosshair, HeartPulse, LoaderCircle, Minus, MousePointer2, Plus, Sparkles, Swords, X } from 'lucide-react';
 
 const ECONOMY_LABELS = { action: 'Acciones', bonus: 'Bonus', reaction: 'Reacciones' };
@@ -11,18 +11,19 @@ function actionIcon(action) {
   return <Swords size={14} />;
 }
 
-export default function TurnActionPanel({ session, socket, isMyTurn, targeting, onTargetingChange, onError, actorName = null, mode = 'player' }) {
+export default function TurnActionPanel({ session, socket, isMyTurn, targeting, onTargetingChange, onError, actorName = null, actorCharacterId = null, mode = 'player' }) {
   const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [activeEconomy, setActiveEconomy] = useState('action');
   const [resourceSummary, setResourceSummary] = useState({ spellSlots: {}, trackers: [] });
+  const submittingRef = useRef(false);
 
   const refresh = () => {
     if (!socket || !session?.id || session.status !== 'LIVE') return;
     setLoading(true);
-    socket.emit('game:get-actions', { sessionId: session.id }, response => {
+    socket.emit('game:get-actions', { sessionId: session.id, characterId: actorCharacterId }, response => {
       setLoading(false);
       if (!response?.ok) return onError?.(response?.message || 'No se pudieron cargar las acciones.');
       setActions(response.actions || []);
@@ -35,7 +36,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
     refresh();
     // The serialized combat state and history change after every resolved action.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMyTurn, session?.id, session?.round, session?.turn_index, JSON.stringify(session?.combat_state || {}), session?.combat_actions?.[0]?.id, session?.combat_actions?.[0]?.status]);
+  }, [actorCharacterId, isMyTurn, session?.id, session?.round, session?.turn_index, JSON.stringify(session?.combat_state || {}), session?.combat_actions?.[0]?.id, session?.combat_actions?.[0]?.status]);
 
   const economies = useMemo(() => [...new Set(actions.map(action => action.economy || 'action'))], [actions]);
   useEffect(() => {
@@ -43,14 +44,18 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   }, [activeEconomy, economies]);
 
   const execute = (action, targetTokenIds = [], area = null) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(action.key);
     socket.emit('game:begin-action', {
       sessionId: session.id,
+      characterId: actorCharacterId,
       actionKey: action.key,
       targetTokenIds,
       area,
       slotLevel: action.selectedSlotLevel,
     }, response => {
+      submittingRef.current = false;
       setSubmitting(null);
       if (!response?.ok) {
         onError?.(response?.message || 'No se pudo ejecutar la acción.');
@@ -62,7 +67,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   };
 
   const choose = action => {
-    if (!action.available || submitting) return;
+    if (!action.available || submitting || submittingRef.current) return;
     if (action.target === 'self') return execute(action);
     if (!['enemy', 'ally'].includes(action.target) && !String(action.target).startsWith('area-')) {
       onError?.('Esta habilidad no tiene un objetivo de combate configurado.');
@@ -79,7 +84,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
 
   const visibleActions = actions.filter(action => (action.economy || 'action') === activeEconomy);
   const reactions = actions.filter(action => action.economy === 'reaction');
-  const adjustTracker = (trackerKey, delta) => socket?.emit('game:adjust-tracker', { sessionId: session.id, trackerKey, delta }, response => {
+  const adjustTracker = (trackerKey, delta) => socket?.emit('game:adjust-tracker', { sessionId: session.id, characterId: actorCharacterId, trackerKey, delta }, response => {
     if (!response?.ok) onError?.(response?.message || 'No se pudo actualizar el rastreador.');
     else refresh();
   });
