@@ -5,6 +5,29 @@ import API_URL from '../../config';
 import DiceRollOverlay from './DiceRollOverlay';
 import GameBoardVfx from './GameBoardVfx';
 
+function normalizedNpcType(token) {
+  return String(token?.character?.npc_type || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function combatRelationship(actorToken, targetToken) {
+  if (!actorToken || !targetToken) return 'neutral';
+  if (Number(actorToken.character_id) === Number(targetToken.character_id)) return 'self';
+  const actorPlayer = Boolean(actorToken.owner_user_id);
+  const targetPlayer = Boolean(targetToken.owner_user_id);
+  const targetType = normalizedNpcType(targetToken);
+  if ((actorPlayer && targetPlayer) || ['amigo', 'companero', 'ally'].includes(targetType)) return 'ally';
+  if (['enemigo', 'enemy'].includes(targetType)) return 'enemy';
+  return actorPlayer ? 'enemy' : 'neutral';
+}
+
+function validTargetRelationship(action, actorToken, targetToken) {
+  const relation = combatRelationship(actorToken, targetToken);
+  if (action?.target === 'self') return relation === 'self';
+  if (String(action?.target || '').includes('ally')) return relation === 'ally' || relation === 'self';
+  if (String(action?.target || '').includes('enemy')) return relation === 'enemy' || relation === 'neutral';
+  return true;
+}
+
 const CONDITIONS = ['Envenenado', 'Aturdido', 'Derribado', 'Invisible', 'Concentración'];
 const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 const EMPTY_SCENE_NPCS = [];
@@ -1224,12 +1247,13 @@ export default function GameStage({
               : token.color || '#83948c';
         const tokenSize = Math.max(44, Math.min(72, 50 * (Number(token.size) || 1)));
         const targetingArea = String(combatTargeting?.action?.target || '').startsWith('area-');
-        const targetingAlly = String(combatTargeting?.action?.target || '').includes('ally');
         const combatActor = tokens.find(item => Number(item.character_id) === Number(activeCharacterId));
         const actionRange = Number(combatTargeting?.action?.range) || 5;
         const rangePct = actionRange <= 5 ? 8 : Math.max(8, Math.min(100, actionRange * 0.8));
         const withinCombatRange = !combatActor || Math.hypot(Number(token.x) - Number(combatActor.x), Number(token.y) - Number(combatActor.y)) <= rangePct;
-        const validCombatTarget = !combatTargeting || targetingArea || (withinCombatRange && (targetingAlly ? ['player', 'ally'].includes(tokenRole) : ['enemy', 'neutral'].includes(tokenRole)));
+        const validCombatTarget = !combatTargeting || targetingArea || (
+          withinCombatRange && validTargetRelationship(combatTargeting.action, combatActor, token)
+        );
         return (
           <button
             key={token.id}
