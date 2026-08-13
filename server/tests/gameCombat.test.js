@@ -108,6 +108,24 @@ test('homebrew text becomes structured attacks and areas', () => {
     assert.equal(actions[1].resource.max, 2);
 });
 
+test('reaction features expose their trigger and mechanical effect', () => {
+    const character = {
+        id: 6,
+        proficiency_bonus: 2,
+        abilityScores: [{ ability: 'DEX', base_value: 16 }],
+        custom_features: [
+            { name: 'Esquiva asombrosa', kind: 'Reacción', description: 'Cuando un ataque te impacta, reduce el daño a la mitad.' },
+            { name: 'Represión infernal', kind: 'Reacción', description: 'Después de recibir daño, el atacante recibe 2d10 de fuego.' },
+        ],
+    };
+    const actions = customFeatureProfiles(character);
+    assert.equal(actions[0].economy, 'reaction');
+    assert.equal(actions[0].reactionTrigger, 'ATTACK_HIT_BEFORE_DAMAGE');
+    assert.equal(actions[0].reactionEffect.type, 'HALVE_DAMAGE');
+    assert.equal(actions[1].reactionTrigger, 'DAMAGE_TAKEN');
+    assert.equal(actions[1].reactionEffect.type, 'COUNTER_DAMAGE');
+});
+
 test('known utility spells do not apply their descriptive damage on cast', () => {
     const character = { level: 5, class_slug: 'warlock', proficiency_bonus: 3, abilityScores: [{ ability: 'CHA', base_value: 16 }] };
     const hex = spellProfile({ id: 1, slug: 'hex', name: 'Hex', level: 1, range: '90 feet', casting_time: '1 Bonus Action', desc: 'You deal an extra 1d6 Necrotic damage whenever you hit.' }, character);

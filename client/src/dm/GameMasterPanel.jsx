@@ -43,6 +43,7 @@ import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';
 import DiceTray from '../components/Game/DiceTray';
 import GameAudioControl from './GameAudioControl';
+import ReactionPrompt from '../components/Game/ReactionPrompt';
 import { deriveWorldConditions } from '../utils/worldTime';
 
 function resolveMediaUrl(value) {
@@ -667,6 +668,7 @@ export default function GameMasterPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+      <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       {pendingCombatNotice && (
         <div className={`game-combat-result-prompt${pendingCombatNotice.status === 'DAMAGE_READY' ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">

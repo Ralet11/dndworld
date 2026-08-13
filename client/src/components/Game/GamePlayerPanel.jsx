@@ -8,6 +8,7 @@ import CharacterSheet from '../Hero/CharacterSheet';
 import CharacterEditorModal from '../Hero/CharacterEditorModal';
 import GameAudioPlayer from './GameAudioPlayer';
 import TurnActionPanel from './TurnActionPanel';
+import ReactionPrompt from './ReactionPrompt';
 
 export default function GamePlayerPanel() {
   const { user } = useAuth();
@@ -354,6 +355,7 @@ export default function GamePlayerPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+      <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       {pendingCombatNotice && (
         <div className={`game-combat-result-prompt${pendingCombatNotice.status === 'DAMAGE_READY' ? ' is-success' : ' is-failure'}`} role="dialog" aria-live="assertive">

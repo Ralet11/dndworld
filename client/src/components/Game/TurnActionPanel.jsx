@@ -68,6 +68,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
 
   const choose = action => {
     if (!action.available || submitting || submittingRef.current) return;
+    if (action.economy === 'reaction' && session.combat_state?.reactionWindow?.id) return execute(action);
     if (action.target === 'self') return execute(action);
     if (!['enemy', 'ally'].includes(action.target) && !String(action.target).startsWith('area-')) {
       onError?.('Esta habilidad no tiene un objetivo de combate configurado.');

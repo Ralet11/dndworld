@@ -788,6 +788,24 @@ a:focus-visible {
   .game-command-bar .game-command-scene { display: none; }
 }
 
+/* Reaction windows pause the triggering event and ask only the controlling user. */
+.game-reaction-backdrop { position: fixed; inset: 0; z-index: 1800; display: grid; place-items: center; padding: 20px; background: rgba(2, 7, 6, .68); backdrop-filter: blur(3px); }
+.game-reaction-prompt { width: min(520px, 100%); padding: 22px; color: #e9dfc7; border: 1px solid #92733b; background: linear-gradient(145deg, #0c1916, #07100e 70%); box-shadow: 0 22px 80px rgba(0,0,0,.72), 0 0 30px rgba(35,169,202,.1); }
+.game-reaction-prompt > header { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 12px; padding-bottom: 15px; border-bottom: 1px solid #2e443c; }
+.game-reaction-icon { width: 44px; height: 44px; display: grid; place-items: center; color: #4fd1eb; border: 1px solid #28758a; transform: rotate(45deg); background: #0c292e; }
+.game-reaction-icon svg { transform: rotate(-45deg); }
+.game-reaction-prompt header span { color: #55cde5; font-size: 7px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+.game-reaction-prompt h2 { margin: 4px 0 0; font-family: var(--font-display); font-size: 24px; font-weight: 500; }
+.game-reaction-timer { display: flex; align-items: center; gap: 6px; color: #d9bd78; }
+.game-reaction-prompt > p { margin: 16px 0; color: #aab7b0; font-size: 12px; line-height: 1.55; }
+.game-reaction-options { display: grid; gap: 8px; }
+.game-reaction-options button { min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 11px 14px; text-align: left; color: #ead9ae; border: 1px solid #31504a; background: #0a1714; }
+.game-reaction-options button:hover:not(:disabled) { border-color: #4fc1d8; background: #0d2422; transform: translateY(-1px); }
+.game-reaction-options button > span { display: grid; gap: 4px; }
+.game-reaction-options strong { font-family: var(--font-display); font-size: 14px; font-weight: 500; }
+.game-reaction-options small { color: #8fa099; font-size: 9px; line-height: 1.45; }
+.game-reaction-pass { min-height: 34px; margin-top: 12px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; color: #959f99; border: 1px solid #39433f; background: transparent; }
+
 @media (max-width: 1180px) {
   .bestiary-workspace { grid-template-columns: 200px minmax(330px, 1fr) 330px; }
   .bestiary-card-grid { grid-template-columns: 1fr; }

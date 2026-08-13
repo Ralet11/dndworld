@@ -34,6 +34,10 @@ const SPELL_PROFILES = {
     'acid-splash': { save: 'DEX', damage: '1d6', damageType: 'acido', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 5 }, cantripScale: true },
     hex: { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true },
     'armor-of-agathys': { utility: true, target: 'self', range: 0, economy: 'bonus', slot: true, temporaryHp: 5 },
+    shield: { utility: true, target: 'self', range: 0, economy: 'reaction', slot: true, trigger: 'ATTACK_HIT_BEFORE_DAMAGE', reactionEffect: { type: 'AC_BONUS', bonus: 5 } },
+    'hellish-rebuke': { save: 'DEX', damage: '2d10', damageType: 'fuego', target: 'enemy', range: 60, economy: 'reaction', slot: true, trigger: 'DAMAGE_TAKEN', reactionEffect: { type: 'COUNTER_DAMAGE' } },
+    'absorb-elements': { utility: true, target: 'self', range: 0, economy: 'reaction', slot: true, trigger: 'ATTACK_HIT_BEFORE_DAMAGE', reactionEffect: { type: 'RESIST_TRIGGERING_DAMAGE' } },
+    counterspell: { utility: true, target: 'enemy', range: 60, economy: 'reaction', slot: true, trigger: 'SPELL_CAST_NEARBY', reactionEffect: { type: 'CANCEL_SPELL' } },
 };
 
 const CUSTOM_SPELL_ALIASES = {
@@ -42,6 +46,43 @@ const CUSTOM_SPELL_ALIASES = {
     maleficio: 'hex',
     'armadura de agathys': 'armor-of-agathys',
 };
+
+const REACTION_TRIGGERS = Object.freeze({
+    ATTACK_TARGETED: 'ATTACK_TARGETED',
+    ATTACK_ROLLED: 'ATTACK_ROLLED',
+    ATTACK_HIT_BEFORE_DAMAGE: 'ATTACK_HIT_BEFORE_DAMAGE',
+    DAMAGE_TAKEN: 'DAMAGE_TAKEN',
+    SPELL_CAST_NEARBY: 'SPELL_CAST_NEARBY',
+    ALLY_ATTACKED_NEARBY: 'ALLY_ATTACKED_NEARBY',
+    ENEMY_LEAVES_REACH: 'ENEMY_LEAVES_REACH',
+    CREATURE_REACHES_ZERO_HP: 'CREATURE_REACHES_ZERO_HP',
+    TURN_END: 'TURN_END',
+});
+
+function inferReactionTrigger(name, description, override = {}) {
+    const configured = String(override.trigger || override.reaction_trigger || override.reactionTrigger || '').toUpperCase();
+    if (Object.values(REACTION_TRIGGERS).includes(configured)) return configured;
+    const text = normalize(`${name} ${description}`);
+    if (/contrahechizo|counterspell|lanza un conjuro/.test(text)) return REACTION_TRIGGERS.SPELL_CAST_NEARBY;
+    if (/represion infernal|hellish rebuke|despues de recibir dano|cuando recibes dano/.test(text)) return REACTION_TRIGGERS.DAMAGE_TAKEN;
+    if (/esquiva asombrosa|uncanny dodge|reduce.*mitad/.test(text)) return REACTION_TRIGGERS.ATTACK_HIT_BEFORE_DAMAGE;
+    if (/escudo|shield|antes de que.*impact/.test(text) || override.shield) return REACTION_TRIGGERS.ATTACK_HIT_BEFORE_DAMAGE;
+    if (/proteccion|intercepcion|ataca.*aliado/.test(text)) return REACTION_TRIGGERS.ALLY_ATTACKED_NEARBY;
+    if (/oportunidad|abandona.*alcance|sale.*alcance/.test(text)) return REACTION_TRIGGERS.ENEMY_LEAVES_REACH;
+    return REACTION_TRIGGERS.ATTACK_HIT_BEFORE_DAMAGE;
+}
+
+function inferReactionEffect(name, description, override = {}) {
+    if (override.reactionEffect || override.reaction_effect) return override.reactionEffect || override.reaction_effect;
+    const text = normalize(`${name} ${description}`);
+    if (override.shield) return { type: 'AC_BONUS', bonus: Number(override.shield.bonus) || 5, shield: override.shield };
+    if (/esquiva asombrosa|uncanny dodge|reduce.*mitad/.test(text)) return { type: 'HALVE_DAMAGE' };
+    if (/represion infernal|hellish rebuke/.test(text)) return { type: 'COUNTER_DAMAGE' };
+    if (/absorber elementos|absorb elements/.test(text)) return { type: 'RESIST_TRIGGERING_DAMAGE' };
+    if (/contrahechizo|counterspell/.test(text)) return { type: 'CANCEL_SPELL' };
+    if (/oportunidad/.test(text)) return { type: 'OPPORTUNITY_ATTACK' };
+    return { type: 'CUSTOM' };
+}
 
 function normalize(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -145,13 +186,16 @@ function spellProfile(spell, character) {
     const finalHealing = healing && named.addAbility
         ? (() => { const parsed = parseDiceExpression(healing); return parsed ? formatDice({ ...parsed, modifier: parsed.modifier + abilityMod }) : healing; })()
         : healing;
+    const economy = named.economy || (casting.includes('bonus') || casting.includes('adicional') ? 'bonus' : casting.includes('reaction') || casting.includes('reaccion') ? 'reaction' : 'action');
     return {
         key: `spell:${spell.id}`,
         source: 'spell',
         sourceId: spell.id,
         name: spell.translation?.name || spell.name,
         description: spell.translation?.desc || spell.desc,
-        economy: named.economy || (casting.includes('bonus') || casting.includes('adicional') ? 'bonus' : casting.includes('reaction') || casting.includes('reaccion') ? 'reaction' : 'action'),
+        economy,
+        reactionTrigger: economy === 'reaction' ? (named.trigger || inferReactionTrigger(spell.name, text, named)) : null,
+        reactionEffect: economy === 'reaction' ? (named.reactionEffect || inferReactionEffect(spell.name, text, named)) : null,
         target,
         range,
         area: area ? { ...area, sizePct: Math.max(5, Math.min(36, Number(area.feet) * 0.8)) } : null,
@@ -220,13 +264,18 @@ function npcActionProfile(action, allActions = []) {
     const source = referencedAction || action;
     const sourceDice = parseDiceExpression(source.damage_dice);
     const target = source.damage_dice || source.attack_bonus != null || source.save_dc ? 'enemy' : 'self';
+    const economyText = normalize(action.action_type || 'action');
+    const economy = economyText.includes('reaccion') || economyText.includes('reaction') ? 'reaction' : economyText.includes('bonus') ? 'bonus' : 'action';
+    const override = profileOverride(action) || {};
     return {
         key: `feature:${action.id}`,
         source: 'feature',
         sourceId: action.id,
         name: action.name,
         description: action.description,
-        economy: action.action_type || 'action',
+        economy,
+        reactionTrigger: economy === 'reaction' ? inferReactionTrigger(action.name, action.description, override) : null,
+        reactionEffect: economy === 'reaction' ? inferReactionEffect(action.name, action.description, override) : null,
         target,
         range: Number(String(source.reach || '').match(/\d+/)?.[0]) || 5,
         attackBonus: source.attack_bonus == null ? null : Number(source.attack_bonus),
@@ -284,6 +333,8 @@ function customFeatureProfiles(character) {
             .find(type => normalizedDescription.includes(type)) || null;
         const economyText = normalize(override.economy || override.action_type || feature.kind);
         const economy = economyText.includes('bonus') ? 'bonus' : economyText.includes('reaccion') || economyText.includes('reaction') ? 'reaction' : 'action';
+        const reactionTrigger = economy === 'reaction' ? inferReactionTrigger(feature.name, description, override) : null;
+        const reactionEffect = economy === 'reaction' ? inferReactionEffect(feature.name, description, override) : null;
         return [{
             key: `custom:${index}:${normalize(override.name || feature.name).replace(/\s+/g, '-')}`,
             source: 'custom',
@@ -291,6 +342,8 @@ function customFeatureProfiles(character) {
             name: override.name || feature.name || `Rasgo ${index + 1}`,
             description: override.description || feature.description || '',
             economy,
+            reactionTrigger,
+            reactionEffect,
             target: override.target || (areaFeet ? 'area-enemy' : override.healing ? 'ally' : damage || attack ? 'enemy' : 'self'),
             range,
             area: override.area || (areaFeet ? { shape: areaShape, feet: areaFeet, sizePct: Math.max(5, Math.min(36, areaFeet * 0.8)) } : null),
@@ -345,12 +398,23 @@ async function buildActionCatalog(characterId) {
         const alias = CUSTOM_SPELL_ALIASES[normalize(action.name)];
         return !alias || !knownSpellSlugs.has(alias);
     });
+    const primaryWeapon = weaponProfile(character.equipment?.primary_weapon, character, 'primary');
+    const opportunityAttack = primaryWeapon ? {
+        ...primaryWeapon,
+        key: `reaction:opportunity:${primaryWeapon.sourceId}`,
+        name: `Ataque de oportunidad · ${character.equipment?.primary_weapon?.name || 'arma'}`,
+        economy: 'reaction',
+        reactionTrigger: REACTION_TRIGGERS.ENEMY_LEAVES_REACH,
+        reactionEffect: { type: 'OPPORTUNITY_ATTACK' },
+        summary: `Reacción al abandonar tu alcance · ${primaryWeapon.summary}`,
+    } : null;
     const actions = [
-        weaponProfile(character.equipment?.primary_weapon, character, 'primary'),
+        primaryWeapon,
         weaponProfile(character.equipment?.secondary_weapon, character, 'secondary'),
         ...(character.npcActions || []).map(action => npcActionProfile(action, character.npcActions || [])),
         ...customActions,
         ...spells.map(spell => spellProfile(spell, character)),
+        opportunityAttack,
     ].filter(Boolean).map(action => ({ ...action, available: true, unavailableReason: null }));
     return { character, actions };
 }
@@ -359,9 +423,12 @@ function relationship(actorToken, targetToken) {
     if (Number(actorToken.character_id) === Number(targetToken.character_id)) return 'self';
     const actorPlayer = Boolean(actorToken.owner_user_id);
     const targetPlayer = Boolean(targetToken.owner_user_id);
+    const actorType = normalize(actorToken.character?.npc_type);
     const type = normalize(targetToken.character?.npc_type);
     if ((actorPlayer && targetPlayer) || ['amigo', 'companero', 'ally'].includes(type)) return 'ally';
     if (['enemigo', 'enemy'].includes(type)) return 'enemy';
+    if (targetPlayer) return ['enemigo', 'enemy'].includes(actorType) ? 'enemy' : 'ally';
+    if (!actorPlayer && !targetPlayer && ['enemigo', 'enemy'].includes(actorType) !== ['enemigo', 'enemy'].includes(type)) return 'enemy';
     return actorPlayer ? 'enemy' : 'neutral';
 }
 
@@ -473,6 +540,9 @@ module.exports = {
     hpAfterHealing,
     loadCombatCharacter,
     parseDiceExpression,
+    REACTION_TRIGGERS,
+    validRelationship,
+    pointDistance,
     proficiencyBonus,
     resolveTargetTokens,
     spellProfile,

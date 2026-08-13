@@ -24,12 +24,16 @@ const {
     hpAfterHealing,
     loadCombatCharacter,
     parseDiceExpression,
+    pointDistance,
+    REACTION_TRIGGERS,
     resolveTargetTokens,
+    validRelationship,
 } = require('../services/gameCombat');
 
 const presence = new Map();
 const rollDismissTimers = new Map();
 const recentActionRequests = new Map();
+const reactionWindowTimers = new Map();
 const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
@@ -339,6 +343,19 @@ function serializeSession(session, viewer) {
         return { ...token, character };
     });
     payload.dm_connected = Boolean(onlineUsers?.get(payload.dm_user_id)?.size);
+    if (payload.combat_state?.reactionWindow) {
+        const reactionWindow = payload.combat_state.reactionWindow;
+        const canRespond = String(reactionWindow.controllerUserId) === String(viewer?.user?.id);
+        payload.combat_state = {
+            ...payload.combat_state,
+            reactionWindow: {
+                ...reactionWindow,
+                canRespond,
+                options: canRespond ? (reactionWindow.options || []).map(option => ({ key: option.key, name: option.name, summary: option.summary })) : [],
+                controllerUserId: undefined,
+            },
+        };
+    }
     payload.active_character_id = payload.combat_state?.awaitingInitiative
         ? null
         : payload.turn_order?.[payload.turn_index] ?? null;
@@ -410,7 +427,7 @@ async function requireHostedSession(socket, sessionId) {
 
 async function hasPendingCombatAction(sessionId) {
     return Boolean(await GameCombatAction.findOne({
-        where: { session_id: sessionId, status: { [Op.in]: ['PENDING', 'ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL'] } },
+        where: { session_id: sessionId, status: { [Op.in]: ['PENDING', 'ATTACK_ROLL', 'DAMAGE_READY', 'EFFECT_ROLL', 'REACTION_PENDING'] } },
         attributes: ['id'],
     }));
 }
@@ -459,24 +476,242 @@ function resourceAvailability(action, character, session) {
     return { available: true };
 }
 
+function reactionControllerUserId(session, token) {
+    return token?.owner_user_id || session?.dm_user_id || null;
+}
+
+function activeReactionWindow(session) {
+    const window = session?.combat_state?.reactionWindow;
+    if (!window?.id) return null;
+    return window;
+}
+
 function decorateActions(actions, character, session) {
     const state = currentCombatState(session, character.id);
     return actions.map(action => {
         const resource = resourceAvailability(action, character, session);
+        const reactionWindow = activeReactionWindow(session);
+        const reactionTriggered = action.economy !== 'reaction' || Boolean(
+            reactionWindow
+            && Number(reactionWindow.reactorCharacterId) === Number(character.id)
+            && reactionWindow.options?.some(option => option.key === action.key),
+        );
         const economyUsed = action.economy === 'reaction'
             ? Boolean(state.reactions?.[character.id])
             : Boolean(state.used?.[action.economy]);
         return {
             ...action,
-            available: resource.available && !economyUsed && session.status === 'LIVE',
+            available: resource.available && !economyUsed && reactionTriggered && session.status === 'LIVE',
             unavailableReason: session.status !== 'LIVE'
                 ? 'La partida debe estar en vivo.'
-                : economyUsed
+                : !reactionTriggered
+                    ? 'Esta reacción se habilita cuando ocurre su disparador.'
+                    : economyUsed
                     ? `Ya usaste tu ${action.economy === 'bonus' ? 'acción bonus' : action.economy === 'reaction' ? 'reacción' : 'acción'} este turno.`
                     : resource.reason || null,
             selectedSlotLevel: resource.slotLevel || null,
         };
     });
+}
+
+async function eligibleReactionOptions(session, reactorToken, trigger) {
+    if (!reactorToken?.character_id || session.combat_state?.reactions?.[reactorToken.character_id]) return [];
+    const catalog = await buildActionCatalog(reactorToken.character_id);
+    if (!catalog) return [];
+    return catalog.actions.filter(action => (
+        action.economy === 'reaction'
+        && action.reactionTrigger === trigger
+        && resourceAvailability(action, catalog.character, session).available
+    ));
+}
+
+async function consumeReactionResource(action, character, state) {
+    if (action.resource?.type === 'spell-slot') {
+        const minimum = Number(action.resource.level) || 1;
+        const slots = JSON.parse(JSON.stringify(character.spell_slots || {}));
+        const level = Object.keys(slots).map(Number).filter(candidate => (
+            candidate >= minimum && Number(slots[candidate]?.used || 0) < Number(slots[candidate]?.max || 0)
+        )).sort((left, right) => left - right)[0];
+        if (!level) throw new Error('No quedan espacios de conjuro para esta reacción.');
+        slots[level].used = Number(slots[level].used || 0) + 1;
+        character.spell_slots = slots;
+        character.changed('spell_slots', true);
+        await character.save();
+    } else if (action.resource?.type === 'feature-use') {
+        const feature = await NpcAction.findByPk(action.resource.actionId);
+        if (!feature || Number(feature.used_uses || 0) >= Number(feature.max_uses || 0)) throw new Error('No quedan usos de esta reacción.');
+        feature.used_uses = Number(feature.used_uses || 0) + 1;
+        await feature.save();
+    } else if (action.resource?.type === 'session-use') {
+        const resourceKey = `${character.id}:${action.resource.key}`;
+        const used = Number(state.resources?.[resourceKey] || 0);
+        if (used >= Number(action.resource.max || 0)) throw new Error('No quedan usos de esta reacción.');
+        state.resources = { ...(state.resources || {}), [resourceKey]: used + 1 };
+    }
+}
+
+async function openReactionWindow(io, session, {
+    trigger,
+    reactorToken,
+    sourceToken = null,
+    parentAction = null,
+    resumeStatus = 'DAMAGE_READY',
+    context = {},
+}) {
+    if (activeReactionWindow(session)) return false;
+    const options = await eligibleReactionOptions(session, reactorToken, trigger);
+    if (!options.length) return false;
+    const id = randomUUID();
+    const expiresAt = new Date(Date.now() + 15000).toISOString();
+    const window = {
+        id,
+        trigger,
+        reactorCharacterId: Number(reactorToken.character_id),
+        reactorTokenId: reactorToken.id,
+        reactorName: reactorToken.label || reactorToken.character?.name || 'Combatiente',
+        controllerUserId: reactionControllerUserId(session, reactorToken),
+        sourceTokenId: sourceToken?.id || null,
+        sourceCharacterId: sourceToken?.character_id || null,
+        sourceName: sourceToken?.label || sourceToken?.character?.name || null,
+        parentActionId: parentAction?.id || null,
+        resumeStatus,
+        context,
+        expiresAt,
+        options: options.map(action => ({
+            key: action.key,
+            name: action.name,
+            summary: action.summary || action.description || 'Usar reacción',
+            action,
+        })),
+    };
+    const state = { ...(session.combat_state || {}), reactionWindow: window };
+    session.combat_state = state;
+    session.changed('combat_state', true);
+    await session.save();
+    if (parentAction) {
+        parentAction.status = 'REACTION_PENDING';
+        parentAction.result = { ...(parentAction.result || {}), summary: `${parentAction.action_name}: esperando reacción de ${window.reactorName}.` };
+        await parentAction.save();
+    }
+    const timer = setTimeout(() => {
+        reactionWindowTimers.delete(id);
+        resolveReactionWindow(io, session.id, id, null, null).catch(error => console.error('reaction window expiry error:', error));
+    }, 15000);
+    reactionWindowTimers.set(id, timer);
+    return true;
+}
+
+async function createReactionCombatAction(io, session, window, option, controllerUserId) {
+    const action = option.action || {};
+    const reactorToken = session.tokens.find(token => String(token.id) === String(window.reactorTokenId));
+    const sourceToken = session.tokens.find(token => String(token.id) === String(window.sourceTokenId));
+    if (!reactorToken?.character || !sourceToken?.character) return null;
+    const reactionAction = await GameCombatAction.create({
+        session_id: session.id,
+        actor_user_id: controllerUserId,
+        actor_character_id: reactorToken.character_id,
+        action_key: action.key,
+        action_name: action.name,
+        status: 'PENDING',
+        action_snapshot: action,
+        target_token_ids: [sourceToken.id],
+        before_state: {
+            targets: [{ tokenId: sourceToken.id, characterId: sourceToken.character_id, hpCurrent: sourceToken.character.hp_current, hpMax: sourceToken.character.hp_max, hpTemp: sourceToken.character.hp_temp }],
+            combatState: JSON.parse(JSON.stringify(session.combat_state || {})),
+        },
+        result: { summary: `${window.reactorName} responde con ${action.name}.` },
+    });
+    const rollRequest = action.attackBonus != null
+        ? { sides: 20, quantity: 1, modifier: Number(action.attackBonus), label: `${action.name} · ataque de reacción` }
+        : parseDiceExpression(action.damage || action.healing);
+    if (!rollRequest) {
+        reactionAction.status = 'COMPLETED';
+        await reactionAction.save();
+        return reactionAction;
+    }
+    const roll = await createCombatRoll(io, session, controllerUserId, reactorToken.character, {
+        ...rollRequest,
+        label: rollRequest.label || `${action.name} · reacción`,
+    });
+    if (action.attackBonus != null) reactionAction.attack_roll_id = roll.id;
+    else reactionAction.effect_roll_id = roll.id;
+    reactionAction.status = action.attackBonus != null ? 'ATTACK_ROLL' : 'EFFECT_ROLL';
+    await reactionAction.save();
+    return reactionAction;
+}
+
+async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketUserId) {
+    const session = await loadSession(sessionId);
+    const window = activeReactionWindow(session);
+    if (!session || !window || String(window.id) !== String(windowId)) return { ok: false, message: 'La ventana de reacción ya terminó.' };
+    if (socketUserId && String(window.controllerUserId) !== String(socketUserId)) return { ok: false, message: 'Esta reacción pertenece a otro combatiente.' };
+    const option = actionKey ? window.options?.find(item => item.key === actionKey) : null;
+    const state = { ...(session.combat_state || {}), reactionWindow: null };
+    const parentAction = window.parentActionId ? await GameCombatAction.findByPk(window.parentActionId) : null;
+    if (option) {
+        const reactorToken = session.tokens.find(token => Number(token.character_id) === Number(window.reactorCharacterId));
+        if (!reactorToken?.character) return { ok: false, message: 'El combatiente que reacciona ya no está disponible.' };
+        try {
+            await consumeReactionResource(option.action || {}, reactorToken.character, state);
+        } catch (error) {
+            return { ok: false, message: error.message };
+        }
+        state.reactions = { ...(state.reactions || {}), [window.reactorCharacterId]: true };
+        const effect = option.action?.reactionEffect || { type: 'CUSTOM' };
+        if (effect.type === 'AC_BONUS') {
+            state.acBonuses = { ...(state.acBonuses || {}), [window.reactorCharacterId]: { bonus: Number(effect.bonus) || 5, source: option.name } };
+            if (parentAction?.result?.attack) {
+                const targetToken = session.tokens.find(token => Number(token.character_id) === Number(window.reactorCharacterId));
+                const nextAc = combatArmorClass({ combat_state: state }, targetToken?.character);
+                const hit = Number(parentAction.result.attack.total) >= nextAc && Number(parentAction.result.attack.natural) !== 1;
+                parentAction.result = { ...parentAction.result, attack: { ...parentAction.result.attack, targetAc: nextAc, hit }, reaction: { name: option.name, effect: effect.type } };
+                parentAction.status = hit ? window.resumeStatus : 'COMPLETED';
+                if (!hit) parentAction.result.summary = `${option.name} eleva la CA a ${nextAc}; ${parentAction.action_name} falla.`;
+            }
+        } else if (effect.type === 'HALVE_DAMAGE' || effect.type === 'RESIST_TRIGGERING_DAMAGE') {
+            if (parentAction) {
+                parentAction.result = { ...(parentAction.result || {}), reactionModifiers: { ...parentAction.result?.reactionModifiers, damageMultiplier: 0.5 }, reaction: { name: option.name, effect: effect.type } };
+                parentAction.status = window.resumeStatus;
+            }
+        } else if (effect.type === 'COUNTER_DAMAGE' || effect.type === 'OPPORTUNITY_ATTACK') {
+            if (parentAction) parentAction.status = window.resumeStatus;
+        } else if (parentAction) parentAction.status = window.resumeStatus;
+        if (parentAction) await parentAction.save();
+    } else if (parentAction) {
+        parentAction.status = window.resumeStatus;
+        parentAction.result = { ...(parentAction.result || {}), summary: window.context?.resumeSummary || parentAction.result?.summary };
+        await parentAction.save();
+    }
+    const timer = reactionWindowTimers.get(window.id);
+    if (timer) clearTimeout(timer);
+    reactionWindowTimers.delete(window.id);
+    session.combat_state = state;
+    session.changed('combat_state', true);
+    await session.save();
+
+    if (window.context?.pendingMove) {
+        const move = window.context.pendingMove;
+        const movingToken = session.tokens.find(token => String(token.id) === String(move.tokenId));
+        if (movingToken) {
+            movingToken.x = clamp(move.x);
+            movingToken.y = clamp(move.y);
+            await movingToken.save();
+            io.to(roomName(session.id)).emit('game:token-moved', { tokenId: movingToken.id, x: movingToken.x, y: movingToken.y });
+        }
+    }
+    if (option && ['COUNTER_DAMAGE', 'OPPORTUNITY_ATTACK'].includes(option.action?.reactionEffect?.type)) {
+        await createReactionCombatAction(io, session, window, option, window.controllerUserId);
+    }
+    await broadcastSession(io, session.id);
+    return { ok: true };
+}
+
+function refreshTurnReaction(state, characterId) {
+    const reactions = { ...(state?.reactions || {}) };
+    const acBonuses = { ...(state?.acBonuses || {}) };
+    delete reactions[characterId];
+    delete acBonuses[characterId];
+    return { ...state, reactions, acBonuses, resources: { ...(state?.resources || {}) } };
 }
 
 function customTrackers(character, session) {
@@ -593,6 +828,15 @@ async function finalizeCombatAction(io, combatAction, roll) {
         }
 
         const expression = parseDiceExpression(action.damage || action.healing);
+        const reactionOpened = await openReactionWindow(io, session, {
+            trigger: REACTION_TRIGGERS.ATTACK_HIT_BEFORE_DAMAGE,
+            reactorToken: target,
+            sourceToken: actorToken,
+            parentAction: combatAction,
+            resumeStatus: expression ? 'DAMAGE_READY' : 'COMPLETED',
+            context: { resumeSummary: `${combatAction.action_name}: impacto confirmado.` },
+        });
+        if (reactionOpened) return broadcastSession(io, session.id);
         if (!expression) {
             combatAction.status = 'COMPLETED';
             combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'hit' }], summary: `${combatAction.action_name}: impacta a ${target.label}.` };
@@ -641,7 +885,8 @@ async function finalizeCombatAction(io, combatAction, roll) {
         const results = Array.from({ length: parsed.quantity * criticalMultiplier }, () => randomInt(1, parsed.sides + 1));
         return [{ expression, results, total: results.reduce((sum, value) => sum + value, 0) + parsed.modifier }];
     });
-    const totalEffect = (Number(roll.total) || 0) + extraRolls.reduce((sum, item) => sum + item.total, 0);
+    const reactionMultiplier = Number(combatAction.result?.reactionModifiers?.damageMultiplier) || 1;
+    const totalEffect = Math.floor(((Number(roll.total) || 0) + extraRolls.reduce((sum, item) => sum + item.total, 0)) * reactionMultiplier);
     for (const target of targets) {
         const character = target.character;
         if (!character) continue;
@@ -695,6 +940,18 @@ async function finalizeCombatAction(io, combatAction, roll) {
             : `${combatAction.action_name}: ${totalEffect} de ${action.damageType || 'daño'}, ${affected} objetivo${affected === 1 ? '' : 's'} afectado${affected === 1 ? '' : 's'}.`,
     };
     await combatAction.save();
+    const damagedTarget = targets.find(target => outcomes.some(outcome => String(outcome.tokenId) === String(target.id) && outcome.amount > 0));
+    if (!action.healing && damagedTarget) {
+        const reactionOpened = await openReactionWindow(io, session, {
+            trigger: REACTION_TRIGGERS.DAMAGE_TAKEN,
+            reactorToken: damagedTarget,
+            sourceToken: actorToken,
+            parentAction: combatAction,
+            resumeStatus: 'COMPLETED',
+            context: { resumeSummary: combatAction.result.summary },
+        });
+        if (reactionOpened) return broadcastSession(io, session.id);
+    }
     await queueMultiattackFollowup();
     await broadcastSession(io, session.id);
 }
@@ -1316,7 +1573,7 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index = nextIndex;
         }
-        session.combat_state = { ...(session.combat_state || {}), resources: { ...(session.combat_state?.resources || {}) }, reactions: nextIndex >= session.turn_order.length ? {} : { ...(session.combat_state?.reactions || {}) } };
+        session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1338,7 +1595,7 @@ function registerGameSessionSocket(io, socket) {
         } else {
             session.turn_index -= 1;
         }
-        session.combat_state = { ...(session.combat_state || {}), resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
+        session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1366,7 +1623,7 @@ function registerGameSessionSocket(io, socket) {
             turnIndex = session.turn_order.length - 1;
         }
         session.turn_index = turnIndex;
-        session.combat_state = { ...(session.combat_state || {}), resources: { ...(session.combat_state?.resources || {}) }, reactions: { ...(session.combat_state?.reactions || {}) } };
+        session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1474,8 +1731,8 @@ function registerGameSessionSocket(io, socket) {
     });
 
     socket.on('game:move-token', async ({ sessionId, tokenId, x, y } = {}) => {
-        const session = await GameSession.findByPk(sessionId);
-        const token = await GameToken.findOne({ where: { id: tokenId, session_id: sessionId } });
+        const session = await loadSession(sessionId);
+        const token = session?.tokens?.find(item => String(item.id) === String(tokenId));
         if (!session || !token || token.locked) return;
         const dmControl = isDm(socket) && session.dm_user_id === socket.user.id;
         const activeCharacterId = session.turn_order?.[session.turn_index] ?? null;
@@ -1483,6 +1740,26 @@ function registerGameSessionSocket(io, socket) {
             && token.owner_user_id === socket.user.id
             && (session.combat_state?.mode !== 'COMBAT' || token.character_id === activeCharacterId);
         if (!dmControl && !playerControl) return fail(socket, 'Sólo puedes mover tu token durante tu turno.');
+
+        if (session.combat_state?.mode === 'COMBAT' && !activeReactionWindow(session)) {
+            const destination = { x: clamp(x), y: clamp(y) };
+            for (const reactorToken of session.tokens.filter(item => item.visible && item.character && String(item.id) !== String(token.id))) {
+                if (!validRelationship({ target: 'enemy' }, reactorToken, token)) continue;
+                const wasInReach = pointDistance(reactorToken, token) <= 8;
+                const leavesReach = pointDistance(reactorToken, destination) > 8;
+                if (!wasInReach || !leavesReach) continue;
+                const opened = await openReactionWindow(io, session, {
+                    trigger: REACTION_TRIGGERS.ENEMY_LEAVES_REACH,
+                    reactorToken,
+                    sourceToken: token,
+                    context: { pendingMove: { tokenId: token.id, x: destination.x, y: destination.y } },
+                });
+                if (opened) {
+                    await broadcastSession(io, session.id);
+                    return;
+                }
+            }
+        }
 
         token.x = clamp(x);
         token.y = clamp(y);
@@ -1749,6 +2026,16 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
+    socket.on('game:resolve-reaction', async ({ sessionId, windowId, actionKey = null } = {}, reply = () => {}) => {
+        try {
+            const result = await resolveReactionWindow(io, sessionId, windowId, actionKey, socket.user.id);
+            reply(result);
+        } catch (error) {
+            console.error('game:resolve-reaction error:', error);
+            reply({ ok: false, message: 'No se pudo resolver la reacción.' });
+        }
+    });
+
     socket.on('game:begin-action', async ({ sessionId, characterId: requestedCharacterId = null, actionKey, targetTokenIds = [], area = null, slotLevel = null } = {}, reply = () => {}) => {
         try {
             const requestKey = `${socket.id}:${sessionId}:${requestedCharacterId || 'active'}:${actionKey}`;
@@ -1778,6 +2065,11 @@ function registerGameSessionSocket(io, socket) {
             const decorated = decorateActions(catalog.actions, catalog.character, session);
             const action = decorated.find(item => item.key === actionKey);
             if (!action) return reply({ ok: false, message: 'Esa acción ya no está disponible.' });
+            const reactionWindow = activeReactionWindow(session);
+            if (action.economy === 'reaction' && reactionWindow?.options?.some(option => option.key === action.key)) {
+                const result = await resolveReactionWindow(io, session.id, reactionWindow.id, action.key, socket.user.id);
+                return reply(result);
+            }
             if (actorCharacterId !== activeCharacterId && action.economy !== 'reaction') return reply({ ok: false, message: 'Todavía no es tu turno.' });
             if (!action.available) return reply({ ok: false, message: action.unavailableReason || 'No puedes usar esa acción ahora.' });
 
