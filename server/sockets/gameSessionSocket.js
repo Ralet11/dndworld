@@ -356,6 +356,7 @@ function serializeSession(session, viewer) {
         summary: action.result?.summary || null,
         undone_at: action.undone_at,
         createdAt: action.createdAt,
+        updatedAt: action.updatedAt,
     }));
     delete payload.combatActions;
     payload.server_now = new Date().toISOString();
@@ -542,7 +543,10 @@ async function finalizeCombatAction(io, combatAction, roll) {
 
     const previousResult = combatAction.result || {};
     const queueMultiattackFollowup = async () => {
-        if (Number(action.multiattack) <= 1 || action.attackBonus == null) return false;
+        // Las acciones normales no incluyen `multiattack`. Number(undefined)
+        // es NaN y NaN <= 1 es falso, lo que creaba por error un "golpe 2".
+        const attackCount = Number(action.multiattack) || 1;
+        if (attackCount <= 1 || action.attackBonus == null) return false;
         const character = await loadCombatCharacter(combatAction.actor_character_id);
         if (!character) return false;
         const followupAction = { ...action, multiattack: 1, name: `${action.name} · golpe 2` };

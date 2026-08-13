@@ -93,6 +93,7 @@ export default function GameMasterPanel() {
   const [combatTargeting, setCombatTargeting] = useState(null);
   const [selectedActiveTokenId, setSelectedActiveTokenId] = useState(null);
   const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
+  const [combatNoticeStartedAt] = useState(() => Date.now());
   const [worldState, setWorldState] = useState({ global_time: '12:00', day_period: 'Día', temperature_c: 24 });
   const deferredAssetSearch = useDeferredValue(assetSearch);
 
@@ -608,8 +609,10 @@ export default function GameMasterPanel() {
     const belongsToDm = String(action.actor_user_id) === String(user.id)
       || dmControlledCharacterIds.has(Number(action.actor_character_id));
     if (!belongsToDm || dismissedCombatNotices.includes(String(action.id))) return false;
-    return action.status === 'DAMAGE_READY'
-      || (action.status === 'COMPLETED' && action.attack && action.attack.hit === false);
+    const isNewMiss = action.status === 'COMPLETED'
+      && action.attack?.hit === false
+      && new Date(action.updatedAt || action.createdAt).getTime() >= combatNoticeStartedAt;
+    return action.status === 'DAMAGE_READY' || isNewMiss;
   });
 
   const reorderInitiative = (characterId, targetIndex) => {

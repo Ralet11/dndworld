@@ -25,6 +25,7 @@ export default function GamePlayerPanel() {
   const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
   const [initiativePrompt, setInitiativePrompt] = useState(false);
   const sessionDashboardRef = useRef(false);
+  const [combatNoticeStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -241,7 +242,10 @@ export default function GamePlayerPanel() {
       || Number(action.actor_character_id) === Number(ownerCharacterId)
       || Number(action.actor_character_id) === Number(character?.id);
     if (!belongsToPlayer || dismissedCombatNotices.includes(String(action.id))) return false;
-    return action.status === 'DAMAGE_READY' || (action.status === 'COMPLETED' && action.attack && action.attack.hit === false);
+    const isNewMiss = action.status === 'COMPLETED'
+      && action.attack?.hit === false
+      && new Date(action.updatedAt || action.createdAt).getTime() >= combatNoticeStartedAt;
+    return action.status === 'DAMAGE_READY' || isNewMiss;
   });
 
   const rollPendingDamage = action => {
