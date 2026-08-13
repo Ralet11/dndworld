@@ -48,6 +48,7 @@ const CUSTOM_SPELL_ALIASES = {
 };
 
 const NPC_ACTION_PROFILES = {
+    'contraataque arcano': { trigger: 'DAMAGE_TAKEN' },
     'cadena rota': { target: 'enemy', range: 30, effect: { type: 'SAVE_CONDITION', conditions: ['Apresado'] } },
     'daga corta': { extraDamage: ['1d6'], extraDamageType: 'veneno' },
     'ancla de sombra': { target: 'area-enemy', range: 30, area: { shape: 'circle', feet: 10 }, effect: { type: 'SAVE_CONDITION', conditions: ['Asustado', 'Ralentizado'] } },

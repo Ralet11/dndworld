@@ -632,9 +632,26 @@ async function openReactionWindow(io, session, {
 
 async function createReactionCombatAction(io, session, window, option, controllerUserId) {
     const action = option.action || {};
+    const effect = action.reactionEffect || { type: 'CUSTOM' };
     const reactorToken = session.tokens.find(token => String(token.id) === String(window.reactorTokenId));
     const sourceToken = session.tokens.find(token => String(token.id) === String(window.sourceTokenId));
     if (!reactorToken?.character || !sourceToken?.character) return null;
+    const forcedSave = effect.type === 'FORCED_SAVE';
+    const actionSnapshot = forcedSave
+        ? {
+            ...action,
+            damage: null,
+            healing: null,
+            utilitySave: true,
+            saveAbility: effect.saveAbility || 'DEX',
+            saveDc: Number(effect.saveDc) || 10,
+            effect: { type: 'SAVE_CONDITION', conditions: effect.condition ? [effect.condition] : [] },
+            forcedMovement: Number(effect.pushFeet) > 0
+                ? { pushFeet: Number(effect.pushFeet), originTokenId: reactorToken.id }
+                : null,
+            reactionParentActionId: window.parentActionId || null,
+        }
+        : action;
     const reactionAction = await GameCombatAction.create({
         session_id: session.id,
         actor_user_id: controllerUserId,
@@ -642,14 +659,29 @@ async function createReactionCombatAction(io, session, window, option, controlle
         action_key: action.key,
         action_name: action.name,
         status: 'PENDING',
-        action_snapshot: action,
+        action_snapshot: actionSnapshot,
         target_token_ids: [sourceToken.id],
         before_state: {
             targets: [{ tokenId: sourceToken.id, characterId: sourceToken.character_id, hpCurrent: sourceToken.character.hp_current, hpMax: sourceToken.character.hp_max, hpTemp: sourceToken.character.hp_temp }],
             combatState: JSON.parse(JSON.stringify(session.combat_state || {})),
         },
-        result: { summary: `${window.reactorName} responde con ${action.name}.` },
+        result: { summary: forcedSave
+            ? `${window.reactorName} usa ${action.name}; ${window.sourceName} debe realizar una salvación de ${effect.saveAbility || 'DEX'} CD ${Number(effect.saveDc) || 10}.`
+            : `${window.reactorName} responde con ${action.name}.` },
     });
+    if (forcedSave) {
+        const saveControllerUserId = reactionControllerUserId(session, sourceToken);
+        const roll = await createCombatRoll(io, session, saveControllerUserId, sourceToken.character, {
+            sides: 20,
+            quantity: 1,
+            modifier: savingThrowBonus(sourceToken.character, effect.saveAbility || 'DEX'),
+            label: `${window.sourceName} · salvación ${effect.saveAbility || 'DEX'} contra ${action.name}`,
+        });
+        reactionAction.effect_roll_id = roll.id;
+        reactionAction.status = 'EFFECT_ROLL';
+        await reactionAction.save();
+        return reactionAction;
+    }
     const rollRequest = action.attackBonus != null
         ? { sides: 20, quantity: 1, modifier: Number(action.attackBonus), label: `${action.name} · ataque de reacción` }
         : parseDiceExpression(action.damage || action.healing);
@@ -714,37 +746,12 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
         } else if (effect.type === 'COUNTER_DAMAGE' || effect.type === 'OPPORTUNITY_ATTACK') {
             if (parentAction) parentAction.status = window.resumeStatus;
         } else if (effect.type === 'FORCED_SAVE') {
-            const sourceToken = session.tokens.find(token => String(token.id) === String(window.sourceTokenId));
-            const natural = randomInt(1, 21);
-            const bonus = savingThrowBonus(sourceToken?.character, effect.saveAbility);
-            const total = natural + bonus;
-            const success = total >= Number(effect.saveDc || 10);
-            if (sourceToken && !success) {
-                if (effect.condition) {
-                    const conditions = Array.isArray(sourceToken.conditions) ? sourceToken.conditions : [];
-                    sourceToken.conditions = [...new Set([...conditions, effect.condition])];
-                }
-                if (Number(effect.pushFeet) > 0) {
-                    const reactorToken = session.tokens.find(token => String(token.id) === String(window.reactorTokenId));
-                    const dx = Number(sourceToken.x) - Number(reactorToken?.x);
-                    const dy = Number(sourceToken.y) - Number(reactorToken?.y);
-                    const length = Math.hypot(dx, dy) || 1;
-                    const distance = Math.max(4, Number(effect.pushFeet) * 0.8);
-                    sourceToken.x = clamp(Number(sourceToken.x) + (dx / length) * distance);
-                    sourceToken.y = clamp(Number(sourceToken.y) + (dy / length) * distance);
-                }
-                await sourceToken.save();
-                io.to(roomName(session.id)).emit('game:token-moved', { tokenId: sourceToken.id, x: sourceToken.x, y: sourceToken.y });
-                io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: sourceToken.id, conditions: sourceToken.conditions || [] });
-            }
             if (parentAction) {
                 parentAction.status = window.resumeStatus;
                 parentAction.result = {
                     ...(parentAction.result || {}),
-                    reaction: { name: option.name, effect: effect.type, save: { ability: effect.saveAbility, dc: effect.saveDc, natural, bonus, total, success }, condition: !success ? effect.condition : null, pushFeet: !success ? effect.pushFeet : 0 },
-                    summary: success
-                        ? `${window.sourceName} supera la salvación de ${option.name}.`
-                        : `${window.sourceName} falla la salvación de ${option.name}${effect.pushFeet ? `, es empujado ${effect.pushFeet} pies` : ''}${effect.condition ? ` y queda ${effect.condition.toLowerCase()}` : ''}.`,
+                    reaction: { name: option.name, effect: effect.type, savePending: true, ability: effect.saveAbility, dc: effect.saveDc },
+                    summary: `${window.reactorName} usa ${option.name}; ${window.sourceName} debe realizar una salvación de ${effect.saveAbility} CD ${effect.saveDc}.`,
                 };
             }
         } else if (parentAction) parentAction.status = window.resumeStatus;
@@ -786,7 +793,7 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
             io.to(roomName(session.id)).emit('game:token-moved', { tokenId: movingToken.id, x: movingToken.x, y: movingToken.y });
         }
     }
-    if (option && ['COUNTER_DAMAGE', 'OPPORTUNITY_ATTACK'].includes(option.action?.reactionEffect?.type)) {
+    if (option && ['COUNTER_DAMAGE', 'OPPORTUNITY_ATTACK', 'FORCED_SAVE'].includes(option.action?.reactionEffect?.type)) {
         await createReactionCombatAction(io, session, window, option, window.controllerUserId);
     }
     await broadcastSession(io, session.id);
@@ -978,22 +985,55 @@ async function finalizeCombatAction(io, combatAction, roll) {
         const total = Number(roll.total) || natural + bonus;
         const success = total >= Number(action.saveDc);
         const conditions = success ? [] : (action.effect?.conditions || []).filter(Boolean);
+        let targetChanged = false;
+        let pushedFeet = 0;
         if (target && conditions.length) {
             target.conditions = [...new Set([...(Array.isArray(target.conditions) ? target.conditions : []), ...conditions])];
-            await target.save();
+            targetChanged = true;
             io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
         }
+        if (target && !success && Number(action.forcedMovement?.pushFeet) > 0) {
+            const originToken = session.tokens.find(token => String(token.id) === String(action.forcedMovement.originTokenId));
+            if (originToken) {
+                const dx = Number(target.x) - Number(originToken.x);
+                const dy = Number(target.y) - Number(originToken.y);
+                const length = Math.hypot(dx, dy) || 1;
+                pushedFeet = Number(action.forcedMovement.pushFeet);
+                const distance = Math.max(4, pushedFeet * 0.8);
+                target.x = clamp(Number(target.x) + (dx / length) * distance);
+                target.y = clamp(Number(target.y) + (dy / length) * distance);
+                targetChanged = true;
+                io.to(roomName(session.id)).emit('game:token-moved', { tokenId: target.id, x: target.x, y: target.y });
+            }
+        }
+        if (targetChanged) await target.save();
         combatAction.status = 'COMPLETED';
         combatAction.result = {
             ...previousResult,
             save: { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success },
-            targets: [{ tokenId: target?.id, characterId: target?.character_id, name: target?.label, outcome: success ? 'saved' : 'failed-save', conditions }],
+            targets: [{ tokenId: target?.id, characterId: target?.character_id, name: target?.label, outcome: success ? 'saved' : 'failed-save', conditions, pushedFeet }],
             summary: success
                 ? `${target?.label} supera ${action.name} (${total} contra CD ${action.saveDc}).`
-                : `${target?.label} falla ${action.name} (${total} contra CD ${action.saveDc})${conditions.length ? ` y queda ${conditions.join(' y ').toLowerCase()}` : ''}.`,
+                : `${target?.label} falla ${action.name} (${total} contra CD ${action.saveDc})${pushedFeet ? `, es empujado ${pushedFeet} pies` : ''}${conditions.length ? ` y queda ${conditions.join(' y ').toLowerCase()}` : ''}.`,
         };
         roll.label = combatAction.result.summary.slice(0, 120);
-        await Promise.all([roll.save(), combatAction.save()]);
+        const parentAction = action.reactionParentActionId
+            ? await GameCombatAction.findByPk(action.reactionParentActionId)
+            : null;
+        if (parentAction) {
+            parentAction.result = {
+                ...(parentAction.result || {}),
+                reaction: {
+                    ...(parentAction.result?.reaction || {}),
+                    savePending: false,
+                    save: { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success },
+                    condition: success ? null : conditions[0] || null,
+                    pushFeet: success ? 0 : pushedFeet,
+                },
+                summary: combatAction.result.summary,
+            };
+        }
+        await Promise.all([roll.save(), combatAction.save(), parentAction?.save()].filter(Boolean));
         return broadcastSession(io, session.id);
     }
     if (action.shield) {

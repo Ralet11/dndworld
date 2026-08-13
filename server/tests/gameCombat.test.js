@@ -136,7 +136,7 @@ test('NPC counter reactions model their save, push and condition', () => {
         save_dc: 13,
         description: 'Cuando es alcanzado por un ataque cuerpo a cuerpo, fuerza al atacante a salvar. Si falla, es empujado 10 pies y cae derribado.',
     });
-    assert.equal(action.reactionTrigger, 'ATTACK_HIT_BEFORE_DAMAGE');
+    assert.equal(action.reactionTrigger, 'DAMAGE_TAKEN');
     assert.deepEqual(action.reactionEffect, {
         type: 'FORCED_SAVE', saveAbility: 'DEX', saveDc: 13, pushFeet: 10, condition: 'Derribado', meleeOnly: true,
     });
