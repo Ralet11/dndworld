@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Crown, Dices, X } from 'lucide-react';
 import API_URL from '../../config';
 
@@ -31,8 +31,6 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
   const [retiringRolls, setRetiringRolls] = useState([]);
   const visibleStackRef = useRef([]);
   const retirementTimersRef = useRef(new Map());
-  const cardNodesRef = useRef(new Map());
-  const cardPositionsRef = useRef(new Map());
 
   useEffect(() => () => {
     window.clearTimeout(hideTimerRef.current);
@@ -160,24 +158,6 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
   const activeIds = new Set(orderedRolls.map(roll => String(roll.id)));
   const stackRolls = [...retiringRolls.filter(roll => !activeIds.has(String(roll.id))), ...orderedRolls];
 
-  useLayoutEffect(() => {
-    const nextPositions = new Map();
-    cardNodesRef.current.forEach((node, id) => {
-      if (!node || node.classList.contains('is-exiting') || node.classList.contains('is-stack-retiring')) return;
-      const top = node.getBoundingClientRect().top;
-      const previousTop = cardPositionsRef.current.get(id);
-      if (previousTop != null) {
-        const delta = previousTop - top;
-        if (Math.abs(delta) > 1) node.animate([
-          { transform: `translate3d(0, ${delta}px, 0)` },
-          { transform: 'translate3d(0, 0, 0)' },
-        ], { duration: 380, easing: 'cubic-bezier(.18, .82, .25, 1)', fill: 'both' });
-      }
-      nextPositions.set(id, top);
-    });
-    cardPositionsRef.current = nextPositions;
-  }, [stackRolls]);
-
   return (
     <>
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
@@ -188,11 +168,10 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
           {stackRolls.map(roll => {
             const naturalTwenty = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20;
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
-            const diceTotal = (roll.results || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
             const modifier = Number(roll.modifier) || 0;
             const hasModifier = modifier !== 0;
             return (
-              <article ref={node => { if (node) cardNodesRef.current.set(String(roll.id), node); else cardNodesRef.current.delete(String(roll.id)); }} key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring && !roll.dismissing ? ' is-stack-retiring' : ''}`}>
+              <article key={roll.id} style={{ '--roll-accent': roll.theme_color || '#c89b43' }} className={`game-roll-card${naturalTwenty ? ' is-critical' : ''}${naturalOne ? ' is-fumble' : ''}${roll.dismissing ? ' is-exiting' : ''}${roll.stackRetiring && !roll.dismissing ? ' is-stack-retiring' : ''}`}>
                 <div className="game-roll-card-portrait">
                   {roll.character_image ? <img src={resolveImage(roll.character_image)} alt="" /> : <Crown size={20} />}
                 </div>
@@ -205,7 +184,7 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
                   <Dices size={13} />
                   <div className="game-roll-total-values">
                     {hasModifier && <b className={modifier > 0 ? 'is-positive' : 'is-negative'}>{modifier > 0 ? '+' : '−'}{Math.abs(modifier)}</b>}
-                    <strong className={hasModifier ? 'is-modified' : ''} data-base={diceTotal}>{roll.total}</strong>
+                    <strong className={hasModifier ? 'is-modified' : ''}>{roll.total}</strong>
                   </div>
                 </div>
                 <button className="game-roll-dismiss" disabled={roll.dismissing} onClick={() => onDismiss?.(roll.id)} aria-label="Cerrar resultado"><X size={12} /></button>

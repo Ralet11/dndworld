@@ -32,6 +32,7 @@ const rollDismissTimers = new Map();
 const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a', '#d8cfb8', '#7c9c45', '#b05f72'];
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
+const ROLL_CARD_EXIT_MS = 1150;
 
 function dismissRollForEveryone(io, sessionId, rollId, delay = 5000) {
     const timerKey = `${sessionId}:${rollId}`;
@@ -39,7 +40,7 @@ function dismissRollForEveryone(io, sessionId, rollId, delay = 5000) {
     const timer = setTimeout(async () => {
         try {
             io.to(roomName(sessionId)).emit('game:roll-dismissing', { rollIds: [rollId] });
-            await new Promise(resolve => setTimeout(resolve, 700));
+            await new Promise(resolve => setTimeout(resolve, ROLL_CARD_EXIT_MS));
             await GameRoll.update({ dismissed: true }, { where: { id: rollId, session_id: sessionId } });
             io.to(roomName(sessionId)).emit('game:roll-dismissed', { rollIds: [rollId] });
         } catch (error) {
@@ -2192,7 +2193,7 @@ function registerGameSessionSocket(io, socket) {
                 console.error('game:dismiss-roll error:', error);
                 io.to(roomName(session.id)).emit('game:roll-upsert', roll.toJSON());
             }
-        }, 700);
+        }, ROLL_CARD_EXIT_MS);
         rollDismissTimers.set(timerKey, timer);
     });
 
