@@ -373,7 +373,6 @@ export default function GamePlayerPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
-      {consciousnessNotice && <div className={`game-consciousness-notice is-${consciousnessNotice.status}`} role="status"><span>{consciousnessNotice.status === 'unconscious' ? '☠' : '❤'}</span><strong>{consciousnessNotice.name} {consciousnessNotice.status === 'unconscious' ? 'ha quedado inconsciente' : 'ha sido reanimado'}</strong></div>}
       <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       <CombatResultPrompt
@@ -393,6 +392,7 @@ export default function GamePlayerPanel() {
         <GameStage
           session={session}
           userId={user.id}
+          consciousnessNotice={consciousnessNotice}
           combatTargeting={combatTargeting}
           onCombatTokenTarget={token => combatTargeting?.execute?.(combatTargeting.action, [token.id])}
           onCombatAreaTarget={area => combatTargeting?.execute?.(combatTargeting.action, [], area)}

@@ -4246,11 +4246,6 @@ a:focus-visible {
 .game-token.is-unconscious .game-token-portrait { filter: grayscale(1) brightness(.58); }
 .game-token-unconscious { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: rgba(245, 241, 231, .72); font-family: sans-serif; font-size: calc(var(--token-size, 50px) * .58); line-height: 1; text-shadow: 0 2px 7px rgba(0, 0, 0, .9); pointer-events: none; }
 .game-token.is-unconscious .game-token-image::before { border-color: rgba(215, 218, 211, .58); box-shadow: 0 0 0 2px rgba(2, 5, 4, .88), 0 0 15px rgba(214, 218, 210, .22); }
-.game-consciousness-notice { position: fixed; top: 76px; left: 50%; z-index: 120; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 11px 16px; color: #f3eee5; border: 1px solid #958d80; border-radius: 4px; background: rgba(19, 22, 20, .96); box-shadow: 0 12px 30px rgba(0, 0, 0, .48); font-family: var(--font-display); font-size: 13px; letter-spacing: .03em; transform: translateX(-50%); animation: game-consciousness-notice-in 180ms ease-out; pointer-events: none; }
-.game-consciousness-notice > span { font-family: sans-serif; font-size: 21px; line-height: 1; }
-.game-consciousness-notice.is-unconscious { border-color: #927a78; background: rgba(33, 22, 22, .96); }
-.game-consciousness-notice.is-revived { border-color: #6f9d78; background: rgba(15, 35, 22, .96); }
-@keyframes game-consciousness-notice-in { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .game-token-name { max-width: 108px; min-height: 17px; padding: 3px 7px 2px; overflow: hidden; color: #f0e8db; border: 1px solid rgba(123, 134, 126, .42); border-bottom-color: var(--token-color); border-radius: 2px; background: linear-gradient(180deg, rgba(12, 18, 15, .97), rgba(2, 5, 4, .96)); box-shadow: 0 4px 10px rgba(0, 0, 0, .7), inset 0 1px rgba(255, 255, 255, .04); font-size: 8px; font-weight: 800; line-height: 1.15; text-overflow: ellipsis; text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .game-token.is-player .game-token-name { color: #f4e5bc; }
 .game-token.is-enemy .game-token-name { color: #f0d4cf; }

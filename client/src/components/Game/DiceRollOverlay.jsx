@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Crown, Dices, X } from 'lucide-react';
+import { Crown, Dices, HeartPulse, Skull, X } from 'lucide-react';
 import API_URL from '../../config';
 
 function resolveImage(value) {
@@ -18,7 +18,7 @@ function fallbackResults(quantity, sides) {
   return Array.from(values, value => (value % sides) + 1);
 }
 
-export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll }) {
+export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll, consciousnessNotice = null }) {
   const boxRef = useRef(null);
   const diceReadyRef = useRef(Promise.resolve(null));
   const initializedRef = useRef(false);
@@ -163,8 +163,23 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
         <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
       </div>
-      {!!stackRolls.length && (
+      {!!(stackRolls.length || consciousnessNotice) && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">
+          {consciousnessNotice && (() => {
+            const unconscious = consciousnessNotice.status === 'unconscious';
+            const Icon = unconscious ? Skull : HeartPulse;
+            return (
+              <article style={{ '--roll-accent': unconscious ? '#b65c55' : '#65ad72' }} className="game-roll-card game-roll-status-card">
+                <div className="game-roll-card-portrait"><Icon size={23} /></div>
+                <div className="game-roll-card-copy">
+                  <span>Estado de combate</span>
+                  <strong>{consciousnessNotice.name} {unconscious ? 'ha quedado inconsciente' : 'ha sido reanimado'}</strong>
+                  <small>{unconscious ? '0 PG · necesita curación' : 'Vuelve a estar consciente'}</small>
+                </div>
+                <div className="game-roll-total"><Icon size={22} /></div>
+              </article>
+            );
+          })()}
           {stackRolls.map(roll => {
             const naturalTwenty = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 20;
             const naturalOne = roll.sides === 20 && roll.quantity === 1 && roll.results?.[0] === 1;
