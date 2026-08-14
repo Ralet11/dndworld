@@ -162,11 +162,13 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
                   const expanded = expandedActionKey === action.key;
                   return (
                     <article key={action.key} className={`turn-action-card${action.available ? '' : ' is-disabled'}${expanded ? ' is-expanded' : ''}`}>
-                      <button type="button" className="turn-action-inspect" onClick={() => setExpandedActionKey(current => current === action.key ? null : action.key)} aria-expanded={expanded}>
+                      <div className="turn-action-inspect" role="button" tabIndex={0} onClick={() => choose(action)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(action); } }} aria-label={`Usar ${action.name}`}>
                         <i>{actionIcon(action)}</i>
                         <span><strong>{action.name}</strong><small>{action.summary || action.description || 'Acción de combate'}</small></span>
-                        {expanded ? <ChevronUp size={13} /> : <ChevronRight size={13} />}
-                      </button>
+                        <button type="button" className="turn-action-expand" onClick={event => { event.stopPropagation(); setExpandedActionKey(current => current === action.key ? null : action.key); }} aria-label={expanded ? `Ocultar detalles de ${action.name}` : `Ver detalles de ${action.name}`} aria-expanded={expanded}>
+                          {expanded ? <ChevronUp size={13} /> : <ChevronRight size={13} />}
+                        </button>
+                      </div>
                       {expanded && (
                         <div className="turn-action-detail">
                           <p>{action.description || 'Esta habilidad no tiene una descripción cargada.'}</p>

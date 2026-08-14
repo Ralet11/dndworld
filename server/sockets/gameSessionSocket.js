@@ -39,6 +39,19 @@ const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
 const ROLL_CARD_EXIT_MS = 1150;
 
+function emitConsciousnessChange(io, session, token, previousHp, nextHp) {
+    if (!session || !token) return;
+    const wasConscious = Number(previousHp) > 0;
+    const isConscious = Number(nextHp) > 0;
+    if (wasConscious === isConscious) return;
+    io.to(roomName(session.id)).emit('game:consciousness-changed', {
+        tokenId: token.id,
+        characterId: token.character_id,
+        name: token.label || token.character?.name || 'La criatura',
+        status: isConscious ? 'revived' : 'unconscious',
+    });
+}
+
 function dismissRollForEveryone(io, sessionId, rollId, delay = 10000) {
     const timerKey = `${sessionId}:${rollId}`;
     if (rollDismissTimers.has(timerKey)) return;
@@ -1088,6 +1101,7 @@ async function finalizeCombatAction(io, combatAction, roll) {
     for (const target of targets) {
         const character = target.character;
         if (!character) continue;
+        const previousHp = character.hp_current;
         let amount = totalEffect;
         let save = null;
         if (action.saveAbility && action.saveDc) {
@@ -1133,14 +1147,17 @@ async function finalizeCombatAction(io, combatAction, roll) {
             await character.save();
             outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: inflicted > 0 ? 'damaged' : 'saved', amount: inflicted, absorbed, mitigations, save });
             if (retaliation && hadTemporaryHp && actorToken?.character && pointDistance(actorToken, target) <= 8) {
+                const actorPreviousHp = actorToken.character.hp_current;
                 const reflected = hpAfterDamage(actorToken.character, retaliation.damage, retaliation.damageType);
                 actorToken.character.hp_current = reflected.hp_current;
                 actorToken.character.hp_temp = reflected.hp_temp;
                 await actorToken.character.save();
+                emitConsciousnessChange(io, session, actorToken, actorPreviousHp, actorToken.character.hp_current);
                 outcomes.push({ tokenId: actorToken.id, characterId: actorToken.character_id, name: actorToken.label, outcome: 'retaliation', amount: reflected.amount, damageType: retaliation.damageType });
                 io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: actorToken.id, characterId: actorToken.character_id, hpCurrent: actorToken.character.hp_current, hpMax: actorToken.character.hp_max, hpTemp: actorToken.character.hp_temp });
             }
         }
+        emitConsciousnessChange(io, session, target, previousHp, character.hp_current);
         io.to(roomName(session.id)).emit('game:token-hp-updated', {
             tokenId: target.id,
             characterId: character.id,
@@ -1153,11 +1170,13 @@ async function finalizeCombatAction(io, combatAction, roll) {
         const healingTarget = session.tokens.find(token => String(token.id) === String(action.secondaryTargetTokenId));
         const parsedHealing = parseDiceExpression(action.secondaryHealing);
         if (healingTarget?.character && parsedHealing) {
+            const previousHp = healingTarget.character.hp_current;
             const healingResults = Array.from({ length: parsedHealing.quantity }, () => randomInt(1, parsedHealing.sides + 1));
             const healingTotal = healingResults.reduce((sum, value) => sum + value, 0) + parsedHealing.modifier;
             const healed = hpAfterHealing(healingTarget.character, healingTotal);
             healingTarget.character.hp_current = healed.hp_current;
             await healingTarget.character.save();
+            emitConsciousnessChange(io, session, healingTarget, previousHp, healingTarget.character.hp_current);
             outcomes.push({ tokenId: healingTarget.id, characterId: healingTarget.character_id, name: healingTarget.label, outcome: 'healed', amount: healed.amount, secondary: true, healingResults });
             io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: healingTarget.id, characterId: healingTarget.character_id, hpCurrent: healingTarget.character.hp_current, hpMax: healingTarget.character.hp_max, hpTemp: healingTarget.character.hp_temp });
         }
@@ -2037,8 +2056,10 @@ function registerGameSessionSocket(io, socket) {
         const token = await GameToken.findOne({ where: { id: tokenId, session_id: sessionId } });
         const character = token?.character_id ? await Character.findByPk(token.character_id) : null;
         if (!token || !character) return;
+        const previousHp = character.hp_current;
         character.hp_current = Math.max(0, Math.min(character.hp_max || 1, (character.hp_current || 0) + Number(delta || 0)));
         await character.save();
+        emitConsciousnessChange(io, session, token, previousHp, character.hp_current);
         io.to(roomName(session.id)).emit('game:token-hp-updated', {
             tokenId: token.id,
             characterId: character.id,
@@ -2056,8 +2077,10 @@ function registerGameSessionSocket(io, socket) {
         if (!token || !character) return;
         const requestedHp = Number.parseInt(hp, 10);
         if (!Number.isFinite(requestedHp)) return;
+        const previousHp = character.hp_current;
         character.hp_current = Math.max(0, Math.min(character.hp_max || 1, requestedHp));
         await character.save();
+        emitConsciousnessChange(io, session, token, previousHp, character.hp_current);
         io.to(roomName(session.id)).emit('game:token-hp-updated', {
             tokenId: token.id,
             characterId: character.id,

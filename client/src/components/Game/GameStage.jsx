@@ -1232,6 +1232,7 @@ export default function GameStage({
         const hpCurrent = Number(token.character?.hp_current);
         const hpMax = Number(token.character?.hp_max);
         const hasHp = Number.isFinite(hpCurrent) && Number.isFinite(hpMax) && hpMax > 0;
+        const isUnconscious = hasHp && hpCurrent <= 0;
         const hpPercent = hasHp ? Math.max(0, Math.min(100, (hpCurrent / hpMax) * 100)) : 0;
         const hpColor = hpPercent > 50 ? '#65ad72' : hpPercent > 20 ? '#d0a348' : '#c94f43';
         const npcType = String(token.character?.npc_type || '').toLowerCase();
@@ -1265,7 +1266,7 @@ export default function GameStage({
               if (element) tokenElementsRef.current.set(token.id, element);
               else tokenElementsRef.current.delete(token.id);
             }}
-            className={`game-token is-${tokenRole}${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}${combatTargeting ? (validCombatTarget ? ' is-valid-combat-target' : ' is-invalid-combat-target') : ''}`}
+            className={`game-token is-${tokenRole}${movable ? ' is-movable' : ''}${selected ? ' is-selected' : ''}${isUnconscious ? ' is-unconscious' : ''}${token.character_id === activeCharacterId ? ' is-active-turn' : ''}${combatTargeting ? (validCombatTarget ? ' is-valid-combat-target' : ' is-invalid-combat-target') : ''}`}
             style={{ left: `${token.x}%`, top: `${token.y}%`, '--token-color': tokenAccent, '--token-size': `${tokenSize}px` }}
             onContextMenu={event => {
               event.preventDefault();
@@ -1313,6 +1314,7 @@ export default function GameStage({
                   ? <img src={resolveUrl(token.image_url || token.character?.rendered_url || token.character?.image_url || token.character?.base_body_url)} alt="" />
                   : token.label.slice(0, 1).toUpperCase()}
               </span>
+              {isUnconscious && <span className="game-token-unconscious" role="img" aria-label={`${token.label} está inconsciente`}>☠</span>}
             </span>
             <small className="game-token-name">{token.label}</small>
             {hasHp && (

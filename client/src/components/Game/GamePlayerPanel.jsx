@@ -18,6 +18,7 @@ export default function GamePlayerPanel() {
   const [character, setCharacter] = useState(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [consciousnessNotice, setConsciousnessNotice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sheetSection, setSheetSection] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -130,6 +131,10 @@ export default function GamePlayerPanel() {
     });
     const onInitiativeRequested = () => setInitiativePrompt(true);
     const onCombatEnded = () => setInitiativePrompt(false);
+    const onConsciousnessChanged = notice => {
+      setConsciousnessNotice(notice);
+      window.setTimeout(() => setConsciousnessNotice(current => current === notice ? null : current), 5000);
+    };
 
     socket.on('game:state', onState);
     socket.on('game:error', onError);
@@ -153,6 +158,7 @@ export default function GamePlayerPanel() {
     socket.on('game:roll-dismissed', onRollDismissed);
     socket.on('game:initiative-requested', onInitiativeRequested);
     socket.on('game:combat-ended', onCombatEnded);
+    socket.on('game:consciousness-changed', onConsciousnessChanged);
     const syncGame = () => {
       if (!sessionDashboardRef.current) socket.emit('game:get-current');
       else setLoading(false);
@@ -186,6 +192,7 @@ export default function GamePlayerPanel() {
     socket.off('game:roll-dismissed', onRollDismissed);
       socket.off('game:initiative-requested', onInitiativeRequested);
       socket.off('game:combat-ended', onCombatEnded);
+      socket.off('game:consciousness-changed', onConsciousnessChanged);
       socket.off('connect', syncGame);
     };
   }, [socket, user.id]);
@@ -366,6 +373,7 @@ export default function GamePlayerPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+      {consciousnessNotice && <div className={`game-consciousness-notice is-${consciousnessNotice.status}`} role="status"><span>{consciousnessNotice.status === 'unconscious' ? '☠' : '❤'}</span><strong>{consciousnessNotice.name} {consciousnessNotice.status === 'unconscious' ? 'ha quedado inconsciente' : 'ha sido reanimado'}</strong></div>}
       <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       <CombatResultPrompt

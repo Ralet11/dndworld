@@ -64,6 +64,7 @@ export default function GameMasterPanel() {
   const [scenes, setScenes] = useState([]);
   const [npcs, setNpcs] = useState([]);
   const [error, setError] = useState('');
+  const [consciousnessNotice, setConsciousnessNotice] = useState(null);
   const [title, setTitle] = useState('La campaña actual');
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaTitle, setMediaTitle] = useState('');
@@ -120,6 +121,10 @@ export default function GameMasterPanel() {
       setNpcsError('');
     };
     const onWorldState = state => setWorldState(current => ({ ...current, ...state }));
+    const onConsciousnessChanged = notice => {
+      setConsciousnessNotice(notice);
+      window.setTimeout(() => setConsciousnessNotice(current => current === notice ? null : current), 5000);
+    };
     const onTokenMoved = ({ tokenId, x, y }) => setSession(current => current ? ({
       ...current,
       tokens: current.tokens.map(token => token.id === tokenId ? { ...token, x, y } : token),
@@ -212,6 +217,7 @@ export default function GameMasterPanel() {
     socket.on('game:token-moved', onTokenMoved);
     socket.on('game:tokens-moved', onTokensMoved);
     socket.on('game:token-hp-updated', onTokenHpUpdated);
+    socket.on('game:consciousness-changed', onConsciousnessChanged);
     socket.on('game:token-condition-updated', onTokenConditionUpdated);
     socket.on('game:turn-updated', onTurnUpdated);
     socket.on('game:annotation-added', onAnnotationAdded);
@@ -238,6 +244,7 @@ export default function GameMasterPanel() {
       socket.off('game:token-moved', onTokenMoved);
       socket.off('game:tokens-moved', onTokensMoved);
       socket.off('game:token-hp-updated', onTokenHpUpdated);
+      socket.off('game:consciousness-changed', onConsciousnessChanged);
       socket.off('game:token-condition-updated', onTokenConditionUpdated);
       socket.off('game:turn-updated', onTurnUpdated);
       socket.off('game:annotation-added', onAnnotationAdded);
@@ -675,6 +682,7 @@ export default function GameMasterPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+      {consciousnessNotice && <div className={`game-consciousness-notice is-${consciousnessNotice.status}`} role="status"><span>{consciousnessNotice.status === 'unconscious' ? '☠' : '❤'}</span><strong>{consciousnessNotice.name} {consciousnessNotice.status === 'unconscious' ? 'ha quedado inconsciente' : 'ha sido reanimado'}</strong></div>}
       <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       <CombatResultPrompt
