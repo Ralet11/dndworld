@@ -180,12 +180,13 @@ const seedDatabase = async () => {
         const [paleas, createdPaleas] = await Character.findOrCreate({
             where: { name: 'Paleas Mucron' },
             defaults: {
-                race: 'Aasimar',
-                class: 'Ranger 3 / Sorcerer 1',
-                level: 4,
+                race: 'Variant Aasimar',
+                class: 'Ranger 4 / Sorcerer 1',
+                background: 'Acolyte',
+                level: 5,
                 hp_current: 18,
-                hp_max: 18,
-                ac_base: 14,
+                hp_max: 27,
+                ac_base: 16,
                 speed: 30,
                 is_npc: false,
                 UserId: playerUsers['emi@player.com'].id
@@ -212,9 +213,11 @@ const seedDatabase = async () => {
 
             // 3. Add Skills
             await Skill.bulkCreate([
-                { character_id: paleas.id, name: 'Atletismo', proficiency_level: 1 },
+                { character_id: paleas.id, name: 'Perspicacia', proficiency_level: 1 },
+                { character_id: paleas.id, name: 'Investigación', proficiency_level: 2 },
                 { character_id: paleas.id, name: 'Percepción', proficiency_level: 1 },
-                { character_id: paleas.id, name: 'Supervivencia', proficiency_level: 1 }
+                { character_id: paleas.id, name: 'Religión', proficiency_level: 1 },
+                { character_id: paleas.id, name: 'Sigilo', proficiency_level: 1 }
             ]);
         }
 
@@ -249,25 +252,17 @@ const seedDatabase = async () => {
             itemMap[item.name] = item;
         }
 
-        // 5. Ensure Paleas has specific items (Check presence before adding)
+        // 5. Helper for idempotent inventory assignment.
         // Helper to safely assign
         const safeAssign = async (char, item, qty = 1) => {
             const has = await char.hasItem(item);
             if (!has) await char.addItem(item, { through: { quantity: qty } });
         };
 
-        if (itemMap['Espada Corta']) await safeAssign(paleas, itemMap['Espada Corta']);
-        if (itemMap['Poción de Curación']) await safeAssign(paleas, itemMap['Poción de Curación']);
-        if (itemMap['Armadura de Cuero']) await safeAssign(paleas, itemMap['Armadura de Cuero']);
-
         // 6. Ensure Equipment Slots (Only if empty/new)
         const equipment = await EquipmentSlots.findOne({ where: { character_id: paleas.id } });
         if (!equipment) {
-            await EquipmentSlots.create({
-                character_id: paleas.id,
-                primary_weapon_id: itemMap['Espada Corta']?.id,
-                chest_id: itemMap['Armadura de Cuero']?.id
-            });
+            await EquipmentSlots.create({ character_id: paleas.id });
         }
 
         // 7. Ensure Quests Exist (SKIPPED - User wants no default quests)
@@ -400,7 +395,10 @@ const seedDatabase = async () => {
             { name: 'Escupefuego', type: 'Arma', rarity: 'Raro', description: 'Arma capaz de lanzar proyectiles de fuego.', level: 4 },
             { name: 'Ballesta', type: 'Arma', rarity: 'Común', description: '1d8+DES perforante.', level: 1 },
             { name: 'Puñales Elficos', type: 'Arma', rarity: 'Raro', description: 'Hojas ligeras y letales.', level: 4 },
-            { name: 'Espada Larga', type: 'Arma', rarity: 'Común', description: 'Versátil (1d8/1d10).', level: 1 }
+            { name: 'Espada Larga', type: 'Arma', rarity: 'Común', description: 'Versátil (1d8/1d10).', level: 1 },
+            { name: 'Longsword, +1', type: 'Arma', rarity: 'Poco Común', slot: 'primary_weapon', weapon_category: 'Marcial', damage: '1d8', damage_type: 'Slashing', weight: 3, properties: ['Martial', 'Versatile'], mastery: { key: 'sap', name: 'Sap', desc: 'Sap' }, description: '1d8+3 Slashing. Martial, Versatile, Sap.', use_effects: { combat_action: { attackBonus: 6, damageBonus: 1, damageType: 'Slashing' } } },
+            { name: 'Shortsword, +1', type: 'Arma', rarity: 'Poco Común', slot: 'secondary_weapon', weapon_category: 'Marcial', damage: '1d6', damage_type: 'Piercing', weight: 2, properties: ['Martial', 'Finesse', 'Light'], mastery: { key: 'vex', name: 'Vex', desc: 'Vex' }, description: '1d6+3 Piercing. Martial, Finesse, Light, Vex.', use_effects: { combat_action: { attackBonus: 6, damageBonus: 1, damageType: 'Piercing' } } },
+            { name: 'Mithral Half Plate', type: 'Armadura', rarity: 'Poco Común', slot: 'chest', armor_weight: 'Medium Armor', armor_material: 'Mithral', armor_type: 'malla', ca_value: null, weight: 40, properties: [], stat_bonuses: { ac: 6 }, description: 'Mithral Half Plate. 40 lb.' }
         ];
 
         const customItemMap = {};
@@ -445,8 +443,9 @@ const seedDatabase = async () => {
         ]);
 
         await assignAndEquip('Paleas Mucron', [
-            { itemName: 'Espada Larga', slot: 'primary_weapon' },
-            { itemName: 'Espada Corta', slot: 'secondary_weapon' }
+            { itemName: 'Longsword, +1', slot: 'primary_weapon' },
+            { itemName: 'Shortsword, +1', slot: 'secondary_weapon' },
+            { itemName: 'Mithral Half Plate', slot: 'chest' }
         ]);
 
         // 12.5 Sistema de Armaduras 2025 — convertir/crear piezas con CA modular.
@@ -641,15 +640,17 @@ const seedDatabase = async () => {
             console.error('Error traduciendo nombres de conjuro:', e.message);
         }
 
-        // 16. Paleas: multiclase Explorador 3 / Hechicero 1 (nivel total 4),
-        // según su ficha: HP 22, subclase Cazador y elecciones tomadas.
+        // 16. Paleas: ficha D&D Beyond importada (Ranger 4 / Sorcerer 1).
         await Character.update(
             {
-                classes: [{ slug: 'ranger', level: 3 }, { slug: 'sorcerer', level: 1 }],
-                level: 4,
+                race: 'Variant Aasimar',
+                race_slug: 'aasimar',
+                class: 'Ranger 4 / Sorcerer 1',
+                background: 'Acolyte',
+                classes: [{ slug: 'ranger', level: 4 }, { slug: 'sorcerer', level: 1 }],
+                level: 5,
                 class_slug: 'ranger',
-                hp_max: 22,
-                hp_current: 22,
+                hp_max: 27,
                 archetype_slug: 'hunter',
                 feature_choices: {
                     'ranger:Estilo de Combate': 'two-weapon',

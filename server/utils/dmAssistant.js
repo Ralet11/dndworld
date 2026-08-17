@@ -1540,9 +1540,33 @@ async function executeAiAssistantFallback({
         });
     } catch (err) {
         console.error('DM Assistant LLM fallback error:', err);
+        if (err?.code === 'NO_API_KEY') {
+            return buildReply('info', 'El Oráculo no tiene configurada la conexión con OpenAI en el servidor. Un administrador debe configurar OPENAI_API_KEY y reiniciar únicamente el proceso dndworld.', {
+                tool: 'assistant.configuration',
+                suggestions: ['contexto', 'ayuda'],
+            });
+        }
+        if (err?.status === 401 || err?.status === 403) {
+            return buildReply('info', 'El Oráculo no pudo autenticarse con OpenAI. La credencial configurada en el servidor debe revisarse.', {
+                tool: 'assistant.authentication',
+                suggestions: ['contexto', 'ayuda'],
+            });
+        }
         if (err?.status === 429 && err?.error?.code === 'insufficient_quota') {
             return buildReply('info', 'El Oráculo no puede consultar la IA porque la clave de OpenAI no tiene créditos disponibles. Recargá la cuenta o configurá una clave con facturación activa; las herramientas de lenguaje natural se habilitarán automáticamente.', {
                 tool: 'assistant.billing',
+                suggestions: ['contexto', 'ayuda'],
+            });
+        }
+        if (err?.status === 429) {
+            return buildReply('info', 'El Oráculo alcanzó temporalmente el límite de solicitudes de OpenAI. Esperá unos segundos y volvé a intentar.', {
+                tool: 'assistant.rate_limit',
+                suggestions: ['contexto', 'ayuda'],
+            });
+        }
+        if (Number(err?.status) >= 500) {
+            return buildReply('info', 'OpenAI no está disponible temporalmente. El estado de la campaña sigue intacto; volvé a intentar en unos segundos.', {
+                tool: 'assistant.upstream',
                 suggestions: ['contexto', 'ayuda'],
             });
         }
