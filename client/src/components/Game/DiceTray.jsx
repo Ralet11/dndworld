@@ -16,6 +16,7 @@ export default function DiceTray({ onRoll, compact = false }) {
   const [quantity, setQuantity] = useState(1);
   const [modifierInput, setModifierInput] = useState('0');
   const [rolling, setRolling] = useState(false);
+  const [previewSides, setPreviewSides] = useState(null);
   const unlockTimerRef = useRef(null);
   const modifier = clampModifier(modifierInput);
 
@@ -39,13 +40,34 @@ export default function DiceTray({ onRoll, compact = false }) {
 
   return (
     <section className={`game-dice-tray${compact ? ' is-compact' : ''}`}>
+      {previewSides && (
+        <div className="game-dice-hover-preview" aria-hidden="true">
+          <div className={`game-die-preview-shape is-d${previewSides}`}>
+            <i /><i /><i />
+            <span>d{previewSides}</span>
+          </div>
+          <strong>Dado de {previewSides} caras</strong>
+          <small>{quantity}d{previewSides}{signedModifier(modifier)}</small>
+        </div>
+      )}
       <header>
         <div><Dices size={15} /><span>Dados</span></div>
         <small><b>{quantity} dado{quantity === 1 ? '' : 's'}</b>{modifier !== 0 && <b className="has-modifier">Mod. {signedModifier(modifier)}</b>}</small>
       </header>
       <div className="game-dice-set">
         {DIE_SIDES.map(sides => (
-          <button type="button" key={sides} disabled={rolling} onClick={() => roll(sides)} aria-label={`Tirar ${quantity}d${sides}${signedModifier(modifier)}`} title={`${quantity}d${sides}${signedModifier(modifier)}`}>
+          <button
+            type="button"
+            key={sides}
+            disabled={rolling}
+            onClick={() => roll(sides)}
+            onMouseEnter={() => setPreviewSides(sides)}
+            onMouseLeave={() => setPreviewSides(current => current === sides ? null : current)}
+            onFocus={() => setPreviewSides(sides)}
+            onBlur={() => setPreviewSides(current => current === sides ? null : current)}
+            aria-label={`Tirar ${quantity}d${sides}${signedModifier(modifier)}`}
+            title={`${quantity}d${sides}${signedModifier(modifier)}`}
+          >
             <span>d{sides}</span>
           </button>
         ))}
