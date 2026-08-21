@@ -13,6 +13,7 @@ const {
     weaponProfile,
 } = require('../services/gameCombat');
 const { initiativeBonus, initiativeEntry, orderByInitiative } = require('../services/gameInitiative');
+const { PALEAS_ARMOR } = require('../data/paleasEquipment');
 
 test('initiative mixes combatants by rolled total and resolves ties consistently', () => {
     const rogue = { id: 1, is_npc: false, initiative_bonus: 1, abilityScores: [{ ability: 'DEX', base_value: 16, bonus_value: 0 }] };
@@ -74,6 +75,18 @@ test('combat armor class uses the same equipped-armor calculation shown on a pla
     const npc = { is_npc: true, ac_base: 15, equipment: { ring_1: { stat_bonuses: { ac: 1 } } } };
     assert.equal(effectiveArmorClass(player), 13);
     assert.equal(effectiveArmorClass(npc), 16);
+});
+
+test('Paleas mail set distributes armor across four slots for exactly AC 15', () => {
+    assert.deepEqual(PALEAS_ARMOR.map(item => item.slot), ['shoulders', 'chest', 'pants', 'boots']);
+    assert.ok(PALEAS_ARMOR.every(item => item.armor_type === 'malla' && item.ca_value === 1.25 && !item.stat_bonuses.ac));
+    const paleas = {
+        is_npc: false,
+        ac_base: 16,
+        abilityScores: [{ ability: 'DEX', base_value: 13, bonus_value: 0 }],
+        equipment: Object.fromEntries(PALEAS_ARMOR.map(item => [item.slot, item])),
+    };
+    assert.equal(effectiveArmorClass(paleas), 15);
 });
 
 test('single and circular area targeting enforce relationships', () => {

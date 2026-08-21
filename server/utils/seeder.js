@@ -1,6 +1,7 @@
 const { Character, Item, AbilityScore, Skill, Quest, EquipmentSlots, MapState, User, Class, Race } = require('../models');
 const bcrypt = require('bcryptjs');
 const seedFromSnapshot = require('./seed_from_snapshot');
+const { PALEAS_ARMOR } = require('../data/paleasEquipment');
 
 const makeFallbackClass = ({
     slug,
@@ -398,7 +399,7 @@ const seedDatabase = async () => {
             { name: 'Espada Larga', type: 'Arma', rarity: 'Común', description: 'Versátil (1d8/1d10).', level: 1 },
             { name: 'Longsword, +1', type: 'Arma', rarity: 'Poco Común', slot: 'primary_weapon', weapon_category: 'Marcial', damage: '1d8', damage_type: 'Slashing', weight: 3, properties: ['Martial', 'Versatile'], mastery: { key: 'sap', name: 'Sap', desc: 'Sap' }, description: '1d8+3 Slashing. Martial, Versatile, Sap.', use_effects: { combat_action: { attackBonus: 6, damageBonus: 1, damageType: 'Slashing' } } },
             { name: 'Shortsword, +1', type: 'Arma', rarity: 'Poco Común', slot: 'secondary_weapon', weapon_category: 'Marcial', damage: '1d6', damage_type: 'Piercing', weight: 2, properties: ['Martial', 'Finesse', 'Light'], mastery: { key: 'vex', name: 'Vex', desc: 'Vex' }, description: '1d6+3 Piercing. Martial, Finesse, Light, Vex.', use_effects: { combat_action: { attackBonus: 6, damageBonus: 1, damageType: 'Piercing' } } },
-            { name: 'Mithral Half Plate', type: 'Armadura', rarity: 'Poco Común', slot: 'chest', armor_weight: 'Medium Armor', armor_material: 'Mithral', armor_type: 'malla', ca_value: null, weight: 40, properties: [], stat_bonuses: { ac: 6 }, description: 'Mithral Half Plate. 40 lb.' }
+            ...PALEAS_ARMOR,
         ];
 
         const customItemMap = {};
@@ -445,7 +446,7 @@ const seedDatabase = async () => {
         await assignAndEquip('Paleas Mucron', [
             { itemName: 'Longsword, +1', slot: 'primary_weapon' },
             { itemName: 'Shortsword, +1', slot: 'secondary_weapon' },
-            { itemName: 'Mithral Half Plate', slot: 'chest' }
+            ...PALEAS_ARMOR.map(item => ({ itemName: item.name, slot: item.slot })),
         ]);
 
         // 12.5 Sistema de Armaduras 2025 — convertir/crear piezas con CA modular.

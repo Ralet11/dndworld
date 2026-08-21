@@ -33,14 +33,12 @@ const NAME_BY_SLOT_TYPE = {
 const CHAR_ARMOR_TYPE = {
     'Zik': 'cuero',
     'Rakion Altarion': 'tela',
-    'Paleas Mucron': 'cuero',
     'Lucario': 'tela',
 };
 
 // CA oficial confirmada (nivel 5) que debe seguir dando el total.
 const OFFICIAL_AC = {
     'Zik': 14,
-    'Paleas Mucron': 16,
     'Rakion Altarion': 14,
     'Lucario': 14,
 };

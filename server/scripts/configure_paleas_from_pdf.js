@@ -6,6 +6,7 @@ const {
     Spell, CharacterAuditLog,
 } = require('../models');
 const StatEngine = require('../utils/statEngine');
+const { PALEAS_ARMOR } = require('../data/paleasEquipment');
 
 const APPLY = process.argv.includes('--apply');
 const CHARACTER_NAME = 'Paleas Mucron';
@@ -79,11 +80,7 @@ const ITEMS = [
         description: '1d6+3 Piercing. Martial, Finesse, Light, Vex.',
         use_effects: { combat_action: { attackBonus: 6, damageBonus: 1, damageType: 'Piercing' } },
     },
-    {
-        name: 'Mithral Half Plate', type: 'Armadura', rarity: 'Poco Común', slot: 'chest',
-        armor_weight: 'Medium Armor', armor_material: 'Mithral', armor_type: 'malla', ca_value: null,
-        weight: 40, properties: [], stat_bonuses: { ac: 6 }, description: 'Mithral Half Plate. 40 lb.',
-    },
+    ...PALEAS_ARMOR,
 ];
 
 const PDF_NOTES = [
@@ -154,7 +151,7 @@ async function run() {
             archetype_slug: 'hunter', classes: [{ slug: 'ranger', level: 4 }, { slug: 'sorcerer', level: 1 }],
             background: 'Acolyte', alignment: null, level: 5, xp: 0, gold: 0,
             hp_current: Math.min(paleas.hp_current, 27), hp_max: 27, hp_temp: 0,
-            ac_base: 16, initiative_bonus: 1, speed: 30, size: 'Medium', proficiency_bonus: 3,
+            ac_base: 15, initiative_bonus: 1, speed: 30, size: 'Medium', proficiency_bonus: 3,
             passive_perception: 15, saving_throws: { str: true, dex: true },
             damage_resistances: ['Necrotic', 'Radiant'], damage_vulnerabilities: [], damage_immunities: [], condition_immunities: [],
             senses: ['Darkvision 60 ft.'], languages: ['Celestial', 'Common', 'Common Sign Language', 'Elvish', 'Infernal'],
@@ -174,9 +171,14 @@ async function run() {
         await CharacterInventory.bulkCreate(itemRecords.map(item => ({ character_id: paleas.id, item_id: item.id, quantity: 1 })), { transaction });
 
         const [equipment] = await EquipmentSlots.findOrCreate({ where: { character_id: paleas.id }, transaction });
+        const itemByName = Object.fromEntries(itemRecords.map(item => [item.name, item]));
+        const armorBySlot = Object.fromEntries(PALEAS_ARMOR.map(definition => [definition.slot, itemByName[definition.name]]));
         await equipment.update({
-            helmet_id: null, shoulders_id: null, boots_id: null, pants_id: null, gloves_id: null, ring_1_id: null, ring_2_id: null,
-            primary_weapon_id: itemRecords[0].id, secondary_weapon_id: itemRecords[1].id, chest_id: itemRecords[2].id,
+            helmet_id: null, gloves_id: null, ring_1_id: null, ring_2_id: null,
+            shoulders_id: armorBySlot.shoulders.id, chest_id: armorBySlot.chest.id,
+            pants_id: armorBySlot.pants.id, boots_id: armorBySlot.boots.id,
+            primary_weapon_id: itemByName['Longsword, +1'].id,
+            secondary_weapon_id: itemByName['Shortsword, +1'].id,
         }, { transaction });
         await CharacterAuditLog.create({
             character_id: paleas.id, actor_username: 'Codex / DM', actor_role: 'DM', source: 'paleas-pdf-import',
@@ -187,7 +189,7 @@ async function run() {
     const updated = await loadCharacter();
     const calculated = StatEngine.calculate(updated);
     const importedSpellCount = await Spell.count({ where: { document__slug: 'paleas-pdf' } });
-    if (calculated.ac !== 16 || calculated.maxHp !== 27 || calculated.level !== 5 || importedSpellCount !== SPELLS.length) {
+    if (calculated.ac !== 15 || calculated.maxHp !== 27 || calculated.level !== 5 || importedSpellCount !== SPELLS.length) {
         throw new Error(`Verificación fallida: nivel ${calculated.level}, PG ${calculated.maxHp}, CA ${calculated.ac}, conjuros ${importedSpellCount}/${SPELLS.length}.`);
     }
     console.log(JSON.stringify({

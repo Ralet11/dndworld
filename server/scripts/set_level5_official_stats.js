@@ -18,7 +18,7 @@ const StatEngine = require('../utils/statEngine');
 
 const TARGETS = {
     'Zik': { level: 5, hp: 19, ac: 14, slot: 'chest' },
-    'Paleas Mucron': { level: 5, hp: 32, ac: 16, slot: 'ring_1' },
+    'Paleas Mucron': { level: 5, hp: 32, ac: 15, slot: 'ring_1' },
     'Rakion Altarion': { level: 5, hp: 30, ac: 14, slot: 'chest' },
     'Lucario': { level: 5, hp: 26, ac: 14, slot: 'ring_1' },
 };
