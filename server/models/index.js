@@ -110,8 +110,8 @@ GameSession.hasMany(GameToken, { foreignKey: 'session_id', as: 'tokens', onDelet
 GameToken.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameToken.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
 GameToken.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
-GameSession.hasMany(GameAsset, { foreignKey: 'session_id', as: 'assets', onDelete: 'CASCADE' });
-GameAsset.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
+GameSession.hasMany(GameAsset, { foreignKey: 'session_id', as: 'assets', onDelete: 'SET NULL' });
+GameAsset.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session', onDelete: 'SET NULL' });
 GameSession.hasMany(GameRoll, { foreignKey: 'session_id', as: 'rolls', onDelete: 'CASCADE' });
 GameRoll.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameRoll.belongsTo(User, { foreignKey: 'user_id', as: 'user' });

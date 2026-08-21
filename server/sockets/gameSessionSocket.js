@@ -182,12 +182,6 @@ async function loadSession(sessionId) {
                 }],
             },
             {
-                model: GameAsset,
-                as: 'assets',
-                separate: true,
-                order: [['sort_order', 'ASC']],
-            },
-            {
                 model: AudioTrack,
                 as: 'audioTrack',
             },
@@ -213,6 +207,31 @@ async function loadSession(sessionId) {
         ],
     });
     if (!session) return null;
+
+    // La biblioteca pertenece al DM, no a la sala. Al consultar por primera
+    // vez también se adoptan los assets históricos que sólo tenían session_id.
+    const legacyAssets = await GameAsset.findAll({
+        where: { owner_user_id: null },
+        attributes: ['id'],
+        include: [{
+            model: GameSession,
+            as: 'session',
+            attributes: [],
+            required: true,
+            where: { dm_user_id: session.dm_user_id },
+        }],
+    });
+    if (legacyAssets.length) {
+        await GameAsset.update(
+            { owner_user_id: session.dm_user_id },
+            { where: { id: legacyAssets.map(asset => asset.id) } },
+        );
+    }
+    const libraryAssets = await GameAsset.findAll({
+        where: { owner_user_id: session.dm_user_id },
+        order: [['sort_order', 'ASC'], ['createdAt', 'ASC']],
+    });
+    session.setDataValue('assets', libraryAssets);
 
     const sceneNpcIds = Array.isArray(session.scene_npc_ids)
         ? session.scene_npc_ids.map(Number).filter(Number.isInteger)
@@ -356,6 +375,9 @@ function serializeSession(session, viewer) {
         return { ...token, character };
     });
     payload.dm_connected = Boolean(onlineUsers?.get(payload.dm_user_id)?.size);
+    // Los jugadores reciben sólo lo que el DM publica en shared_url/panels;
+    // nunca la biblioteca completa, que puede contener spoilers de campaña.
+    if (!isDm(viewer)) payload.assets = [];
     if (payload.combat_state?.reactionWindow) {
         const reactionWindow = payload.combat_state.reactionWindow;
         const canRespond = String(reactionWindow.controllerUserId) === String(viewer?.user?.id);
@@ -1504,8 +1526,8 @@ function registerGameSessionSocket(io, socket) {
             if (clearSlot === true) {
                 panels[normalizedSlot] = null;
             } else if (assetId) {
-                const asset = await GameAsset.findOne({ where: { id: assetId, session_id: session.id } });
-                if (!asset) return fail(socket, 'El asset seleccionado no pertenece a esta sala.');
+                const asset = await GameAsset.findOne({ where: { id: assetId, owner_user_id: session.dm_user_id } });
+                if (!asset) return fail(socket, 'El asset seleccionado no pertenece a tu biblioteca.');
                 panels[normalizedSlot] = { asset_id: asset.id, url: asset.url, title: asset.title };
             } else if (sceneId) {
                 const scene = await Scene.findByPk(sceneId, { attributes: ['id', 'title', 'imageUrl'] });
@@ -1791,9 +1813,10 @@ function registerGameSessionSocket(io, socket) {
             const normalizedType = ['IMAGE', 'MAP'].includes(type) ? type : 'IMAGE';
             const normalizedUrl = String(url || '').trim();
             if (!normalizedUrl) return reply({ ok: false, message: 'El asset necesita una imagen.' });
-            const maxOrder = await GameAsset.max('sort_order', { where: { session_id: session.id } });
+            const maxOrder = await GameAsset.max('sort_order', { where: { owner_user_id: session.dm_user_id } });
             const asset = await GameAsset.create({
                 session_id: session.id,
+                owner_user_id: session.dm_user_id,
                 title: String(title || 'Contenido sin título').trim().slice(0, 160),
                 url: normalizedUrl,
                 type: normalizedType,
@@ -1811,7 +1834,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:reorder-assets', async ({ sessionId, assetIds } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session || !Array.isArray(assetIds)) return;
-        const assets = await GameAsset.findAll({ where: { session_id: session.id, id: assetIds } });
+        const assets = await GameAsset.findAll({ where: { owner_user_id: session.dm_user_id, id: assetIds } });
         const orderById = new Map(assetIds.map((id, index) => [id, index]));
         await Promise.all(assets.map(asset => asset.update({ sort_order: orderById.get(asset.id) })));
         await broadcastSession(io, session.id);
@@ -1820,7 +1843,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:delete-asset', async ({ sessionId, assetId } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return;
-        await GameAsset.destroy({ where: { id: assetId, session_id: session.id } });
+        await GameAsset.destroy({ where: { id: assetId, owner_user_id: session.dm_user_id } });
         await broadcastSession(io, session.id);
     });
 

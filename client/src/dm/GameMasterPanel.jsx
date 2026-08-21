@@ -799,7 +799,7 @@ export default function GameMasterPanel() {
             }}
           >
             <div className="game-library-header">
-              <div><span className="game-kicker">Biblioteca de la sesión</span><h2>Escenas y mapas</h2></div>
+              <div><span className="game-kicker">Biblioteca del director</span><h2>Escenas y mapas</h2></div>
               <div className="game-library-actions">
                 <button onClick={() => openComposer('IMAGE', true)}><ImageIcon size={14} /> Nueva escena</button>
                 <button className="is-map-action" onClick={() => openComposer('MAP', true)}><MapIcon size={14} /> Subir mapa</button>
@@ -870,9 +870,14 @@ export default function GameMasterPanel() {
                 >
                   <img src={resolveMediaUrl(asset.url)} alt="" draggable={false} />
                   <span>{asset.title}</span>
-                  <small>{session.shared_url === asset.url ? 'En mesa' : asset.type === 'MAP' ? 'Mapa' : 'Escena'}</small>
+                  <small>{session.shared_url === asset.url ? 'En mesa' : asset.type === 'MAP' ? 'Mapa' : 'Escena guardada'}</small>
                   <i><GripVertical size={11} /></i>
-                  <button aria-label={`Eliminar ${asset.title}`} onClick={event => { event.stopPropagation(); emit('game:delete-asset', { sessionId: session.id, assetId: asset.id }); }}><Trash2 size={11} /></button>
+                  <button aria-label={`Eliminar ${asset.title} de tu biblioteca`} title="Eliminar de tu biblioteca" onClick={event => {
+                    event.stopPropagation();
+                    if (window.confirm(`¿Eliminar “${asset.title}” de tu biblioteca? Seguirá visible si ya está publicado en otra sala.`)) {
+                      emit('game:delete-asset', { sessionId: session.id, assetId: asset.id });
+                    }
+                  }}><Trash2 size={11} /></button>
                 </article>
               ))}
               {filteredScenes.map(scene => (
@@ -897,7 +902,7 @@ export default function GameMasterPanel() {
                   <small>Archivo</small>
                 </button>
               ))}
-              {!preparedAssets.length && !filteredScenes.length && <div className="game-library-empty"><ImageIcon size={22} /><span>{normalizedAssetSearch ? 'No hay assets que coincidan con la búsqueda.' : 'Tu bandeja está vacía. Agrega mapas o escenas para tenerlos a mano.'}</span></div>}
+              {!preparedAssets.length && !filteredScenes.length && <div className="game-library-empty"><ImageIcon size={22} /><span>{normalizedAssetSearch ? 'No hay assets que coincidan con la búsqueda.' : 'Tu biblioteca está vacía. Agrega mapas o escenas y podrás reutilizarlos en cualquier sala.'}</span></div>}
             </div>
             {(assetOverTray || trayUploading) && (
               <div className={`game-tray-drop-overlay${trayUploading ? ' is-uploading' : ''}`}>

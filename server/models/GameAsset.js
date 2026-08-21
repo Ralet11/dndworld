@@ -9,7 +9,14 @@ const GameAsset = sequelize.define('GameAsset', {
     },
     session_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
+    },
+    // Los archivos son propiedad de su DM, no de una única sala. session_id
+    // conserva la sala donde se cargaron originalmente para trazabilidad y
+    // compatibilidad con los assets ya existentes.
+    owner_user_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
     },
     title: {
         type: DataTypes.STRING(160),
@@ -37,7 +44,10 @@ const GameAsset = sequelize.define('GameAsset', {
 }, {
     tableName: 'game_assets',
     timestamps: true,
-    indexes: [{ fields: ['session_id', 'sort_order'] }],
+    indexes: [
+        { fields: ['session_id', 'sort_order'] },
+        { fields: ['owner_user_id', 'sort_order'] },
+    ],
 });
 
 module.exports = GameAsset;
