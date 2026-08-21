@@ -44,7 +44,7 @@ export default function DiceTray({ onRoll, compact = false }) {
         <div className="game-dice-hover-preview" aria-hidden="true">
           <div className={`game-die-preview-shape is-d${previewSides}`}>
             <i /><i /><i />
-            <span>d{previewSides}</span>
+            <span>{previewSides}</span>
           </div>
           <strong>Dado de {previewSides} caras</strong>
           <small>{quantity}d{previewSides}{signedModifier(modifier)}</small>

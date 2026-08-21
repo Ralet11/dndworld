@@ -5020,7 +5020,7 @@ a:focus-visible {
 .game-dice-hover-preview strong { margin-top: 3px; color: #e7d5af; font-family: var(--font-display); font-size: 10px; font-weight: 500; letter-spacing: .03em; }
 .game-dice-hover-preview small { color: #9b8458; font-family: var(--font-display); font-size: 9px; }
 .game-die-preview-shape { width: 72px; height: 72px; position: relative; display: grid; place-items: center; color: #ffdfa0; border: 2px solid #c99c48; background: linear-gradient(145deg, rgba(205, 158, 70, .19), rgba(34, 50, 42, .65)); filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .55)); }
-.game-die-preview-shape span { position: relative; z-index: 2; font-family: var(--font-display); font-size: 20px; text-shadow: 0 2px 5px #000; }
+.game-die-preview-shape span { min-width: 42px; min-height: 42px; position: relative; z-index: 2; display: grid; place-items: center; color: #fff3ce; border: 1px solid rgba(255, 225, 157, .48); border-radius: 50%; background: rgba(3, 8, 6, .9); box-shadow: 0 3px 12px rgba(0, 0, 0, .72), inset 0 0 10px rgba(211, 164, 73, .12); font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1; text-shadow: 0 2px 3px #000; }
 .game-die-preview-shape i { position: absolute; inset: 10px; border: 1px solid rgba(242, 206, 132, .23); transform: rotate(45deg); }
 .game-die-preview-shape i:nth-child(2) { inset: 22px 8px; transform: rotate(0); }
 .game-die-preview-shape i:nth-child(3) { inset: 8px 26px; transform: rotate(0); }
@@ -5032,6 +5032,7 @@ a:focus-visible {
 .game-die-preview-shape.is-d12 { clip-path: polygon(28% 2%, 72% 2%, 98% 28%, 98% 72%, 72% 98%, 28% 98%, 2% 72%, 2% 28%); }
 .game-die-preview-shape.is-d20 { clip-path: polygon(50% 0, 91% 21%, 100% 63%, 72% 100%, 28% 100%, 0 63%, 9% 21%); }
 .game-die-preview-shape.is-d100 { border-radius: 50%; }
+.game-die-preview-shape.is-d100 span { min-width: 50px; font-size: 24px; }
 @keyframes game-dice-preview-in { from { opacity: 0; transform: translate(-50%, 6px) scale(.94); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 .game-dice-tray > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .game-dice-tray > header > div { display: flex; align-items: center; gap: 7px; color: #d2aa59; }
