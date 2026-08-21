@@ -7,6 +7,9 @@ import {
   Clipboard,
   Eye,
   EyeOff,
+  Folder,
+  FolderOpen,
+  FolderPlus,
   GripVertical,
   Heart,
   Image as ImageIcon,
@@ -52,6 +55,28 @@ function resolveMediaUrl(value) {
   return `${API_URL}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
+const ALL_ASSETS = '__all__';
+const UNFILED_ASSETS = '__unfiled__';
+
+function flattenedFolders(folders, parentId = null, depth = 0) {
+  return folders
+    .filter(folder => (folder.parent_id || null) === parentId)
+    .sort((first, second) => Number(first.sort_order) - Number(second.sort_order) || first.name.localeCompare(second.name, 'es'))
+    .flatMap(folder => [{ ...folder, depth }, ...flattenedFolders(folders, folder.id, depth + 1)]);
+}
+
+function folderBreadcrumbs(folders, folderId) {
+  const result = [];
+  const seen = new Set();
+  let current = folders.find(folder => folder.id === folderId);
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    result.unshift(current);
+    current = folders.find(folder => folder.id === current.parent_id);
+  }
+  return result;
+}
+
 function ReactionThinkingNotice({ reactionWindow }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -83,6 +108,7 @@ export default function GameMasterPanel() {
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaTitle, setMediaTitle] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState('');
+  const [uploadedStorageKey, setUploadedStorageKey] = useState('');
   const [mediaType, setMediaType] = useState('IMAGE');
   const [gridEnabled, setGridEnabled] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -98,6 +124,13 @@ export default function GameMasterPanel() {
   const [dropAssetType, setDropAssetType] = useState('IMAGE');
   const [trayUploading, setTrayUploading] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
+  const [assetFolders, setAssetFolders] = useState([]);
+  const [activeAssetFolder, setActiveAssetFolder] = useState(ALL_ASSETS);
+  const [assetLibraryLoading, setAssetLibraryLoading] = useState(false);
+  const [assetUploadProgress, setAssetUploadProgress] = useState(null);
+  const directAssetInputRef = useRef(null);
+  const folderImportInputRef = useRef(null);
+  const directAssetTypeRef = useRef('IMAGE');
   const [npcSearch, setNpcSearch] = useState('');
   const [npcsLoading, setNpcsLoading] = useState(false);
   const [npcsError, setNpcsError] = useState('');
@@ -300,6 +333,26 @@ export default function GameMasterPanel() {
     return undefined;
   }, [socket, rightTab]);
 
+  useEffect(() => {
+    if (!session?.id) return undefined;
+    const controller = new AbortController();
+    setAssetLibraryLoading(true);
+    fetch(`${API_URL}/api/game-assets`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` },
+      signal: controller.signal,
+    }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'No se pudo cargar la biblioteca.');
+      setAssetFolders(Array.isArray(data.folders) ? data.folders : []);
+      setSession(current => current ? { ...current, assets: Array.isArray(data.assets) ? data.assets : [] } : current);
+    }).catch(fetchError => {
+      if (fetchError.name !== 'AbortError') setError(fetchError.message);
+    }).finally(() => {
+      if (!controller.signal.aborted) setAssetLibraryLoading(false);
+    });
+    return () => controller.abort();
+  }, [session?.id]);
+
   const emit = (event, payload = {}) => {
     setError('');
     socket?.emit(event, payload);
@@ -381,6 +434,28 @@ export default function GameMasterPanel() {
     });
   };
 
+  const assetApi = async (path, options = {}) => {
+    const response = await fetch(`${API_URL}/api/game-assets${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('dnd_token')}`,
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...options.headers,
+      },
+    });
+    const data = response.status === 204 ? {} : await response.json();
+    if (!response.ok) throw new Error(data.message || 'No se pudo actualizar la biblioteca.');
+    return data;
+  };
+
+  const upsertLocalAsset = asset => {
+    if (!asset) return;
+    setSession(current => current ? {
+      ...current,
+      assets: [...(current.assets || []).filter(item => item.id !== asset.id), asset],
+    } : current);
+  };
+
   const uploadMedia = async event => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -393,6 +468,7 @@ export default function GameMasterPanel() {
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.message || 'No se pudo subir el archivo.');
       setMediaUrl(data.url);
+      setUploadedStorageKey(data.key || '');
       setUploadedFileName(file.name);
       if (!mediaTitle) setMediaTitle(file.name.replace(/\.[^.]+$/, ''));
     } catch (uploadError) {
@@ -414,60 +490,128 @@ export default function GameMasterPanel() {
     setComposerOpen(false);
   };
 
-  const savePreparedAsset = publishNow => {
+  const savePreparedAsset = async publishNow => {
     if (!mediaUrl) return setError('Selecciona una imagen o mapa antes de guardarlo.');
     setError('');
     setSavingAsset(true);
     const assetTitle = mediaTitle || (mediaType === 'MAP' ? 'Mapa sin título' : 'Escena sin título');
-    socket.timeout(7000).emit('game:save-asset', {
-      sessionId: session.id,
-      title: assetTitle,
-      url: mediaUrl,
-      type: mediaType,
-      gridEnabled,
-    }, (timeoutError, response) => {
-      setSavingAsset(false);
-      if (timeoutError || !response?.ok) {
-        setError(response?.message || 'No se pudo guardar el asset en la bandeja.');
-        return;
-      }
-      if (publishNow) publish(mediaUrl, assetTitle, mediaType, gridEnabled);
+    try {
+      const response = await assetApi('/assets', {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: session.id,
+          folderId: [ALL_ASSETS, UNFILED_ASSETS].includes(activeAssetFolder) ? null : activeAssetFolder,
+          title: assetTitle,
+          url: mediaUrl,
+          storageKey: uploadedStorageKey || null,
+          type: mediaType,
+          gridEnabled,
+        }),
+      });
+      upsertLocalAsset(response.asset);
+      if (publishNow) publish(response.asset.url, response.asset.title, response.asset.type, response.asset.grid_enabled);
       else setComposerOpen(false);
-    });
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSavingAsset(false);
+    }
   };
 
-  const saveDroppedAsset = (asset, fileName) => new Promise((resolve, reject) => {
-    socket.timeout(7000).emit('game:save-asset', {
-      sessionId: session.id,
-      title: fileName.replace(/\.[^.]+$/, '') || 'Asset sin título',
-      url: asset.url,
-      type: asset.type,
-      gridEnabled: asset.type === 'MAP' && gridEnabled,
-    }, (timeoutError, response) => {
-      if (timeoutError || !response?.ok) reject(new Error(response?.message || 'No se pudo guardar el asset.'));
-      else resolve(response.asset);
-    });
-  });
-
-  const addFilesToTray = async (files, type = 'IMAGE') => {
+  const addFilesToTray = async (files, type = 'IMAGE', { importFolders = false } = {}) => {
     const imageFiles = Array.from(files || []).filter(file => file.type.startsWith('image/'));
     if (!imageFiles.length) return setError('La bandeja sólo admite archivos de imagen.');
     setError('');
     setTrayUploading(true);
+    setAssetUploadProgress({ done: 0, total: imageFiles.length });
     try {
-      for (const file of imageFiles) {
+      for (const [index, file] of imageFiles.entries()) {
         const form = new FormData();
         form.append('image', file);
-        const response = await fetch(`${API_URL}/api/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` }, body: form });
-        const data = await response.json();
-        if (!response.ok || !data.url) throw new Error(data.message || `No se pudo subir ${file.name}.`);
-        await saveDroppedAsset({ url: data.url, type }, file.name);
+        form.append('sessionId', session.id);
+        form.append('title', file.name.replace(/\.[^.]+$/, '') || 'Asset sin título');
+        form.append('type', type);
+        form.append('gridEnabled', String(type === 'MAP' && gridEnabled));
+        if (importFolders) {
+          const relativePath = String(file.webkitRelativePath || file.name).replace(/\\/g, '/');
+          const parts = relativePath.split('/').filter(Boolean);
+          const folderPath = parts.slice(1, -1).join('/');
+          if (folderPath) form.append('folderPath', folderPath);
+          form.append('sourcePath', relativePath);
+        } else if (![ALL_ASSETS, UNFILED_ASSETS].includes(activeAssetFolder)) {
+          form.append('folderId', activeAssetFolder);
+        }
+        const data = await assetApi('/upload', { method: 'POST', body: form });
+        upsertLocalAsset(data.asset);
+        setAssetUploadProgress({ done: index + 1, total: imageFiles.length });
+      }
+      if (importFolders) {
+        const library = await assetApi('');
+        setAssetFolders(Array.isArray(library.folders) ? library.folders : []);
+        setSession(current => current ? { ...current, assets: Array.isArray(library.assets) ? library.assets : [] } : current);
       }
     } catch (dropError) {
       setError(dropError.message);
     } finally {
       setTrayUploading(false);
       setAssetOverTray(false);
+      window.setTimeout(() => setAssetUploadProgress(null), 1200);
+    }
+  };
+
+  const createAssetFolder = async () => {
+    const name = window.prompt('Nombre de la nueva carpeta');
+    if (!name?.trim()) return;
+    try {
+      const data = await assetApi('/folders', {
+        method: 'POST',
+        body: JSON.stringify({ name, parentId: [ALL_ASSETS, UNFILED_ASSETS].includes(activeAssetFolder) ? null : activeAssetFolder }),
+      });
+      setAssetFolders(current => [...current, data.folder]);
+      setActiveAssetFolder(data.folder.id);
+    } catch (folderError) {
+      setError(folderError.message);
+    }
+  };
+
+  const renameAssetFolder = async folder => {
+    const name = window.prompt('Nuevo nombre de la carpeta', folder.name);
+    if (!name?.trim() || name.trim() === folder.name) return;
+    try {
+      const data = await assetApi(`/folders/${folder.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+      setAssetFolders(current => current.map(item => item.id === folder.id ? data.folder : item));
+    } catch (folderError) {
+      setError(folderError.message);
+    }
+  };
+
+  const deleteAssetFolder = async folder => {
+    if (!window.confirm(`¿Eliminar la carpeta “${folder.name}”? Sólo puede eliminarse si está vacía.`)) return;
+    try {
+      await assetApi(`/folders/${folder.id}`, { method: 'DELETE' });
+      setAssetFolders(current => current.filter(item => item.id !== folder.id));
+      setActiveAssetFolder(folder.parent_id || ALL_ASSETS);
+    } catch (folderError) {
+      setError(folderError.message);
+    }
+  };
+
+  const moveAssetToFolder = async (asset, folderId) => {
+    try {
+      const data = await assetApi(`/assets/${asset.id}`, { method: 'PATCH', body: JSON.stringify({ folderId: folderId || null }) });
+      upsertLocalAsset(data.asset);
+    } catch (moveError) {
+      setError(moveError.message);
+    }
+  };
+
+  const deleteLibraryAsset = async asset => {
+    if (!window.confirm(`¿Eliminar “${asset.title}” de tu biblioteca? Seguirá visible si ya está publicado en una sala.`)) return;
+    try {
+      await assetApi(`/assets/${asset.id}`, { method: 'DELETE' });
+      setSession(current => current ? { ...current, assets: (current.assets || []).filter(item => item.id !== asset.id) } : current);
+    } catch (deleteError) {
+      setError(deleteError.message);
     }
   };
 
@@ -518,6 +662,7 @@ export default function GameMasterPanel() {
       setMediaUrl('');
       setMediaTitle('');
       setUploadedFileName('');
+      setUploadedStorageKey('');
     }
     setComposerOpen(true);
   };
@@ -593,11 +738,18 @@ export default function GameMasterPanel() {
   const connectedPlayers = session.participants.filter(item => item.connected).length;
   const visibleScenes = scenes.filter(scene => scene.imageUrl).slice(0, 8);
   const normalizedAssetSearch = deferredAssetSearch.trim().toLocaleLowerCase('es');
+  const orderedAssetFolders = flattenedFolders(assetFolders);
+  const activeFolderRecord = assetFolders.find(folder => folder.id === activeAssetFolder) || null;
+  const activeFolderCrumbs = folderBreadcrumbs(assetFolders, activeAssetFolder);
   const preparedAssets = (session.assets || []).filter(asset => (
     (assetFilter === 'ALL' || asset.type === assetFilter)
+    && (activeAssetFolder === ALL_ASSETS
+      || (activeAssetFolder === UNFILED_ASSETS ? !asset.folder_id : asset.folder_id === activeAssetFolder))
     && (!normalizedAssetSearch || asset.title.toLocaleLowerCase('es').includes(normalizedAssetSearch))
   ));
-  const filteredScenes = visibleScenes.filter(scene => !normalizedAssetSearch || scene.title.toLocaleLowerCase('es').includes(normalizedAssetSearch));
+  const filteredScenes = activeAssetFolder === ALL_ASSETS
+    ? visibleScenes.filter(scene => !normalizedAssetSearch || scene.title.toLocaleLowerCase('es').includes(normalizedAssetSearch))
+    : [];
   const sceneNpcOrder = new Map((session.scene_npcs || []).map((npc, index) => [npc.id, index]));
   const filteredNpcs = npcs
     .filter(npc => npc.name?.toLocaleLowerCase('es').includes(npcSearch.trim().toLocaleLowerCase('es')))
@@ -813,10 +965,93 @@ export default function GameMasterPanel() {
             <div className="game-library-header">
               <div><span className="game-kicker">Biblioteca del director</span><h2>Escenas y mapas</h2></div>
               <div className="game-library-actions">
-                <button onClick={() => openComposer('IMAGE', true)}><ImageIcon size={14} /> Nueva escena</button>
-                <button className="is-map-action" onClick={() => openComposer('MAP', true)}><MapIcon size={14} /> Subir mapa</button>
+                <button onClick={createAssetFolder}><FolderPlus size={14} /> Nueva carpeta</button>
+                <button onClick={() => { directAssetTypeRef.current = 'IMAGE'; directAssetInputRef.current?.click(); }}><ImageIcon size={14} /> Subir imágenes</button>
+                <button className="is-map-action" onClick={() => { directAssetTypeRef.current = 'MAP'; directAssetInputRef.current?.click(); }}><MapIcon size={14} /> Subir mapas</button>
+                <button onClick={() => folderImportInputRef.current?.click()}><Upload size={14} /> Importar carpeta</button>
+                <button onClick={() => openComposer('IMAGE', true)}>Usar URL</button>
               </div>
             </div>
+
+            <input
+              ref={directAssetInputRef}
+              className="game-hidden-file-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              onChange={event => {
+                addFilesToTray(event.target.files, directAssetTypeRef.current);
+                event.target.value = '';
+              }}
+            />
+            <input
+              ref={folderImportInputRef}
+              className="game-hidden-file-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              {...{ webkitdirectory: '', directory: '' }}
+              onChange={event => {
+                addFilesToTray(event.target.files, 'IMAGE', { importFolders: true });
+                event.target.value = '';
+              }}
+            />
+
+            <div className="game-asset-browser">
+              <aside className="game-folder-tree" aria-label="Carpetas de assets">
+                <button className={activeAssetFolder === ALL_ASSETS ? 'is-active' : ''} onClick={() => setActiveAssetFolder(ALL_ASSETS)}><FolderOpen size={14} /><span>Toda la biblioteca</span><small>{(session.assets || []).length}</small></button>
+                <button
+                  className={activeAssetFolder === UNFILED_ASSETS ? 'is-active' : ''}
+                  onClick={() => setActiveAssetFolder(UNFILED_ASSETS)}
+                  onDragOver={event => {
+                    if (Array.from(event.dataTransfer.types).includes('application/x-game-asset')) event.preventDefault();
+                  }}
+                  onDrop={event => {
+                    const assetId = event.dataTransfer.getData('application/x-game-asset');
+                    const asset = (session.assets || []).find(item => item.id === assetId);
+                    if (asset) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      moveAssetToFolder(asset, null);
+                    }
+                  }}
+                ><Folder size={14} /><span>Sin carpeta</span><small>{(session.assets || []).filter(asset => !asset.folder_id).length}</small></button>
+                <div className="game-folder-tree-divider" />
+                {orderedAssetFolders.map(folder => (
+                  <button
+                    key={folder.id}
+                    className={activeAssetFolder === folder.id ? 'is-active' : ''}
+                    style={{ '--folder-depth': folder.depth }}
+                    onClick={() => setActiveAssetFolder(folder.id)}
+                    onDragOver={event => {
+                      if (Array.from(event.dataTransfer.types).includes('application/x-game-asset')) event.preventDefault();
+                    }}
+                    onDrop={event => {
+                      const assetId = event.dataTransfer.getData('application/x-game-asset');
+                      const asset = (session.assets || []).find(item => item.id === assetId);
+                      if (asset) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        moveAssetToFolder(asset, folder.id);
+                      }
+                    }}
+                  >
+                    <Folder size={14} /><span>{folder.name}</span><small>{(session.assets || []).filter(asset => asset.folder_id === folder.id).length}</small>
+                  </button>
+                ))}
+                {assetLibraryLoading && <p>Cargando carpetas...</p>}
+                {!assetLibraryLoading && !orderedAssetFolders.length && <p>Crea una carpeta o importa tu campaña.</p>}
+              </aside>
+
+              <div className="game-asset-browser-main">
+                <div className="game-folder-location">
+                  <div>
+                    <button onClick={() => setActiveAssetFolder(ALL_ASSETS)}>Assets</button>
+                    {activeAssetFolder === UNFILED_ASSETS && <><span>/</span><strong>Sin carpeta</strong></>}
+                    {activeFolderCrumbs.map(folder => <span key={folder.id}>/ <button onClick={() => setActiveAssetFolder(folder.id)}>{folder.name}</button></span>)}
+                  </div>
+                  {activeFolderRecord && <div><button onClick={() => renameAssetFolder(activeFolderRecord)}>Renombrar</button><button className="is-danger" onClick={() => deleteAssetFolder(activeFolderRecord)}>Eliminar carpeta</button></div>}
+                </div>
 
             <div className="game-asset-toolbar">
               <div>
@@ -848,7 +1083,8 @@ export default function GameMasterPanel() {
                     <input type="file" accept="image/*" onChange={uploadMedia} disabled={uploading} />
                   </label>
                   <label className="game-composer-field"><span>Nombre visible</span><input value={mediaTitle} onChange={event => setMediaTitle(event.target.value)} placeholder={mediaType === 'MAP' ? 'Ej. Cripta del eco' : 'Ej. Entrada al castillo'} /></label>
-                  <label className="game-composer-field"><span>O usar una URL</span><input value={mediaUrl} onChange={event => { setMediaUrl(event.target.value); setUploadedFileName(''); }} placeholder="https://..." /></label>
+                  <label className="game-composer-field"><span>O usar una URL</span><input value={mediaUrl} onChange={event => { setMediaUrl(event.target.value); setUploadedFileName(''); setUploadedStorageKey(''); }} placeholder="https://..." /></label>
+                  <label className="game-composer-field"><span>Carpeta de destino</span><select value={[ALL_ASSETS, UNFILED_ASSETS].includes(activeAssetFolder) ? '' : activeAssetFolder} onChange={event => setActiveAssetFolder(event.target.value || UNFILED_ASSETS)}><option value="">Sin carpeta</option>{orderedAssetFolders.map(folder => <option key={folder.id} value={folder.id}>{`${'— '.repeat(folder.depth)}${folder.name}`}</option>)}</select></label>
                   {mediaType === 'MAP' && <label className="game-grid-toggle"><input type="checkbox" checked={gridEnabled} onChange={event => setGridEnabled(event.target.checked)} /><span><strong>Cuadrícula táctica</strong><small>Superpone una grilla para posicionar tokens</small></span></label>}
                   <div className="game-composer-actions">
                     <button className="game-save-asset-button" disabled={!mediaUrl || uploading || savingAsset} onClick={() => savePreparedAsset(false)}>Guardar en bandeja</button>
@@ -886,10 +1122,15 @@ export default function GameMasterPanel() {
                   <i><GripVertical size={11} /></i>
                   <button aria-label={`Eliminar ${asset.title} de tu biblioteca`} title="Eliminar de tu biblioteca" onClick={event => {
                     event.stopPropagation();
-                    if (window.confirm(`¿Eliminar “${asset.title}” de tu biblioteca? Seguirá visible si ya está publicado en otra sala.`)) {
-                      emit('game:delete-asset', { sessionId: session.id, assetId: asset.id });
-                    }
+                    deleteLibraryAsset(asset);
                   }}><Trash2 size={11} /></button>
+                  <label className="game-asset-folder-select" onClick={event => event.stopPropagation()}>
+                    <span>Mover a</span>
+                    <select value={asset.folder_id || ''} onChange={event => moveAssetToFolder(asset, event.target.value || null)}>
+                      <option value="">Sin carpeta</option>
+                      {orderedAssetFolders.map(folder => <option key={folder.id} value={folder.id}>{`${'— '.repeat(folder.depth)}${folder.name}`}</option>)}
+                    </select>
+                  </label>
                 </article>
               ))}
               {filteredScenes.map(scene => (
@@ -916,10 +1157,12 @@ export default function GameMasterPanel() {
               ))}
               {!preparedAssets.length && !filteredScenes.length && <div className="game-library-empty"><ImageIcon size={22} /><span>{normalizedAssetSearch ? 'No hay assets que coincidan con la búsqueda.' : 'Tu biblioteca está vacía. Agrega mapas o escenas y podrás reutilizarlos en cualquier sala.'}</span></div>}
             </div>
+              </div>
+            </div>
             {(assetOverTray || trayUploading) && (
               <div className={`game-tray-drop-overlay${trayUploading ? ' is-uploading' : ''}`}>
                 {trayUploading ? (
-                  <div className="game-tray-uploading"><i className="game-button-spinner" /><strong>Agregando a la bandeja...</strong></div>
+                  <div className="game-tray-uploading"><i className="game-button-spinner" /><strong>{assetUploadProgress ? `Agregando ${assetUploadProgress.done} de ${assetUploadProgress.total}...` : 'Agregando a la biblioteca...'}</strong></div>
                 ) : (
                   <>
                     <div className={dropAssetType === 'IMAGE' ? 'is-target' : ''}><ImageIcon size={24} /><strong>Imagen narrativa</strong><small>Suelta en este lado</small></div>

@@ -18,6 +18,10 @@ const GameAsset = sequelize.define('GameAsset', {
         type: DataTypes.UUID,
         allowNull: true,
     },
+    folder_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
     title: {
         type: DataTypes.STRING(160),
         allowNull: false,
@@ -25,6 +29,14 @@ const GameAsset = sequelize.define('GameAsset', {
     url: {
         type: DataTypes.TEXT,
         allowNull: false,
+    },
+    storage_key: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    source_path: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     type: {
         type: DataTypes.ENUM('IMAGE', 'MAP'),
@@ -47,6 +59,8 @@ const GameAsset = sequelize.define('GameAsset', {
     indexes: [
         { fields: ['session_id', 'sort_order'] },
         { fields: ['owner_user_id', 'sort_order'] },
+        { fields: ['owner_user_id', 'folder_id', 'sort_order'] },
+        { fields: ['owner_user_id', 'source_path'] },
     ],
 });
 

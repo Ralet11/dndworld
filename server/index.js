@@ -58,11 +58,13 @@ const audioUpload = multer({
 });
 const authController = require('./controllers/authController');
 const { verifyToken, isDm } = require('./middleware/auth');
+const gameAssetRoutes = require('./routes/gameAssetRoutes');
 
 // Auth Routes
 app.post('/api/auth/register', authController.register);
 app.post('/api/auth/login', authController.login);
 app.get('/api/auth/me', verifyToken, authController.getMe);
+app.use('/api/game-assets', gameAssetRoutes);
 
 // POI Routes
 app.use('/api/pois', require('./routes/poiRoutes'));

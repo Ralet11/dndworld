@@ -23,6 +23,7 @@ const GameSession = require('./GameSession');
 const GameParticipant = require('./GameParticipant');
 const GameToken = require('./GameToken');
 const GameAsset = require('./GameAsset');
+const GameAssetFolder = require('./GameAssetFolder');
 const GameRoll = require('./GameRoll');
 const GameCombatAction = require('./GameCombatAction');
 const NpcAction = require('./NpcAction');
@@ -112,6 +113,12 @@ GameToken.belongsTo(Character, { foreignKey: 'character_id', as: 'character' });
 GameToken.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
 GameSession.hasMany(GameAsset, { foreignKey: 'session_id', as: 'assets', onDelete: 'SET NULL' });
 GameAsset.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session', onDelete: 'SET NULL' });
+User.hasMany(GameAssetFolder, { foreignKey: 'owner_user_id', as: 'gameAssetFolders', onDelete: 'CASCADE' });
+GameAssetFolder.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
+GameAssetFolder.hasMany(GameAssetFolder, { foreignKey: 'parent_id', as: 'children', onDelete: 'RESTRICT' });
+GameAssetFolder.belongsTo(GameAssetFolder, { foreignKey: 'parent_id', as: 'parent', onDelete: 'RESTRICT' });
+GameAssetFolder.hasMany(GameAsset, { foreignKey: 'folder_id', as: 'assets', onDelete: 'SET NULL' });
+GameAsset.belongsTo(GameAssetFolder, { foreignKey: 'folder_id', as: 'folder', onDelete: 'SET NULL' });
 GameSession.hasMany(GameRoll, { foreignKey: 'session_id', as: 'rolls', onDelete: 'CASCADE' });
 GameRoll.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameRoll.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -154,6 +161,7 @@ module.exports = {
     GameParticipant,
     GameToken,
     GameAsset,
+    GameAssetFolder,
     GameRoll,
     GameCombatAction,
     NpcAction,
