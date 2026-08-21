@@ -181,7 +181,9 @@ async function run() {
         custom_features: mergeNamed(zik.custom_features, ZIK_FEATURES),
         spell_slots: {
             ...(zik.spell_slots || {}),
-            1: { max: 1, used: 0, source: 'Magia de Pacto', recovery: 'Descanso corto o largo' },
+            // Configurar la ficha no equivale a descansar: conservamos el uso
+            // actual de la ranura para no alterar una sesión en curso.
+            1: { max: 1, used: Math.min(1, Number(zik.spell_slots?.[1]?.used || 0)), source: 'Magia de Pacto', recovery: 'Descanso corto o largo' },
         },
         spells_known: [...new Set([...(zik.spells_known || []), 'eldritch-blast', 'minor-illusion', 'hex', 'armor-of-agathys'])],
         spells_prepared: [...new Set([...(zik.spells_prepared || []), 'hex', 'armor-of-agathys'])],
