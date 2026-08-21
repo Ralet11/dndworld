@@ -305,6 +305,7 @@ function DesktopCapabilities({ character, onRoll }) {
   };
 
   const quickStats = [
+    { label: 'CA', value: character.ac ?? 10, Icon: Shield, color: '#3E84D6' },
     { label: 'Velocidad', value: `${character.speed ?? 30}'`, Icon: Footprints, color: '#D8D5CC' },
     { label: 'Percepcion', value: passivePerception, Icon: Eye, color: '#5BA86B' },
     { label: 'Competencia', value: `+${proficiency}`, Icon: Target, color: '#C8A36A' },
