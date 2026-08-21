@@ -220,3 +220,18 @@ test('finesse weapons choose the best ability and shared chord uses scale from c
     assert.equal(chords[0].resource.max, 4);
     assert.equal(chords[0].resource.key, chords[1].resource.key);
 });
+
+test('Paleas uses the correct spellcasting ability and weapon passives stay attached to attacks', () => {
+    const paleas = {
+        id: 31, level: 5, proficiency_bonus: 3,
+        abilityScores: [{ ability: 'STR', base_value: 14 }, { ability: 'WIS', base_value: 15 }, { ability: 'CHA', base_value: 16 }],
+        custom_features: [{ name: 'Hunter’s Prey — Colossus Slayer', kind: 'Accion' }],
+    };
+    const fireBolt = spellProfile({ id: 1, slug: 'paleas-fire-bolt', name: 'Fire Bolt', dnd_class: 'Sorcerer', level: 0, range: '120 ft.', casting_time: '1A' }, paleas);
+    const mark = spellProfile({ id: 2, slug: 'paleas-hunters-mark', name: "Hunter's Mark", dnd_class: 'Ranger', level: 1, range: '90 ft.', casting_time: '1BA' }, paleas);
+    const shortsword = weaponProfile({ id: 3, name: 'Shortsword +1', damage: '1d6', damage_type: 'perforante', mastery: { name: 'Vex' }, properties: ['Light'] }, paleas, 'secondary');
+    assert.equal(fireBolt.attackBonus, 6);
+    assert.equal(mark.effect.type, 'MARK_EXTRA_DAMAGE');
+    assert.deepEqual(shortsword.conditionalExtraDamage, [{ expression: '1d8', damageType: 'perforante', when: 'target-wounded', oncePerTurn: true, source: 'Asesino de Colosos' }]);
+    assert.equal(shortsword.effect.type, 'VEX_NEXT_ATTACK_ADVANTAGE');
+});

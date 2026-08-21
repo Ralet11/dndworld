@@ -31,6 +31,10 @@ const SPELL_PROFILES = {
     'burning-hands': { save: 'DEX', damage: '3d6', damageType: 'fuego', target: 'area-enemy', area: { shape: 'cone', feet: 15 }, halfOnSave: true, slot: true },
     'thunderwave': { save: 'CON', damage: '2d8', damageType: 'trueno', target: 'area-enemy', area: { shape: 'square', feet: 15 }, halfOnSave: true, slot: true },
     'magic-missile': { damage: '3d4+3', damageType: 'fuerza', target: 'enemy', range: 120, slot: true },
+    'sorcerous-burst': { attack: true, damage: '1d6', damageType: 'fuerza', target: 'enemy', range: 120, cantripScale: true },
+    thunderclap: { save: 'CON', damage: '1d6', damageType: 'trueno', target: 'area-enemy', range: 5, area: { shape: 'circle', feet: 5 }, cantripScale: true },
+    'hunters-mark': { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true, effect: { type: 'MARK_EXTRA_DAMAGE', damage: '1d6', damageType: 'fuerza' } },
+    'lesser-restoration': { utility: true, target: 'ally', range: 5, slot: true, effect: { type: 'REMOVE_CONDITIONS', conditions: ['Cegado', 'Ensordecido', 'Paralizado', 'Envenenado'] } },
     'acid-splash': { save: 'DEX', damage: '1d6', damageType: 'acido', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 5 }, cantripScale: true },
     hex: { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true, effect: { type: 'MARK_EXTRA_DAMAGE', damage: '1d6', damageType: 'necrotico' } },
     'armor-of-agathys': { utility: true, target: 'self', range: 0, economy: 'bonus', slot: true, temporaryHp: 5, effect: { type: 'TEMP_HP_RETALIATION', damage: 5, damageType: 'frio' } },
@@ -188,7 +192,10 @@ function allDice(text) {
     return [...String(text || '').matchAll(/(\d{1,2})d(4|6|8|10|12|20|100)/gi)].map(match => `${Number(match[1])}d${Number(match[2])}`);
 }
 
-function spellAbility(character) {
+function spellAbility(character, spell = null) {
+    const source = normalize(`${spell?.dnd_class || ''} ${spell?.source || ''} ${spell?.name || ''}`);
+    if (/(sorcerer|hechicero|celestial legacy|legado celestial)/.test(source)) return 'CHA';
+    if (/(ranger|explorador)/.test(source)) return 'WIS';
     const classEntries = Array.isArray(character.classes) && character.classes.length
         ? character.classes
         : [{ slug: character.class_slug || character.class }];
@@ -200,7 +207,7 @@ function spellAbility(character) {
 }
 
 function spellProfile(spell, character) {
-    const slug = normalize(spell.slug).replace(/\s+/g, '-');
+    const slug = normalize(spell.slug).replace(/\s+/g, '-').replace(/^paleas-/, '');
     const text = normalize(`${spell.desc || ''} ${spell.higher_level || ''}`);
     const named = SPELL_PROFILES[slug] || {};
     const damage = named.utility ? null : named.damage || (/(damage|dano)/.test(text) ? firstDice(text) : null);
@@ -220,7 +227,7 @@ function spellProfile(spell, character) {
     const target = named.target || (area ? (healing ? 'area-ally' : 'area-enemy') : healing ? 'ally' : damage || attack || save ? 'enemy' : 'self');
     const level = Number(spell.level) || 0;
     const casting = normalize(spell.casting_time);
-    const ability = spellAbility(character);
+    const ability = spellAbility(character, spell);
     const abilityMod = abilityModifier(character, ability);
     const scaledDamage = named.cantripScale && level === 0 ? scaleCantrip(damage, character.level) : damage;
     const finalHealing = healing && named.addAbility
@@ -280,6 +287,11 @@ function weaponProfile(item, character, slot) {
     const damageBase = override.damage || item.damage || firstDice(item.description) || '1d4';
     const parsedDamage = parseDiceExpression(damageBase);
     const damage = parsedDamage ? formatDice({ ...parsedDamage, modifier: parsedDamage.modifier + abilityMod + (Number(override.damageBonus) || 0) }) : damageBase;
+    const featureNames = (Array.isArray(character.custom_features) ? character.custom_features : []).map(feature => normalize(feature?.name));
+    const hasColossusSlayer = featureNames.some(name => name.includes('colossus slayer') || name.includes('asesino de colosos'));
+    const mastery = normalize(`${item.mastery?.key || ''} ${item.mastery?.name || ''}`);
+    const vex = mastery.includes('vex') || /shortsword|espada corta/.test(normalize(item.name));
+    const graze = mastery.includes('graze') || /greatsword|espadon/.test(normalize(item.name));
     return {
         key: `weapon:${slot}:${item.id}`,
         source: 'weapon',
@@ -292,6 +304,9 @@ function weaponProfile(item, character, slot) {
         attackBonus: Number.isFinite(Number(override.attackBonus)) ? Number(override.attackBonus) : proficiencyBonus(character) + abilityMod,
         damage,
         damageType: override.damageType || item.damage_type || 'fisico',
+        conditionalExtraDamage: hasColossusSlayer ? [{ expression: '1d8', damageType: override.damageType || item.damage_type || 'fisico', when: 'target-wounded', oncePerTurn: true, source: 'Asesino de Colosos' }] : [],
+        effect: vex ? { type: 'VEX_NEXT_ATTACK_ADVANTAGE' } : null,
+        grazeDamage: graze ? Math.max(0, abilityMod) : 0,
         formula: damage,
         summary: `Ataque ${signed(Number.isFinite(Number(override.attackBonus)) ? Number(override.attackBonus) : proficiencyBonus(character) + abilityMod)} · ${damage} ${override.damageType || item.damage_type || ''}`.trim(),
     };
@@ -349,7 +364,12 @@ function customFeatureProfiles(character) {
             : [];
     return features.flatMap((feature, index) => {
         if (!feature || typeof feature !== 'object') return [];
-        if (normalize(feature.kind).includes('pasiv')) return [];
+        const featureName = normalize(feature.name);
+        const embeddedPassive = [
+            'favored enemy', 'hunter s lore', 'hunter’s lore', 'colossus slayer', 'asesino de colosos',
+            'innate sorcery', 'greatsword (graze)', 'shortsword (vex)', 'ataque salvaje', 'two weapon fighting',
+        ].some(name => featureName.includes(normalize(name)));
+        if (normalize(feature.kind).includes('pasiv') || embeddedPassive) return [];
         const description = feature.description || '';
         const parsedDice = allDice(description);
         const actionableKind = /(accion|action|bonus|reaccion|reaction)/.test(normalize(feature.kind));

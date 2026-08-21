@@ -481,7 +481,7 @@ function currentCombatState(session, actorCharacterId) {
         // Mantener los metadatos globales (especialmente mode) al iniciar el
         // estado de un nuevo turno. Si se perdía mode, el cliente volvía a
         // interpretar la mesa como narrativa después de cualquier acción.
-        return { ...current, round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions, acBonuses, shields };
+        return { ...current, round: session.round, turnIndex: session.turn_index, actorCharacterId, used: {}, resources, reactions, acBonuses, shields, conditionalUses: {} };
     }
     return { ...current, used: { ...(current.used || {}) }, resources, reactions, acBonuses, shields };
 }
@@ -985,8 +985,19 @@ async function finalizeCombatAction(io, combatAction, roll) {
         roll.label = `${combatAction.action_name}: ${hit ? `impacta a ${target.label}` : `falla contra ${target.label}`}`.slice(0, 120);
         await roll.save();
         if (!hit) {
+            if (Number(action.grazeDamage) > 0 && target.character) {
+                const previousHp = target.character.hp_current;
+                const grazed = hpAfterDamage(target.character, Number(action.grazeDamage), action.damageType);
+                target.character.hp_current = grazed.hp_current;
+                target.character.hp_temp = grazed.hp_temp;
+                await target.character.save();
+                emitConsciousnessChange(io, session, target, previousHp, target.character.hp_current);
+                io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: target.id, characterId: target.character.id, hpCurrent: target.character.hp_current, hpMax: target.character.hp_max, hpTemp: target.character.hp_temp });
+                combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'graze', amount: grazed.amount }], summary: `${combatAction.action_name}: falla, pero Graze inflige ${grazed.amount} de daño a ${target.label}.` };
+            } else {
+                combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'miss' }], summary: `${combatAction.action_name}: falla contra ${target.label}.` };
+            }
             combatAction.status = 'COMPLETED';
-            combatAction.result = { ...combatAction.result, targets: [{ tokenId: target.id, name: target.label, outcome: 'miss' }], summary: `${combatAction.action_name}: falla contra ${target.label}.` };
             await combatAction.save();
             await queueMultiattackFollowup();
             return broadcastSession(io, session.id);
@@ -1112,7 +1123,18 @@ async function finalizeCombatAction(io, combatAction, roll) {
         ? [{ expression: persistentMark.damage, damageType: persistentMark.damageType }]
         : [];
     const configuredExtraDamage = (action.extraDamage || []).map(expression => ({ expression, damageType: action.extraDamageType || action.damageType }));
-    const extraRolls = [...configuredExtraDamage, ...markedExtraDamage].flatMap(component => {
+    const conditionalUseKey = `${combatAction.actor_character_id}:colossus-slayer`;
+    const conditionalAvailable = !session.combat_state?.conditionalUses?.[conditionalUseKey];
+    const conditionalExtraDamage = (action.conditionalExtraDamage || []).filter(component => {
+        if (component.when === 'target-wounded' && !targets.some(target => Number(target.character?.hp_current) < Number(target.character?.hp_max))) return false;
+        return !component.oncePerTurn || conditionalAvailable;
+    });
+    if (conditionalExtraDamage.some(component => component.oncePerTurn)) {
+        session.combat_state = { ...(session.combat_state || {}), conditionalUses: { ...(session.combat_state?.conditionalUses || {}), [conditionalUseKey]: true } };
+        session.changed('combat_state', true);
+        await session.save();
+    }
+    const extraRolls = [...configuredExtraDamage, ...markedExtraDamage, ...conditionalExtraDamage].flatMap(component => {
         const parsed = parseDiceExpression(component.expression);
         if (!parsed) return [];
         const results = Array.from({ length: parsed.quantity * criticalMultiplier }, () => randomInt(1, parsed.sides + 1));
@@ -1226,6 +1248,11 @@ async function finalizeCombatAction(io, combatAction, roll) {
     };
     await combatAction.save();
     const damagedTarget = targets.find(target => outcomes.some(outcome => String(outcome.tokenId) === String(target.id) && outcome.amount > 0));
+    if (damagedTarget && action.effect?.type === 'VEX_NEXT_ATTACK_ADVANTAGE') {
+        session.combat_state = { ...(session.combat_state || {}), effectsByTarget: { ...(session.combat_state?.effectsByTarget || {}), [damagedTarget.id]: { nextAttackAdvantage: true, source: 'Vex' } } };
+        session.changed('combat_state', true);
+        await session.save();
+    }
     if (!action.healing && damagedTarget) {
         const reactionOpened = await openReactionWindow(io, session, {
             trigger: REACTION_TRIGGERS.DAMAGE_TAKEN,
@@ -2474,6 +2501,14 @@ function registerGameSessionSocket(io, socket) {
             }
             if (action.effect?.type === 'GRANT_NEXT_ATTACK_ADVANTAGE') {
                 combatState.effectsByTarget = { ...(combatState.effectsByTarget || {}), [targets[0].id]: { nextAttackAdvantage: true, source: action.name } };
+            }
+            if (action.effect?.type === 'REMOVE_CONDITIONS') {
+                for (const target of targets) {
+                    const removable = new Set(action.effect.conditions || []);
+                    target.conditions = (Array.isArray(target.conditions) ? target.conditions : []).filter(condition => !removable.has(condition));
+                    await target.save();
+                    io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
+                }
             }
             if (action.clearWeaponJam) combatState.weaponJams = { ...(combatState.weaponJams || {}), [actorCharacterId]: false };
             if (action.shield) {
