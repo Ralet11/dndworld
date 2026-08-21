@@ -145,7 +145,7 @@ async function run() {
 
         const [spike] = await Item.findOrCreate({
             where: { name: 'Pua de brumante' },
-            defaults: { type: 'Objeto Magico', rarity: 'Raro', slot: 'none', description: 'Mejora entregada a Lucario: +1d4 al dano y las curaciones del Laud Runico.', use_effects: { bonus_dice: '1d4', applies_to: ['dano', 'curacion'] } },
+            defaults: { type: 'Objeto Mágico', rarity: 'Raro', slot: 'none', description: 'Mejora entregada a Lucario: +1d4 al dano y las curaciones del Laud Runico.', use_effects: { bonus_dice: '1d4', applies_to: ['dano', 'curacion'] } },
             transaction,
         });
         await CharacterInventory.findOrCreate({ where: { character_id: lucario.id, item_id: spike.id }, defaults: { quantity: 1 }, transaction });
