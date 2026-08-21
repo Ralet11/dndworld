@@ -396,6 +396,7 @@ export default function GamePlayerPanel() {
           combatTargeting={combatTargeting}
           onCombatTokenTarget={token => combatTargeting?.execute?.(combatTargeting.action, [token.id])}
           onCombatAreaTarget={area => combatTargeting?.execute?.(combatTargeting.action, [], area)}
+          combatSocket={socket}
           onMoveToken={(tokenId, x, y) => socket.emit('game:move-token', { sessionId: session.id, tokenId, x, y })}
           hiddenRollIds={hiddenRollIds}
           onDismissRoll={rollId => setHiddenRollIds(current => current.includes(String(rollId)) ? current : [...current, String(rollId)])}

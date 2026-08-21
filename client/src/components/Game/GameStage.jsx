@@ -134,6 +134,7 @@ export default function GameStage({
   const contextDragRef = useRef(null);
   const readingLensSnapshotRef = useRef(null);
   const readingLensActiveRef = useRef(false);
+  const combatUseNoticeTimeoutRef = useRef(null);
   const [selectionBox, setSelectionBox] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
@@ -168,7 +169,23 @@ export default function GameStage({
   const [readingLensPinned, setReadingLensPinned] = useState(false);
   const [readingLensPointer, setReadingLensPointer] = useState({ x: 0, y: 0 });
   const [readingLensZoom, setReadingLensZoom] = useState(1.7);
+  const [combatUseNotice, setCombatUseNotice] = useState(null);
   const readingLens = readingLensHeld || readingLensPinned;
+
+  useEffect(() => {
+    if (!combatSocket) return undefined;
+    const handleCombatActionUsed = payload => {
+      if (!payload?.manualResolution) return;
+      setCombatUseNotice(payload);
+      window.clearTimeout(combatUseNoticeTimeoutRef.current);
+      combatUseNoticeTimeoutRef.current = window.setTimeout(() => setCombatUseNotice(null), 6500);
+    };
+    combatSocket.on('game:combat-action-used', handleCombatActionUsed);
+    return () => {
+      combatSocket.off('game:combat-action-used', handleCombatActionUsed);
+      window.clearTimeout(combatUseNoticeTimeoutRef.current);
+    };
+  }, [combatSocket]);
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -1290,6 +1307,7 @@ export default function GameStage({
         </div>
       )}
       <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} consciousnessNotice={consciousnessNotice} />
+      {combatUseNotice && <aside className="game-combat-use-notice" aria-live="polite"><span>Acción de combate</span><strong>{combatUseNotice.actorName} usa {combatUseNotice.actionName}</strong><p>{combatUseNotice.summary}</p></aside>}
       {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && combatPointer?.actionKey === combatTargeting.action?.key && (() => {
         const action = combatTargeting.action;
         const shape = action.area?.shape || 'circle';

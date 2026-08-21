@@ -209,6 +209,8 @@ function spellAbility(character, spell = null) {
 function spellProfile(spell, character) {
     const slug = normalize(spell.slug).replace(/\s+/g, '-').replace(/^paleas-/, '');
     const text = normalize(`${spell.desc || ''} ${spell.higher_level || ''}`);
+    const source = normalize(spell.dnd_class || spell.source || '');
+    const notes = normalize(spell.notes || '');
     const named = SPELL_PROFILES[slug] || {};
     const damage = named.utility ? null : named.damage || (/(damage|dano)/.test(text) ? firstDice(text) : null);
     const healing = named.utility ? null : named.healing || (/(regains?|restore|recupera|cura|hit points|puntos de golpe)/.test(text) ? firstDice(text) : null);
@@ -224,7 +226,7 @@ function spellProfile(spell, character) {
             area = { shape: shapes[areaMatch[2]] || 'circle', feet: Number(areaMatch[1]) };
         }
     }
-    const target = named.target || (area ? (healing ? 'area-ally' : 'area-enemy') : healing ? 'ally' : damage || attack || save ? 'enemy' : 'self');
+    let target = named.target || (area ? (healing ? 'area-ally' : 'area-enemy') : healing ? 'ally' : damage || attack || save ? 'enemy' : 'self');
     const level = Number(spell.level) || 0;
     const casting = normalize(spell.casting_time);
     const ability = spellAbility(character, spell);
@@ -234,6 +236,16 @@ function spellProfile(spell, character) {
         ? (() => { const parsed = parseDiceExpression(healing); return parsed ? formatDice({ ...parsed, modifier: parsed.modifier + abilityMod }) : healing; })()
         : healing;
     const economy = named.economy || (casting.includes('bonus') || casting.includes('adicional') ? 'bonus' : casting.includes('reaction') || casting.includes('reaccion') ? 'reaction' : 'action');
+    // Algunos conjuros (luz, detectar magia, baya buena, golpe enmarañador,
+    // etc.) requieren una decisión narrativa del DM, pero siguen siendo usos
+    // válidos de una acción y no deben quedar inutilizables en combate.
+    const hasAutomaticResolution = Boolean(attack || scaledDamage || finalHealing || save || named.temporaryHp || (named.effect && named.effect.type !== 'CUSTOM'));
+    const manualResolution = !hasAutomaticResolution;
+    if (manualResolution) target = 'self';
+    const legacyLimitedUse = /celestial legacy|legado celestial/.test(source) && /1\s*\/\s*(lr|descanso largo)/.test(notes);
+    const resource = legacyLimitedUse
+        ? { type: 'session-use', key: `spell:${slug}`, max: 1, recovery: 'largo' }
+        : level > 0 ? { type: 'spell-slot', level } : null;
     return {
         key: `spell:${spell.id}`,
         source: 'spell',
@@ -255,10 +267,11 @@ function spellProfile(spell, character) {
         halfOnSave: Boolean(named.halfOnSave || /half as much|mitad del dano/.test(text)),
         temporaryHp: Number(named.temporaryHp) || null,
         effect: named.effect || null,
+        manualResolution,
         spellLevel: level,
-        resource: level > 0 ? { type: 'spell-slot', level } : null,
+        resource,
         formula: scaledDamage || finalHealing,
-        summary: [attack ? `Ataque ${signed(proficiencyBonus(character) + abilityMod)}` : null, save ? `Salv. ${save} CD ${8 + proficiencyBonus(character) + abilityMod}` : null, scaledDamage && `${scaledDamage} ${named.damageType || ''}`.trim(), finalHealing && `Cura ${finalHealing}`, level > 0 && `Espacio nivel ${level}`].filter(Boolean).join(' · '),
+        summary: [attack ? `Ataque ${signed(proficiencyBonus(character) + abilityMod)}` : null, save ? `Salv. ${save} CD ${8 + proficiencyBonus(character) + abilityMod}` : null, scaledDamage && `${scaledDamage} ${named.damageType || ''}`.trim(), finalHealing && `Cura ${finalHealing}`, manualResolution && 'Resolución manual', resource?.type === 'spell-slot' && `Espacio nivel ${level}`, resource?.type === 'session-use' && '1 / descanso largo'].filter(Boolean).join(' · '),
     };
 }
 

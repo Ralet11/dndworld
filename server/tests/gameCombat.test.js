@@ -235,3 +235,16 @@ test('Paleas uses the correct spellcasting ability and weapon passives stay atta
     assert.deepEqual(shortsword.conditionalExtraDamage, [{ expression: '1d8', damageType: 'perforante', when: 'target-wounded', oncePerTurn: true, source: 'Asesino de Colosos' }]);
     assert.equal(shortsword.effect.type, 'VEX_NEXT_ATTACK_ADVANTAGE');
 });
+
+test('utility spells can be used manually and retain their real resource cost', () => {
+    const paleas = { id: 31, level: 5, proficiency_bonus: 3, abilityScores: [{ ability: 'WIS', base_value: 15 }, { ability: 'CHA', base_value: 16 }] };
+    const detectMagic = spellProfile({ id: 11, slug: 'paleas-detect-magic', name: 'Detect Magic', dnd_class: 'Ranger', level: 1, casting_time: '1A' }, paleas);
+    const light = spellProfile({ id: 12, slug: 'paleas-light', name: 'Light', dnd_class: 'Celestial Legacy', level: 0, casting_time: '1A' }, paleas);
+    const daylight = spellProfile({ id: 13, slug: 'paleas-daylight', name: 'Daylight', dnd_class: 'Celestial Legacy', level: 3, casting_time: '1A', notes: '1/LR' }, paleas);
+    assert.equal(detectMagic.manualResolution, true);
+    assert.equal(detectMagic.target, 'self');
+    assert.deepEqual(detectMagic.resource, { type: 'spell-slot', level: 1 });
+    assert.equal(light.manualResolution, true);
+    assert.equal(light.resource, null);
+    assert.deepEqual(daylight.resource, { type: 'session-use', key: 'spell:daylight', max: 1, recovery: 'largo' });
+});

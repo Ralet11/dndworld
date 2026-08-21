@@ -26,6 +26,7 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
   const [activeEconomy, setActiveEconomy] = useState('action');
   const [resourceSummary, setResourceSummary] = useState({ spellSlots: {}, trackers: [] });
   const [expandedActionKey, setExpandedActionKey] = useState(null);
+  const [manualActionConfirmation, setManualActionConfirmation] = useState(null);
   const submittingRef = useRef(false);
 
   const refresh = () => {
@@ -77,6 +78,10 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
 
   const choose = action => {
     if (!action.available || submitting || submittingRef.current) return;
+    if (action.manualResolution) {
+      setManualActionConfirmation(action);
+      return;
+    }
     if (action.economy === 'reaction' && session.combat_state?.reactionWindow?.id) return execute(action);
     if (action.movement) {
       onTargetingChange?.({
@@ -139,6 +144,19 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
 
   return (
     <section className={`turn-action-panel${targeting ? ' is-targeting' : ''}${collapsed ? ' is-collapsed' : ''}`} aria-label="Acciones del turno">
+      {manualActionConfirmation && (
+        <div className="turn-action-confirmation" role="alertdialog" aria-modal="true" aria-label={`Confirmar uso de ${manualActionConfirmation.name}`}>
+          <div>
+            <span>Conjuro de resolución manual</span>
+            <strong>¿Quieres usar {manualActionConfirmation.name}?</strong>
+            <p>{manualActionConfirmation.resource?.type === 'spell-slot' ? `Consumirá un espacio de hechizo de nivel ${manualActionConfirmation.spellLevel}.` : manualActionConfirmation.resource?.type === 'session-use' ? 'Consumirá su uso hasta el próximo descanso largo.' : 'No consume espacios de hechizo.'} El DM resolverá el efecto narrativo.</p>
+            <footer>
+              <button type="button" onClick={() => setManualActionConfirmation(null)}>Cancelar</button>
+              <button type="button" className="is-confirm" onClick={() => { const action = manualActionConfirmation; setManualActionConfirmation(null); execute(action); }}>Usar {manualActionConfirmation.name}</button>
+            </footer>
+          </div>
+        </div>
+      )}
       <header>
         <div><span>{mode === 'dm' ? (isMyTurn ? 'Turno del NPC' : 'Fuera de turno') : 'Tu turno'}</span><strong>{targeting ? 'Elige un objetivo' : actorName ? `Acciones de ${actorName}` : 'Panel de acción'}</strong></div>
         <button type="button" onClick={() => setCollapsed(current => !current)} aria-label={collapsed ? 'Abrir acciones' : 'Contraer acciones'}>{collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</button>
