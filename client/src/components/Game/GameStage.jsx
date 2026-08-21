@@ -132,6 +132,8 @@ export default function GameStage({
   const vfxElementsRef = useRef(new Map());
   const contextCardRef = useRef(null);
   const contextDragRef = useRef(null);
+  const readingLensSnapshotRef = useRef(null);
+  const readingLensActiveRef = useRef(false);
   const [selectionBox, setSelectionBox] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
@@ -163,6 +165,7 @@ export default function GameStage({
   const [textEditor, setTextEditor] = useState(null);
   const [combatPointer, setCombatPointer] = useState(null);
   const [readingLens, setReadingLens] = useState(false);
+  const [readingLensPointer, setReadingLensPointer] = useState({ x: 0, y: 0 });
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -258,11 +261,9 @@ export default function GameStage({
   }, []);
 
   useEffect(() => {
-    const root = document.getElementById('root');
-    const updateOrigin = event => {
+    const updatePointer = event => {
       if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
-      root?.style.setProperty('--reading-zoom-x', `${Math.max(0, Math.min(100, (event.clientX / window.innerWidth) * 100))}%`);
-      root?.style.setProperty('--reading-zoom-y', `${Math.max(0, Math.min(100, (event.clientY / window.innerHeight) * 100))}%`);
+      if (readingLensActiveRef.current) setReadingLensPointer({ x: event.clientX, y: event.clientY });
     };
     const keyDown = event => {
       const editable = event.target instanceof HTMLElement
@@ -278,19 +279,27 @@ export default function GameStage({
     };
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', keyUp);
-    window.addEventListener('pointermove', updateOrigin, { passive: true });
+    window.addEventListener('pointermove', updatePointer, { passive: true });
     window.addEventListener('blur', clearLens);
     return () => {
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
-      window.removeEventListener('pointermove', updateOrigin);
+      window.removeEventListener('pointermove', updatePointer);
       window.removeEventListener('blur', clearLens);
     };
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dndworld-reading-zoom', readingLens);
-    return () => document.documentElement.classList.remove('dndworld-reading-zoom');
+    readingLensActiveRef.current = readingLens;
+    const lensViewport = readingLensSnapshotRef.current;
+    if (!readingLens || !lensViewport) return undefined;
+    const source = document.getElementById('root');
+    if (!source) return undefined;
+    const snapshot = source.cloneNode(true);
+    snapshot.removeAttribute('id');
+    snapshot.classList.add('game-reading-lens-snapshot');
+    lensViewport.replaceChildren(snapshot);
+    return () => lensViewport.replaceChildren();
   }, [readingLens]);
 
   useEffect(() => {
@@ -845,6 +854,23 @@ export default function GameStage({
       )}
 
       <GameBoardVfx effects={vfxEnabled ? renderedStageVfx : []} />
+      {readingLens && createPortal(
+        <aside
+          className="game-reading-lens"
+          role="status"
+          aria-label="Lupa de lectura activa"
+          style={{
+            left: `${Math.max(330, Math.min(window.innerWidth - 330, readingLensPointer.x))}px`,
+            top: `${Math.max(220, Math.min(window.innerHeight - 220, readingLensPointer.y))}px`,
+            '--reading-lens-x': `${readingLensPointer.x}px`,
+            '--reading-lens-y': `${readingLensPointer.y}px`,
+          }}
+        >
+          <div ref={readingLensSnapshotRef} className="game-reading-lens-viewport" aria-hidden="true" />
+          <span>Lupa · suelta L para cerrar</span>
+        </aside>,
+        document.body,
+      )}
       {!vfxEnabled && !!renderedStageVfx.length && (
         <div className="game-vfx-fallback-layer" aria-label="Indicadores tácticos de efectos">
           {renderedStageVfx.map(effect => {
