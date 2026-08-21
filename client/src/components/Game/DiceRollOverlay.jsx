@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Crown, Dices, HeartPulse, Skull, X } from 'lucide-react';
+import { Crown, Dices, HeartPulse, Skull, Sparkles, X } from 'lucide-react';
 import API_URL from '../../config';
 
 function resolveImage(value) {
@@ -18,7 +18,7 @@ function fallbackResults(quantity, sides) {
   return Array.from(values, value => (value % sides) + 1);
 }
 
-export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll, consciousnessNotice = null }) {
+export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll, consciousnessNotice = null, combatNotice = null, onDismissCombatNotice }) {
   const boxRef = useRef(null);
   const diceReadyRef = useRef(Promise.resolve(null));
   const initializedRef = useRef(false);
@@ -163,8 +163,22 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
         <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
       </div>
-      {!!(stackRolls.length || consciousnessNotice) && (
+      {!!(stackRolls.length || consciousnessNotice || combatNotice) && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">
+          {combatNotice && (
+            <article style={{ '--roll-accent': '#c89b43' }} className="game-roll-card game-roll-status-card">
+              <div className="game-roll-card-portrait">
+                {combatNotice.characterImage ? <img src={resolveImage(combatNotice.characterImage)} alt="" /> : <Sparkles size={23} />}
+              </div>
+              <div className="game-roll-card-copy">
+                <span>Acción de combate</span>
+                <strong>{combatNotice.actorName} usa {combatNotice.actionName}</strong>
+                <small>{combatNotice.summary}</small>
+              </div>
+              <div className="game-roll-total"><Sparkles size={22} /></div>
+              <button className="game-roll-dismiss" onClick={onDismissCombatNotice} aria-label="Cerrar acción de combate"><X size={12} /></button>
+            </article>
+          )}
           {consciousnessNotice && (() => {
             const unconscious = consciousnessNotice.status === 'unconscious';
             const Icon = unconscious ? Skull : HeartPulse;

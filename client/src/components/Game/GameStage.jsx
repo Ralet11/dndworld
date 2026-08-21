@@ -1306,8 +1306,7 @@ export default function GameStage({
           })}
         </div>
       )}
-      <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} consciousnessNotice={consciousnessNotice} />
-      {combatUseNotice && <aside className="game-combat-use-notice" aria-live="polite"><span>Acción de combate</span><strong>{combatUseNotice.actorName} usa {combatUseNotice.actionName}</strong><p>{combatUseNotice.summary}</p></aside>}
+      <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} consciousnessNotice={consciousnessNotice} combatNotice={combatUseNotice} onDismissCombatNotice={() => setCombatUseNotice(null)} />
       {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && combatPointer?.actionKey === combatTargeting.action?.key && (() => {
         const action = combatTargeting.action;
         const shape = action.area?.shape || 'circle';

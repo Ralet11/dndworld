@@ -2600,7 +2600,7 @@ function registerGameSessionSocket(io, socket) {
                     const manualSummary = `${catalog.character.name} usa ${action.name}. El DM resuelve su efecto.`;
                     combatAction.result = { targets: targets.map(token => ({ tokenId: token.id, name: token.label, outcome: action.temporaryHp ? 'temporary-hp' : action.movement ? 'moved' : 'used', amount: action.temporaryHp || 0 })), summary: action.temporaryHp ? `${action.name}: ${action.temporaryHp} PG temporales.` : action.movement ? `${catalog.character.name} usa ${action.name} y se reposiciona.` : action.manualResolution ? manualSummary : `${catalog.character.name} usa ${action.name}.` };
                     await combatAction.save();
-                    io.to(roomName(session.id)).emit('game:combat-action-used', { actorName: catalog.character.name, actionName: action.name, summary: action.manualResolution ? manualSummary : `${catalog.character.name} usa ${action.name}.`, manualResolution: Boolean(action.manualResolution) });
+                    io.to(roomName(session.id)).emit('game:combat-action-used', { actorName: catalog.character.name, characterImage: catalog.character.image_url || null, actionName: action.name, summary: action.manualResolution ? manualSummary : `${catalog.character.name} usa ${action.name}.`, manualResolution: Boolean(action.manualResolution) });
                 }
             }
             await broadcastSession(io, session.id);
