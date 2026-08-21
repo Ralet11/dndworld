@@ -3954,6 +3954,28 @@ a:focus-visible {
 .game-vfx-handle > button { width: 18px; height: 18px; position: absolute; top: -7px; right: -7px; display: grid; place-items: center; color: #e3b3a9; border: 1px solid #81483f; border-radius: 50%; background: #170c0a; box-shadow: 0 4px 9px rgba(0, 0, 0, .58); }
 .game-vfx-handle > button:hover { color: #fff0e9; border-color: #c66c5d; }
 .game-stage-media { width: 100%; height: 100%; position: absolute; inset: 0; object-fit: contain; pointer-events: none; background: #030605; }
+.game-reading-lens {
+  width: min(430px, 58%);
+  aspect-ratio: 16 / 10;
+  position: absolute;
+  z-index: 48;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px 12px;
+  overflow: hidden;
+  pointer-events: none;
+  border: 2px solid rgba(229, 199, 105, .96);
+  border-radius: 3px;
+  background-color: #07100c;
+  background-repeat: no-repeat;
+  background-size: 230% 230%;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, .72), 0 0 0 1px rgba(13, 222, 255, .25), inset 0 0 0 1px rgba(0, 0, 0, .72);
+  transform: translate(-50%, -50%);
+  animation: game-reading-lens-in 130ms ease-out both;
+}
+.game-reading-lens::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 42%, rgba(1, 6, 4, .34) 100%); }
+.game-reading-lens span { position: relative; z-index: 1; padding: 4px 6px; color: #f5d988; border: 1px solid rgba(229, 199, 105, .42); background: rgba(4, 12, 8, .84); font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+@keyframes game-reading-lens-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.92); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 .game-stage.is-narrative.fit-cover .game-stage-media { object-fit: cover; object-position: center; }
 .game-stage.is-narrative.fit-contain .game-stage-media { object-fit: contain; object-position: center; }
 .game-stage.is-map.map-fit-cover .game-stage-media { object-fit: cover; object-position: center; }
