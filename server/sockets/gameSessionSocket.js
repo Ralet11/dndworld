@@ -2085,7 +2085,15 @@ function registerGameSessionSocket(io, socket) {
         if (session.combat_state?.mode === 'COMBAT' && !activeReactionWindow(session)) {
             const destination = { x: clamp(x), y: clamp(y) };
             let reactionOpened = false;
-            for (const reactorToken of session.tokens.filter(item => item.visible && item.character && String(item.id) !== String(token.id))) {
+            const initiativeOrder = new Map((session.turn_order || []).map((characterId, index) => [Number(characterId), index]));
+            const reactors = session.tokens
+                .filter(item => item.visible && item.character && String(item.id) !== String(token.id))
+                .sort((left, right) => {
+                    const leftRank = initiativeOrder.get(Number(left.character_id)) ?? Number.MAX_SAFE_INTEGER;
+                    const rightRank = initiativeOrder.get(Number(right.character_id)) ?? Number.MAX_SAFE_INTEGER;
+                    return leftRank - rightRank || String(left.label || '').localeCompare(String(right.label || ''));
+                });
+            for (const reactorToken of reactors) {
                 if (!validRelationship({ target: 'enemy' }, reactorToken, token)) continue;
                 const wasInReach = pointDistance(reactorToken, token) <= 8;
                 const leavesReach = pointDistance(reactorToken, destination) > 8;
