@@ -3974,9 +3974,9 @@ a:focus-visible {
   min-width: 100vw;
   height: 100vh;
   position: absolute;
-  top: calc(50% - var(--reading-lens-y) * 1.7);
-  left: calc(50% - var(--reading-lens-x) * 1.7);
-  transform: scale(1.7);
+  top: calc(50% - var(--reading-lens-y) * var(--reading-lens-zoom, 1.7));
+  left: calc(50% - var(--reading-lens-x) * var(--reading-lens-zoom, 1.7));
+  transform: scale(var(--reading-lens-zoom, 1.7));
   transform-origin: 0 0;
   pointer-events: none !important;
 }

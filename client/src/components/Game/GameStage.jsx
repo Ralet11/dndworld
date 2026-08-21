@@ -166,6 +166,7 @@ export default function GameStage({
   const [combatPointer, setCombatPointer] = useState(null);
   const [readingLens, setReadingLens] = useState(false);
   const [readingLensPointer, setReadingLensPointer] = useState({ x: 0, y: 0 });
+  const [readingLensZoom, setReadingLensZoom] = useState(1.7);
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -274,17 +275,24 @@ export default function GameStage({
       }
     };
     const clearLens = () => setReadingLens(false);
+    const adjustLensZoom = event => {
+      if (!readingLensActiveRef.current) return;
+      event.preventDefault();
+      setReadingLensZoom(current => Math.max(1.2, Math.min(3, Number((current + (event.deltaY < 0 ? .15 : -.15)).toFixed(2)))));
+    };
     const keyUp = event => {
       if (event.key.toLowerCase() === 'l') clearLens();
     };
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', keyUp);
     window.addEventListener('pointermove', updatePointer, { passive: true });
+    window.addEventListener('wheel', adjustLensZoom, { passive: false });
     window.addEventListener('blur', clearLens);
     return () => {
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
       window.removeEventListener('pointermove', updatePointer);
+      window.removeEventListener('wheel', adjustLensZoom);
       window.removeEventListener('blur', clearLens);
     };
   }, []);
@@ -864,10 +872,11 @@ export default function GameStage({
             top: `${Math.max(220, Math.min(window.innerHeight - 220, readingLensPointer.y))}px`,
             '--reading-lens-x': `${readingLensPointer.x}px`,
             '--reading-lens-y': `${readingLensPointer.y}px`,
+            '--reading-lens-zoom': readingLensZoom,
           }}
         >
           <div ref={readingLensSnapshotRef} className="game-reading-lens-viewport" aria-hidden="true" />
-          <span>Lupa · suelta L para cerrar</span>
+          <span>Lupa {Math.round(readingLensZoom * 100)}% · rueda ajusta · suelta L</span>
         </aside>,
         document.body,
       )}
