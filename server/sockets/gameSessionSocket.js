@@ -849,7 +849,10 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
         reactionWindowTimers.set(nextWindow.id, nextTimer);
     }
 
-    if (window.context?.pendingMove) {
+    // El desplazamiento que activó ataques de oportunidad se confirma recién
+    // cuando no quedan reacciones en cola: todas deben resolverse contra la
+    // posición que el objetivo tenía al abandonar el alcance.
+    if (window.context?.pendingMove && !queuedWindows.length) {
         const move = window.context.pendingMove;
         const movingToken = session.tokens.find(token => String(token.id) === String(move.tokenId));
         if (movingToken) {
