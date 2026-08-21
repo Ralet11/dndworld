@@ -22,6 +22,7 @@ const { initiativeBonus, initiativeEntry, orderByInitiative } = require('../serv
 const {
     abilityModifier,
     buildActionCatalog,
+    COMBAT_GRID,
     effectiveArmorClass,
     hpAfterDamage,
     hpAfterHealing,
@@ -540,6 +541,7 @@ function mechanicallyExecutable(action) {
     return action.attackBonus != null || action.damage || action.healing || action.temporaryHp
         || (action.saveAbility && action.saveDc) || action.movement || action.shield
         || action.trackerCost || action.trackerRefill || action.clearWeaponJam
+        || action.utilityRoll
         || action.manualResolution
         || (action.effect && action.effect.type !== 'CUSTOM')
         || (action.reactionEffect && action.reactionEffect.type !== 'CUSTOM');
@@ -1002,8 +1004,10 @@ async function finalizeCombatAction(io, combatAction, roll) {
         const target = targets[0];
         const natural = action.attackRollMode === 'advantage'
             ? Math.max(...(roll.results || []).map(Number))
-            : Number(roll.results?.[0]);
-        if (action.attackRollMode === 'advantage') {
+            : action.attackRollMode === 'disadvantage'
+                ? Math.min(...(roll.results || []).map(Number))
+                : Number(roll.results?.[0]);
+        if (['advantage', 'disadvantage'].includes(action.attackRollMode)) {
             roll.total = natural + Number(roll.modifier || 0);
         }
         const targetAc = combatArmorClass(session, target.character);
@@ -1069,43 +1073,62 @@ async function finalizeCombatAction(io, combatAction, roll) {
     }
 
     if (String(combatAction.effect_roll_id) !== String(roll.id)) return;
-    if (action.utilitySave) {
-        const target = targets[0];
-        const natural = Number(roll.results?.[0]) || 0;
-        const bonus = Number(roll.modifier) || 0;
-        const total = Number(roll.total) || natural + bonus;
-        const success = total >= Number(action.saveDc);
-        const conditions = success ? [] : (action.effect?.conditions || []).filter(Boolean);
-        let targetChanged = false;
-        let pushedFeet = 0;
-        if (target && conditions.length) {
-            target.conditions = [...new Set([...(Array.isArray(target.conditions) ? target.conditions : []), ...conditions])];
-            targetChanged = true;
-            io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
-        }
-        if (target && !success && Number(action.forcedMovement?.pushFeet) > 0) {
-            const originToken = session.tokens.find(token => String(token.id) === String(action.forcedMovement.originTokenId));
-            if (originToken) {
-                const dx = Number(target.x) - Number(originToken.x);
-                const dy = Number(target.y) - Number(originToken.y);
-                const length = Math.hypot(dx, dy) || 1;
-                pushedFeet = Number(action.forcedMovement.pushFeet);
-                const distance = Math.max(4, pushedFeet * 0.8);
-                target.x = clamp(Number(target.x) + (dx / length) * distance);
-                target.y = clamp(Number(target.y) + (dy / length) * distance);
-                targetChanged = true;
-                io.to(roomName(session.id)).emit('game:token-moved', { tokenId: target.id, x: target.x, y: target.y });
-            }
-        }
-        if (targetChanged) await target.save();
+    if (action.utilityRoll) {
         combatAction.status = 'COMPLETED';
         combatAction.result = {
             ...previousResult,
-            save: { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success },
-            targets: [{ tokenId: target?.id, characterId: target?.character_id, name: target?.label, outcome: success ? 'saved' : 'failed-save', conditions, pushedFeet }],
-            summary: success
-                ? `${target?.label} supera ${action.name} (${total} contra CD ${action.saveDc}).`
-                : `${target?.label} falla ${action.name} (${total} contra CD ${action.saveDc})${pushedFeet ? `, es empujado ${pushedFeet} pies` : ''}${conditions.length ? ` y queda ${conditions.join(' y ').toLowerCase()}` : ''}.`,
+            effectRoll: { total: roll.total, results: roll.results },
+            targets: targets.map(target => ({ tokenId: target.id, characterId: target.character_id, name: target.label, outcome: 'buffed', amount: roll.total })),
+            summary: `${combatAction.action_name}: ${targets.map(target => target.label).join(', ')} recibe ${roll.total} para aplicar cuando corresponda.`,
+        };
+        roll.label = combatAction.result.summary.slice(0, 120);
+        await Promise.all([roll.save(), combatAction.save()]);
+        return broadcastSession(io, session.id);
+    }
+    if (action.utilitySave) {
+        const saves = [];
+        const outcomes = [];
+        for (const [index, target] of targets.entries()) {
+            const natural = index === 0 ? Number(roll.results?.[0]) || 0 : randomInt(1, 21);
+            const bonus = index === 0 ? Number(roll.modifier) || 0 : savingThrowBonus(target.character, action.saveAbility);
+            const total = index === 0 ? Number(roll.total) || natural + bonus : natural + bonus;
+            const success = total >= Number(action.saveDc);
+            const conditions = success ? [] : (action.effect?.conditions || []).filter(Boolean);
+            let targetChanged = false;
+            let pushedFeet = 0;
+            if (conditions.length) {
+                target.conditions = [...new Set([...(Array.isArray(target.conditions) ? target.conditions : []), ...conditions])];
+                targetChanged = true;
+                io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
+            }
+            if (!success && Number(action.forcedMovement?.pushFeet) > 0) {
+                const originToken = session.tokens.find(token => String(token.id) === String(action.forcedMovement.originTokenId));
+                if (originToken) {
+                    const dx = Number(target.x) - Number(originToken.x);
+                    const dy = Number(target.y) - Number(originToken.y);
+                    const length = Math.hypot(dx, dy) || 1;
+                    pushedFeet = Number(action.forcedMovement.pushFeet);
+                    const distance = Math.max(4, pushedFeet * 0.8);
+                    target.x = clamp(Number(target.x) + (dx / length) * distance);
+                    target.y = clamp(Number(target.y) + (dy / length) * distance);
+                    targetChanged = true;
+                    io.to(roomName(session.id)).emit('game:token-moved', { tokenId: target.id, x: target.x, y: target.y });
+                }
+            }
+            if (targetChanged) await target.save();
+            const save = { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success };
+            saves.push({ tokenId: target.id, name: target.label, ...save });
+            outcomes.push({ tokenId: target.id, characterId: target.character_id, name: target.label, outcome: success ? 'saved' : 'failed-save', conditions, pushedFeet, save });
+        }
+        combatAction.status = 'COMPLETED';
+        combatAction.result = {
+            ...previousResult,
+            save: saves[0],
+            saves,
+            targets: outcomes,
+            summary: outcomes.map(outcome => outcome.outcome === 'saved'
+                ? `${outcome.name} supera ${action.name}`
+                : `${outcome.name} falla ${action.name}${outcome.conditions.length ? ` y queda ${outcome.conditions.join(' y ').toLowerCase()}` : ''}`).join(' · '),
         };
         roll.label = combatAction.result.summary.slice(0, 120);
         const parentAction = action.reactionParentActionId
@@ -1117,9 +1140,9 @@ async function finalizeCombatAction(io, combatAction, roll) {
                 reaction: {
                     ...(parentAction.result?.reaction || {}),
                     savePending: false,
-                    save: { ability: action.saveAbility, dc: action.saveDc, natural, bonus, total, success },
-                    condition: success ? null : conditions[0] || null,
-                    pushFeet: success ? 0 : pushedFeet,
+                    save: saves[0],
+                    condition: outcomes[0]?.conditions?.[0] || null,
+                    pushFeet: outcomes[0]?.pushedFeet || 0,
                 },
                 summary: combatAction.result.summary,
             };
@@ -1196,6 +1219,17 @@ async function finalizeCombatAction(io, combatAction, roll) {
                 await target.save();
                 io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
             }
+            if (!success && Number(action.forcedMovement?.pushFeet) > 0 && actorToken) {
+                const dx = (Number(target.x) - Number(actorToken.x)) * COMBAT_GRID.columns / 100;
+                const dy = (Number(target.y) - Number(actorToken.y)) * COMBAT_GRID.rows / 100;
+                const length = Math.hypot(dx, dy) || 1;
+                const pushedFeet = Number(action.forcedMovement.pushFeet);
+                const distanceCells = pushedFeet / COMBAT_GRID.feetPerCell;
+                target.x = clamp(Number(target.x) + (dx / length) * distanceCells * 100 / COMBAT_GRID.columns);
+                target.y = clamp(Number(target.y) + (dy / length) * distanceCells * 100 / COMBAT_GRID.rows);
+                await target.save();
+                io.to(roomName(session.id)).emit('game:token-moved', { tokenId: target.id, x: target.x, y: target.y });
+            }
         }
 
         if (action.healing) {
@@ -1252,12 +1286,18 @@ async function finalizeCombatAction(io, combatAction, roll) {
         if (healingTarget?.character && parsedHealing) {
             const previousHp = healingTarget.character.hp_current;
             const healingResults = Array.from({ length: parsedHealing.quantity }, () => randomInt(1, parsedHealing.sides + 1));
-            const healingTotal = healingResults.reduce((sum, value) => sum + value, 0) + parsedHealing.modifier;
+            const healingExtraRolls = (action.secondaryHealingExtra || []).flatMap(expression => {
+                const parsed = parseDiceExpression(expression);
+                if (!parsed) return [];
+                const results = Array.from({ length: parsed.quantity }, () => randomInt(1, parsed.sides + 1));
+                return [{ expression, results, total: results.reduce((sum, value) => sum + value, 0) + parsed.modifier }];
+            });
+            const healingTotal = healingResults.reduce((sum, value) => sum + value, 0) + parsedHealing.modifier + healingExtraRolls.reduce((sum, item) => sum + item.total, 0);
             const healed = hpAfterHealing(healingTarget.character, healingTotal);
             healingTarget.character.hp_current = healed.hp_current;
             await healingTarget.character.save();
             emitConsciousnessChange(io, session, healingTarget, previousHp, healingTarget.character.hp_current);
-            outcomes.push({ tokenId: healingTarget.id, characterId: healingTarget.character_id, name: healingTarget.label, outcome: 'healed', amount: healed.amount, secondary: true, healingResults });
+            outcomes.push({ tokenId: healingTarget.id, characterId: healingTarget.character_id, name: healingTarget.label, outcome: 'healed', amount: healed.amount, secondary: true, healingResults, healingExtraRolls });
             io.to(roomName(session.id)).emit('game:token-hp-updated', { tokenId: healingTarget.id, characterId: healingTarget.character_id, hpCurrent: healingTarget.character.hp_current, hpMax: healingTarget.character.hp_max, hpTemp: healingTarget.character.hp_temp });
         }
     }
@@ -2484,8 +2524,19 @@ function registerGameSessionSocket(io, socket) {
                     shields: { ...(session.combat_state?.shields || {}) },
                 }
                 : currentCombatState(session, actorCharacterId);
-            if (action.attackBonus != null && combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage) {
-                action.attackRollMode = 'advantage';
+            if (action.attackBonus != null) {
+                const advantage = Boolean(combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage)
+                    || (Array.isArray(targets[0].conditions) && targets[0].conditions.includes('Iluminado por Faerie Fire'));
+                const disadvantageCondition = 'Desventaja en el proximo ataque';
+                const disadvantage = Array.isArray(actorToken.conditions) && actorToken.conditions.includes(disadvantageCondition);
+                action.attackRollMode = advantage === disadvantage ? null : advantage ? 'advantage' : 'disadvantage';
+                if (disadvantage) {
+                    actorToken.conditions = actorToken.conditions.filter(condition => condition !== disadvantageCondition);
+                    await actorToken.save();
+                    io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: actorToken.id, conditions: actorToken.conditions });
+                }
+            }
+            if (combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage) {
                 combatState.effectsByTarget = { ...(combatState.effectsByTarget || {}) };
                 delete combatState.effectsByTarget[targets[0].id];
             }
@@ -2557,6 +2608,13 @@ function registerGameSessionSocket(io, socket) {
                     io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
                 }
             }
+            if (action.effect?.type === 'APPLY_CONDITIONS') {
+                for (const target of targets) {
+                    target.conditions = [...new Set([...(Array.isArray(target.conditions) ? target.conditions : []), ...(action.effect.conditions || [])])];
+                    await target.save();
+                    io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
+                }
+            }
             if (action.clearWeaponJam) combatState.weaponJams = { ...(combatState.weaponJams || {}), [actorCharacterId]: false };
             if (action.shield) {
                 combatState.acBonuses[actorCharacterId] = {
@@ -2600,7 +2658,7 @@ function registerGameSessionSocket(io, socket) {
             } else if (action.attackBonus != null) {
                 const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
                     sides: 20,
-                    quantity: action.attackRollMode === 'advantage' ? 2 : 1,
+                    quantity: ['advantage', 'disadvantage'].includes(action.attackRollMode) ? 2 : 1,
                     modifier: Number(action.attackBonus),
                     label: `${action.name} · ataque`,
                 });
@@ -2608,7 +2666,7 @@ function registerGameSessionSocket(io, socket) {
                 combatAction.status = 'ATTACK_ROLL';
                 await combatAction.save();
             } else {
-                const expression = parseDiceExpression(action.damage || action.healing);
+                const expression = parseDiceExpression(action.damage || action.healing || action.utilityRoll);
                 if (expression) {
                     const roll = await createCombatRoll(io, session, socket.user.id, catalog.character, {
                         ...expression,

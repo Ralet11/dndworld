@@ -306,3 +306,55 @@ test('Paleas Burning Hands and Rakion grenade keep their exact grid geometry', (
     assert.equal(grenade.range, 60);
     assert.deepEqual(grenade.area, { shape: 'circle', feet: 20, cells: 4, spanCells: 8, widthPct: 40, heightPct: 160 / 3 });
 });
+
+test('Lucario runic lute and chords expose their complete combat mechanics', () => {
+    const lucario = {
+        id: 4, level: 5, proficiency_bonus: 3,
+        abilityScores: [{ ability: 'CHA', base_value: 18 }, { ability: 'DEX', base_value: 11 }, { ability: 'STR', base_value: 11 }],
+        custom_features: [
+            { name: 'Inspiracion Bardica', kind: 'Bonus', resource: '4/Descanso Corto', description: 'Un aliado recibe 1d8.', combat_action: { utilityRoll: '1d8', target: 'ally', range: 60, max_uses: 4, key: 'inspiracion-bardica', recovery: 'corto' } },
+            { name: 'Acorde radiante', kind: 'Bonus', resource: '4/Descanso Largo', description: 'Causa 1d4 + CAR y cura 1d8.', combat_action: { damage: '1d4', secondaryHealing: '1d8' } },
+            { name: 'Acorde menor', kind: 'Bonus', resource: '4/Descanso Largo', description: 'Causa 1d4 + CAR. El proximo ataque tiene ventaja.' },
+            { name: 'Acorde mayor', kind: 'Bonus', resource: '4/Descanso Largo', description: 'Causa 1d10 + CAR.' },
+        ],
+    };
+    const lute = weaponProfile({ id: 52, name: 'Laud Runico', damage: '1d4', damage_type: 'sonico', properties: [], use_effects: { combat_action: { ability: 'CHA', range: 30, extraDamage: ['1d4'] } } }, lucario, 'primary');
+    assert.equal(lute.attackBonus, 7);
+    assert.equal(lute.damage, '1d4+4');
+    assert.deepEqual(lute.extraDamage, ['1d4']);
+    assert.equal(lute.range, 30);
+    assert.equal(lute.isMelee, false);
+
+    const [inspiration, radiant, minor, major] = customFeatureProfiles(lucario);
+    assert.equal(inspiration.damage, null);
+    assert.equal(inspiration.utilityRoll, '1d8');
+    assert.equal(inspiration.target, 'ally');
+    assert.deepEqual(inspiration.resource, { type: 'session-use', key: 'inspiracion-bardica', max: 4, recovery: 'corto' });
+    assert.equal(radiant.damage, '1d4+4');
+    assert.deepEqual(radiant.extraDamage, ['1d4']);
+    assert.equal(radiant.secondaryHealing, '1d8');
+    assert.deepEqual(radiant.secondaryHealingExtra, ['1d4']);
+    assert.equal(radiant.range, 30);
+    assert.equal(minor.attackBonus, null);
+    assert.equal(minor.effect.type, 'GRANT_NEXT_ATTACK_ADVANTAGE');
+    assert.equal(major.damage, '1d10+4');
+    assert.equal(major.range, 30);
+});
+
+test('Lucario bard spells model saves, conditions, forced movement and grid areas', () => {
+    const lucario = { id: 4, level: 5, class_slug: 'bard', proficiency_bonus: 3, abilityScores: [{ ability: 'CHA', base_value: 18 }] };
+    const mockery = spellProfile({ id: 21, slug: 'vicious-mockery', name: 'Vicious Mockery', level: 0, range: '60 feet', casting_time: '1 action' }, lucario);
+    const faerieFire = spellProfile({ id: 22, slug: 'faerie-fire', name: 'Faerie Fire', level: 1, range: '60 feet', casting_time: '1 action' }, lucario);
+    const thunderwave = spellProfile({ id: 23, slug: 'thunderwave', name: 'Thunderwave', level: 1, range: 'Self', casting_time: '1 action' }, lucario);
+    const shatter = spellProfile({ id: 24, slug: 'shatter', name: 'Shatter', level: 2, range: '60 feet', casting_time: '1 action' }, lucario);
+    const pattern = spellProfile({ id: 25, slug: 'hypnotic-pattern', name: 'Hypnotic Pattern', level: 3, range: '120 feet', casting_time: '1 action' }, lucario);
+    assert.equal(mockery.damage, '2d4');
+    assert.equal(mockery.saveDc, 15);
+    assert.deepEqual(mockery.effect.conditions, ['Desventaja en el proximo ataque']);
+    assert.deepEqual(faerieFire.area, { shape: 'square', feet: 20, cells: 4, spanCells: 4, widthPct: 20, heightPct: 80 / 3 });
+    assert.equal(faerieFire.effect.conditions[0], 'Iluminado por Faerie Fire');
+    assert.deepEqual(thunderwave.forcedMovement, { pushFeet: 10 });
+    assert.deepEqual(shatter.area, { shape: 'circle', feet: 10, cells: 2, spanCells: 4, widthPct: 20, heightPct: 80 / 3 });
+    assert.deepEqual(pattern.area, { shape: 'square', feet: 30, cells: 6, spanCells: 6, widthPct: 30, heightPct: 40 });
+    assert.deepEqual(pattern.effect.conditions, ['Hechizado', 'Incapacitado', 'Velocidad 0']);
+});

@@ -37,13 +37,20 @@ const SPELL_PROFILES = {
     'cure-wounds': { healing: '2d8', addAbility: true, target: 'ally', range: 5, slot: true },
     fireball: { save: 'DEX', damage: '8d6', damageType: 'fuego', target: 'area-enemy', range: 150, area: { shape: 'circle', feet: 20 }, halfOnSave: true, slot: true },
     'burning-hands': { save: 'DEX', damage: '3d6', damageType: 'fuego', target: 'area-enemy', area: { shape: 'cone', feet: 15 }, halfOnSave: true, slot: true },
-    'thunderwave': { save: 'CON', damage: '2d8', damageType: 'trueno', target: 'area-enemy', area: { shape: 'square', feet: 15 }, halfOnSave: true, slot: true },
+    'thunderwave': { save: 'CON', damage: '2d8', damageType: 'trueno', target: 'area-enemy', area: { shape: 'square', feet: 15 }, forcedMovement: { pushFeet: 10 }, halfOnSave: true, slot: true },
     'magic-missile': { damage: '3d4+3', damageType: 'fuerza', target: 'enemy', range: 120, slot: true },
     'sorcerous-burst': { attack: true, damage: '1d6', damageType: 'fuerza', target: 'enemy', range: 120, cantripScale: true },
+    'vicious-mockery': { save: 'WIS', damage: '1d4', damageType: 'psiquico', target: 'enemy', range: 60, cantripScale: true, effect: { type: 'SAVE_CONDITION', conditions: ['Desventaja en el proximo ataque'] } },
     thunderclap: { save: 'CON', damage: '1d6', damageType: 'trueno', target: 'area-enemy', range: 0, area: { shape: 'square', feet: 15, origin: 'self' }, cantripScale: true },
     light: { utility: true, target: 'area-all', range: 5, area: { shape: 'circle', feet: 20 } },
     'detect-magic': { utility: true, target: 'area-all', range: 0, area: { shape: 'circle', feet: 30, origin: 'self' } },
     daylight: { utility: true, target: 'area-all', range: 60, area: { shape: 'circle', feet: 60 } },
+    'faerie-fire': { utility: true, save: 'DEX', target: 'area-enemy', range: 60, area: { shape: 'square', feet: 20 }, slot: true, effect: { type: 'SAVE_CONDITION', conditions: ['Iluminado por Faerie Fire'] } },
+    invisibility: { utility: true, target: 'ally', range: 5, slot: true, effect: { type: 'APPLY_CONDITIONS', conditions: ['Invisible'] } },
+    shatter: { save: 'CON', damage: '3d8', damageType: 'trueno', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 10 }, halfOnSave: true, slot: true },
+    suggestion: { utility: true, save: 'WIS', target: 'enemy', range: 30, slot: true, effect: { type: 'SAVE_CONDITION', conditions: ['Bajo Suggestion'] } },
+    'hypnotic-pattern': { utility: true, save: 'WIS', target: 'area-enemy', range: 120, area: { shape: 'square', feet: 30 }, slot: true, effect: { type: 'SAVE_CONDITION', conditions: ['Hechizado', 'Incapacitado', 'Velocidad 0'] } },
+    'dispel-magic': { utility: true, target: 'enemy', range: 120, slot: true },
     'hunters-mark': { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true, effect: { type: 'MARK_EXTRA_DAMAGE', damage: '1d6', damageType: 'fuerza' } },
     'lesser-restoration': { utility: true, target: 'ally', range: 5, slot: true, effect: { type: 'REMOVE_CONDITIONS', conditions: ['Cegado', 'Ensordecido', 'Paralizado', 'Envenenado'] } },
     'acid-splash': { save: 'DEX', damage: '1d6', damageType: 'acido', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 5 }, cantripScale: true },
@@ -75,7 +82,11 @@ const NPC_ACTION_PROFILES = {
 };
 
 const CUSTOM_ACTION_PROFILES = {
-    'acorde menor': { effect: { type: 'GRANT_NEXT_ATTACK_ADVANTAGE' } },
+    'acorde radiante': { attack: false, target: 'enemy', range: 30, damageType: 'radiante', extraDamage: ['1d4'], secondaryHealing: '1d8', secondaryHealingExtra: ['1d4'], secondaryHealingRange: 15, max_uses: 4, key: 'acordes-laud-runico', recovery: 'largo' },
+    'acorde menor': { attack: false, target: 'enemy', range: 30, damageType: 'sonico', extraDamage: ['1d4'], effect: { type: 'GRANT_NEXT_ATTACK_ADVANTAGE' }, max_uses: 4, key: 'acordes-laud-runico', recovery: 'largo' },
+    'acorde mayor': { attack: false, target: 'enemy', range: 30, damageType: 'sonico', extraDamage: ['1d4'], max_uses: 4, key: 'acordes-laud-runico', recovery: 'largo' },
+    'inspiracion bardica': { target: 'ally', range: 60, utilityRoll: '1d8', max_uses: 4, key: 'inspiracion-bardica', recovery: 'corto' },
+    'canamo somnoliento': { target: 'enemy', range: 30, saveAbility: 'WIS', saveDc: 15, effect: { type: 'SAVE_CONDITION', conditions: ['Dormido'] }, max_uses: 1, key: 'canamo-somnoliento', recovery: 'manual' },
     'escupefuego · municion normal': { jamOnNaturalBelow: 7 },
     'escupefuego · municion runica': { jamOnNaturalBelow: 7 },
     'escupefuego · municion runica ii': { jamOnNaturalBelow: 7 },
@@ -264,7 +275,7 @@ function spellProfile(spell, character) {
     const manualResolution = !hasAutomaticResolution;
     // A manually resolved effect can still need a spatial template. Only
     // manual effects without an area resolve directly on the caster.
-    if (manualResolution && !area) target = 'self';
+    if (manualResolution && !area && !named.target) target = 'self';
     const legacyLimitedUse = /celestial legacy|legado celestial/.test(source) && /1\s*\/\s*(lr|descanso largo)/.test(notes);
     const resource = legacyLimitedUse
         ? { type: 'session-use', key: `spell:${slug}`, max: 1, recovery: 'largo' }
@@ -290,6 +301,7 @@ function spellProfile(spell, character) {
         halfOnSave: Boolean(named.halfOnSave || /half as much|mitad del dano/.test(text)),
         temporaryHp: Number(named.temporaryHp) || null,
         effect: named.effect || null,
+        forcedMovement: named.forcedMovement || null,
         manualResolution,
         spellLevel: level,
         resource,
@@ -340,6 +352,9 @@ function weaponProfile(item, character, slot) {
         attackBonus: Number.isFinite(Number(override.attackBonus)) ? Number(override.attackBonus) : proficiencyBonus(character) + abilityMod,
         damage,
         damageType: override.damageType || item.damage_type || 'fisico',
+        extraDamage: override.extraDamage ? (Array.isArray(override.extraDamage) ? override.extraDamage : [override.extraDamage]) : [],
+        extraDamageType: override.extraDamageType || override.damageType || item.damage_type || 'fisico',
+        isMelee: Number(override.range) > 5 ? false : !ranged,
         conditionalExtraDamage: hasColossusSlayer ? [{ expression: '1d8', damageType: override.damageType || item.damage_type || 'fisico', when: 'target-wounded', oncePerTurn: true, source: 'Asesino de Colosos' }] : [],
         effect: vex ? { type: 'VEX_NEXT_ATTACK_ADVANTAGE' } : null,
         grazeDamage: graze ? Math.max(0, abilityMod) : 0,
@@ -421,13 +436,13 @@ function customFeatureProfiles(character) {
         const abilityBonus = ability && /\+\s*(des|fue|car|sab|int)\b/.test(normalizedDescription)
             ? abilityModifier(character, ability)
             : 0;
-        const rawDamage = override.damage || parsedDice[0] || null;
-        const secondaryHealing = normalizedDescription.match(/(?:cura|recupera).*?(\d{1,2}d(?:4|6|8|10|12|20|100))/)?.[1] || null;
+        const rawDamage = override.utilityRoll || override.manualResolution ? null : override.damage || parsedDice[0] || null;
+        const secondaryHealing = override.secondaryHealing || normalizedDescription.match(/(?:cura|recupera).*?(\d{1,2}d(?:4|6|8|10|12|20|100))/)?.[1] || null;
         const conditionalSecondaryDamage = /\bsi\b[^.]*?(?:recibe|sufre|causa|inflige)[^.]*?\d{1,2}d(?:4|6|8|10|12|20|100)/.test(normalizedDescription);
         const damageParsed = parseDiceExpression(rawDamage);
         const damage = damageParsed ? formatDice({ ...damageParsed, modifier: damageParsed.modifier + abilityBonus }) : rawDamage;
         const attackAbility = ability || 'DEX';
-        const attack = override.attack_bonus != null || override.attackBonus != null || /(ataque|disparo)/.test(normalizedDescription);
+        const attack = override.attack ?? (override.attack_bonus != null || override.attackBonus != null || /(ataque|disparo)/.test(normalizedDescription));
         const areaFeet = Number(normalizedDescription.match(/(?:circulo|radio|cono|linea|cuadrado).*?(\d+)\s*(?:pies|pie|feet|foot)/)?.[1]) || null;
         const range = Number(override.range) || Number(normalizedDescription.match(/(?:alcance|dentro de)\s*(\d+)\s*(?:pies|pie|feet|foot)/)?.[1]) || (areaFeet ? 60 : 5);
         const areaShape = /cono/.test(normalizedDescription) ? 'cone' : /linea/.test(normalizedDescription) ? 'line' : /cuadrado/.test(normalizedDescription) ? 'square' : 'circle';
@@ -463,7 +478,10 @@ function customFeatureProfiles(character) {
                 ? (Array.isArray(override.extraDamage) ? override.extraDamage : [override.extraDamage])
                 : conditionalSecondaryDamage ? [] : parsedDice.slice(1).filter(expression => expression !== secondaryHealing),
             secondaryHealing,
-            secondaryHealingRange: secondaryHealing ? 15 : null,
+            secondaryHealingExtra: override.secondaryHealingExtra
+                ? (Array.isArray(override.secondaryHealingExtra) ? override.secondaryHealingExtra : [override.secondaryHealingExtra])
+                : [],
+            secondaryHealingRange: secondaryHealing ? Number(override.secondaryHealingRange) || 15 : null,
             healing: override.healing || null,
             damageType: override.damage_type || override.damageType || inferredDamageType,
             effect: override.effect || null,
@@ -472,6 +490,8 @@ function customFeatureProfiles(character) {
             trackerRefill: override.refills_tracker || override.refillsTracker || feature.refills_tracker || null,
             jamOnNaturalBelow: Number(override.jamOnNaturalBelow) || null,
             clearWeaponJam: Boolean(override.clearWeaponJam),
+            utilityRoll: override.utilityRoll || null,
+            manualResolution: Boolean(override.manualResolution),
             resource: override.max_uses
                 ? { type: 'session-use', key: override.key || sharedResourceKey, max: override.max_uses, recovery: override.recovery || null }
                 : formulaResource ? { type: 'session-use', key: sharedResourceKey, ...formulaResource }
@@ -519,7 +539,7 @@ async function buildActionCatalog(characterId) {
         return !alias || !knownSpellSlugs.has(alias);
     });
     const primaryWeapon = weaponProfile(character.equipment?.primary_weapon, character, 'primary');
-    const opportunityAttack = primaryWeapon ? {
+    const opportunityAttack = primaryWeapon?.isMelee ? {
         ...primaryWeapon,
         key: `reaction:opportunity:${primaryWeapon.sourceId}`,
         name: `Ataque de oportunidad · ${character.equipment?.primary_weapon?.name || 'arma'}`,
