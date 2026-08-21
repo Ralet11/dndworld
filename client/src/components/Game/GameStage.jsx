@@ -171,6 +171,11 @@ export default function GameStage({
   const [readingLensZoom, setReadingLensZoom] = useState(1.7);
   const [combatUseNotice, setCombatUseNotice] = useState(null);
   const readingLens = readingLensHeld || readingLensPinned;
+  const reactionNotice = (() => {
+    if (!isDm || !session?.combat_state?.reactionWindow?.id) return null;
+    const windows = [session.combat_state.reactionWindow, ...(session.combat_state.reactionQueue || [])].filter(window => window?.id);
+    return { count: windows.length, activeName: windows[0]?.reactorName || 'Un jugador', waitingNames: windows.slice(1).map(window => window.reactorName || 'Un jugador') };
+  })();
 
   useEffect(() => {
     if (!combatSocket) return undefined;
@@ -1306,7 +1311,7 @@ export default function GameStage({
           })}
         </div>
       )}
-      <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} consciousnessNotice={consciousnessNotice} combatNotice={combatUseNotice} onDismissCombatNotice={() => setCombatUseNotice(null)} />
+      <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} consciousnessNotice={consciousnessNotice} combatNotice={combatUseNotice} onDismissCombatNotice={() => setCombatUseNotice(null)} reactionNotice={reactionNotice} />
       {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && combatPointer?.actionKey === combatTargeting.action?.key && (() => {
         const action = combatTargeting.action;
         const shape = action.area?.shape || 'circle';

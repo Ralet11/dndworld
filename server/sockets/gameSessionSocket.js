@@ -379,16 +379,20 @@ function serializeSession(session, viewer) {
     // nunca la biblioteca completa, que puede contener spoilers de campaña.
     if (!isDm(viewer)) payload.assets = [];
     if (payload.combat_state?.reactionWindow) {
-        const reactionWindow = payload.combat_state.reactionWindow;
-        const canRespond = String(reactionWindow.controllerUserId) === String(viewer?.user?.id);
-        payload.combat_state = {
-            ...payload.combat_state,
-            reactionWindow: {
+        const sanitizeReactionWindow = reactionWindow => {
+            const canRespond = String(reactionWindow.controllerUserId) === String(viewer?.user?.id);
+            return {
                 ...reactionWindow,
                 canRespond,
                 options: canRespond ? (reactionWindow.options || []).map(option => ({ key: option.key, name: option.name, summary: option.summary })) : [],
                 controllerUserId: undefined,
-            },
+            };
+        };
+        const reactionWindow = payload.combat_state.reactionWindow;
+        payload.combat_state = {
+            ...payload.combat_state,
+            reactionWindow: sanitizeReactionWindow(reactionWindow),
+            reactionQueue: (payload.combat_state.reactionQueue || []).map(sanitizeReactionWindow),
         };
     }
     payload.active_character_id = payload.combat_state?.awaitingInitiative
@@ -621,14 +625,14 @@ async function openReactionWindow(io, session, {
     resumeStatus = 'DAMAGE_READY',
     context = {},
 }) {
-    if (activeReactionWindow(session)) return false;
     const candidateOptions = await eligibleReactionOptions(session, reactorToken, trigger);
     const options = candidateOptions.filter(action => !action.reactionEffect?.meleeOnly || (
         sourceToken && pointDistance(reactorToken, sourceToken) <= 8
     ));
     if (!options.length) return false;
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 15000).toISOString();
+    const queued = Boolean(activeReactionWindow(session));
+    const expiresAt = queued ? null : new Date(Date.now() + 15000).toISOString();
     const window = {
         id,
         trigger,
@@ -650,15 +654,18 @@ async function openReactionWindow(io, session, {
             action,
         })),
     };
-    const state = { ...(session.combat_state || {}), reactionWindow: window };
+    const state = queued
+        ? { ...(session.combat_state || {}), reactionQueue: [...(session.combat_state?.reactionQueue || []), window] }
+        : { ...(session.combat_state || {}), reactionWindow: window };
     session.combat_state = state;
     session.changed('combat_state', true);
     await session.save();
     if (parentAction) {
         parentAction.status = 'REACTION_PENDING';
-        parentAction.result = { ...(parentAction.result || {}), summary: `${parentAction.action_name}: esperando reacción de ${window.reactorName}.` };
+        parentAction.result = { ...(parentAction.result || {}), summary: `${parentAction.action_name}: esperando reacción de ${window.reactorName}${queued ? ' (en cola)' : ''}.` };
         await parentAction.save();
     }
+    if (queued) return true;
     const timer = setTimeout(() => {
         reactionWindowTimers.delete(id);
         resolveReactionWindow(io, session.id, id, null, null).catch(error => console.error('reaction window expiry error:', error));
@@ -827,6 +834,20 @@ async function resolveReactionWindow(io, sessionId, windowId, actionKey, socketU
     session.combat_state = state;
     session.changed('combat_state', true);
     await session.save();
+
+    const queuedWindows = state.reactionQueue || [];
+    if (queuedWindows.length) {
+        const [nextWindow, ...remainingWindows] = queuedWindows;
+        nextWindow.expiresAt = new Date(Date.now() + 15000).toISOString();
+        session.combat_state = { ...(session.combat_state || {}), reactionWindow: nextWindow, reactionQueue: remainingWindows };
+        session.changed('combat_state', true);
+        await session.save();
+        const nextTimer = setTimeout(() => {
+            reactionWindowTimers.delete(nextWindow.id);
+            resolveReactionWindow(io, session.id, nextWindow.id, null, null).catch(error => console.error('reaction window expiry error:', error));
+        }, 15000);
+        reactionWindowTimers.set(nextWindow.id, nextTimer);
+    }
 
     if (window.context?.pendingMove) {
         const move = window.context.pendingMove;
@@ -2060,6 +2081,7 @@ function registerGameSessionSocket(io, socket) {
 
         if (session.combat_state?.mode === 'COMBAT' && !activeReactionWindow(session)) {
             const destination = { x: clamp(x), y: clamp(y) };
+            let reactionOpened = false;
             for (const reactorToken of session.tokens.filter(item => item.visible && item.character && String(item.id) !== String(token.id))) {
                 if (!validRelationship({ target: 'enemy' }, reactorToken, token)) continue;
                 const wasInReach = pointDistance(reactorToken, token) <= 8;
@@ -2071,10 +2093,11 @@ function registerGameSessionSocket(io, socket) {
                     sourceToken: token,
                     context: { pendingMove: { tokenId: token.id, x: destination.x, y: destination.y } },
                 });
-                if (opened) {
-                    await broadcastSession(io, session.id);
-                    return;
-                }
+                if (opened) reactionOpened = true;
+            }
+            if (reactionOpened) {
+                await broadcastSession(io, session.id);
+                return;
             }
         }
 

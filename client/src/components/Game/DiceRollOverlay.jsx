@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Crown, Dices, HeartPulse, Skull, Sparkles, X } from 'lucide-react';
+import { Crown, Dices, HeartPulse, Shield, Skull, Sparkles, X } from 'lucide-react';
 import API_URL from '../../config';
 
 function resolveImage(value) {
@@ -18,7 +18,7 @@ function fallbackResults(quantity, sides) {
   return Array.from(values, value => (value % sides) + 1);
 }
 
-export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll, consciousnessNotice = null, combatNotice = null, onDismissCombatNotice }) {
+export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResolveRoll, consciousnessNotice = null, combatNotice = null, onDismissCombatNotice, reactionNotice = null }) {
   const boxRef = useRef(null);
   const diceReadyRef = useRef(Promise.resolve(null));
   const initializedRef = useRef(false);
@@ -163,8 +163,19 @@ export default function DiceRollOverlay({ rolls = [], userId, onDismiss, onResol
       <div className={`game-dice-animation${activeRoll ? ' is-active' : ''}${fallback ? ' is-fallback' : ''}`} aria-hidden={!activeRoll}>
         <div id="game-dice-box" ref={boxRef} className="game-dice-box" />
       </div>
-      {!!(stackRolls.length || consciousnessNotice || combatNotice) && (
+      {!!(stackRolls.length || consciousnessNotice || combatNotice || reactionNotice) && (
         <div className="game-roll-stack" aria-live="polite" aria-label="Resultados de las tiradas">
+          {reactionNotice && (
+            <article style={{ '--roll-accent': '#56aac3' }} className="game-roll-card game-roll-status-card">
+              <div className="game-roll-card-portrait"><Shield size={23} /></div>
+              <div className="game-roll-card-copy">
+                <span>Reacciones pendientes</span>
+                <strong>{reactionNotice.count === 1 ? `${reactionNotice.activeName} está resolviendo una reacción` : `${reactionNotice.count} jugadores tienen reacciones pendientes`}</strong>
+                <small>{reactionNotice.waitingNames.length ? `${reactionNotice.activeName} está decidiendo · En espera: ${reactionNotice.waitingNames.join(', ')}` : `${reactionNotice.activeName} está decidiendo ahora`}</small>
+              </div>
+              <div className="game-roll-total"><strong>{reactionNotice.count}</strong></div>
+            </article>
+          )}
           {combatNotice && (
             <article style={{ '--roll-accent': '#c89b43' }} className="game-roll-card game-roll-status-card">
               <div className="game-roll-card-portrait">
