@@ -164,9 +164,11 @@ export default function GameStage({
   const [draftPath, setDraftPath] = useState(null);
   const [textEditor, setTextEditor] = useState(null);
   const [combatPointer, setCombatPointer] = useState(null);
-  const [readingLens, setReadingLens] = useState(false);
+  const [readingLensHeld, setReadingLensHeld] = useState(false);
+  const [readingLensPinned, setReadingLensPinned] = useState(false);
   const [readingLensPointer, setReadingLensPointer] = useState({ x: 0, y: 0 });
   const [readingLensZoom, setReadingLensZoom] = useState(1.7);
+  const readingLens = readingLensHeld || readingLensPinned;
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -271,10 +273,14 @@ export default function GameStage({
         && (event.target.matches('input, textarea, select') || event.target.isContentEditable);
       if (!editable && event.key.toLowerCase() === 'l') {
         event.preventDefault();
-        setReadingLens(true);
+        if (event.shiftKey) {
+          if (!event.repeat) setReadingLensPinned(current => !current);
+        } else {
+          setReadingLensHeld(true);
+        }
       }
     };
-    const clearLens = () => setReadingLens(false);
+    const clearLens = () => setReadingLensHeld(false);
     const adjustLensZoom = event => {
       if (!readingLensActiveRef.current) return;
       event.preventDefault();
@@ -876,7 +882,7 @@ export default function GameStage({
           }}
         >
           <div ref={readingLensSnapshotRef} className="game-reading-lens-viewport" aria-hidden="true" />
-          <span>Lupa {Math.round(readingLensZoom * 100)}% · rueda ajusta · suelta L</span>
+          <span>Lupa {Math.round(readingLensZoom * 100)}% · rueda ajusta · {readingLensPinned ? 'Shift + L para cerrar' : 'suelta L'}</span>
         </aside>,
         document.body,
       )}
