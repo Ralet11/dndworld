@@ -52,6 +52,13 @@ const PointOfInterest = sequelize.define('PointOfInterest', {
         type: DataTypes.TEXT,
         allowNull: true, // Information acquired by the entire party
     },
+    // null conserva POIs históricos visibles; los nuevos nacen ocultos y el
+    // DM los revela explícitamente cuando la party los descubre.
+    party_known: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: null,
+    },
     type: {
         type: DataTypes.STRING,
         allowNull: false,

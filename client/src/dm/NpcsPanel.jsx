@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { createElement, useMemo, useRef, useState, useEffect } from 'react';
 import {
-  BookOpen, ChevronLeft, CircleUserRound, Heart, ImagePlus, Plus, Save,
+  BookOpen, ChevronLeft, CircleUserRound, Eye, EyeOff, Heart, ImagePlus, Plus, Save,
   Search, Shield, Skull, Sparkles, Swords, Trash2, UserRound,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
@@ -23,7 +23,7 @@ const baseNpc = () => ({
   size: 'Mediano', creature_type: 'Humanoide', challenge_rating: '', proficiency_bonus: 2,
   passive_perception: 10, image_url: '', rendered_url: '', abilities_text: '', notes: '',
   saving_throws: {}, damage_resistances: [], damage_immunities: [], damage_vulnerabilities: [],
-  condition_immunities: [], senses: [], languages: [],
+  condition_immunities: [], senses: [], languages: [], party_known: false,
   abilityScores: Object.fromEntries(ABILITIES.map(key => [key, 10])), npcActions: [],
 });
 
@@ -53,9 +53,9 @@ function Field({ label, children, wide = false, hint = '' }) {
   </label>;
 }
 
-function SectionTitle({ icon: Icon, title, description, action }) {
+function SectionTitle({ icon: SectionIcon, title, description, action }) {
   return <div className="npc-studio-section-title">
-    <span className="npc-studio-section-icon"><Icon size={18} /></span>
+    <span className="npc-studio-section-icon">{createElement(SectionIcon, { size: 18 })}</span>
     <div><h3>{title}</h3><p>{description}</p></div>
     {action}
   </div>;
@@ -103,6 +103,15 @@ export default function NpcsPanel() {
   }), [filter, npcs, query]);
 
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
+  const togglePartyKnowledge = () => {
+    if (!selectedId) return;
+    const next = form.party_known === false;
+    socket.emit('npc:set-party-known', { characterId: selectedId, partyKnown: next }, response => {
+      if (!response?.ok) return setMessage(response?.message || 'No se pudo cambiar la visibilidad para la party.');
+      setForm(current => ({ ...current, party_known: next }));
+      setMessage(next ? 'NPC revelado en el glosario de la party.' : 'NPC oculto del glosario de la party.');
+    });
+  };
   const setAction = (index, patch) => set('npcActions', form.npcActions.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   const startNew = () => { setSelectedId(null); setForm(baseNpc()); setTab('overview'); setMessage(''); };
 
@@ -177,6 +186,7 @@ export default function NpcsPanel() {
       <header className="npc-studio-sheetbar">
         <button className="npc-studio-back" onClick={() => setSelectedId(null)} title="Nueva ficha"><ChevronLeft size={18} /></button>
         <div><span>{selectedId ? 'Ficha de personaje' : 'Nueva criatura'}</span><h2>{form.name || 'Personaje sin nombre'}</h2></div>
+        {selectedId && <button className="npc-studio-save" onClick={togglePartyKnowledge}>{form.party_known !== false ? <EyeOff size={16} /> : <Eye size={16} />}{form.party_known !== false ? 'Ocultar a party' : 'Revelar a party'}</button>}
         <button className="npc-studio-save" disabled={saving} onClick={save}><Save size={16} /> {saving ? 'Guardando…' : 'Guardar cambios'}</button>
       </header>
 
@@ -209,7 +219,7 @@ export default function NpcsPanel() {
       </section>
 
       <nav className="npc-studio-tabs" role="tablist" aria-label="Secciones de la ficha">
-        {tabs.map(([value, Icon, label]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? 'is-active' : ''} onClick={() => setTab(value)}><Icon size={17} /> {label}</button>)}
+        {tabs.map(([value, TabIcon, label]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? 'is-active' : ''} onClick={() => setTab(value)}>{createElement(TabIcon, { size: 17 })} {label}</button>)}
       </nav>
 
       <div className="npc-studio-content">

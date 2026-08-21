@@ -7,6 +7,14 @@ const {
     NpcAction,
     Spell,
 } = require('../models');
+const StatEngine = require('../utils/statEngine');
+
+const COMBAT_GRID = Object.freeze({ columns: 20, rows: 15, feetPerCell: 5 });
+
+const EQUIPMENT_SLOT_INCLUDES = [
+    'helmet', 'chest', 'shoulders', 'boots', 'pants', 'gloves',
+    'ring_1', 'ring_2', 'primary_weapon', 'secondary_weapon',
+].map(as => ({ model: Item, as }));
 
 const ABILITY_BY_CLASS = {
     artificer: 'INT', artificiero: 'INT', bard: 'CHA', bardo: 'CHA', cleric: 'WIS', clerigo: 'WIS',
@@ -32,7 +40,7 @@ const SPELL_PROFILES = {
     'thunderwave': { save: 'CON', damage: '2d8', damageType: 'trueno', target: 'area-enemy', area: { shape: 'square', feet: 15 }, halfOnSave: true, slot: true },
     'magic-missile': { damage: '3d4+3', damageType: 'fuerza', target: 'enemy', range: 120, slot: true },
     'sorcerous-burst': { attack: true, damage: '1d6', damageType: 'fuerza', target: 'enemy', range: 120, cantripScale: true },
-    thunderclap: { save: 'CON', damage: '1d6', damageType: 'trueno', target: 'area-enemy', range: 5, area: { shape: 'circle', feet: 5 }, cantripScale: true },
+    thunderclap: { save: 'CON', damage: '1d6', damageType: 'trueno', target: 'area-enemy', range: 0, area: { shape: 'square', feet: 15, origin: 'self' }, cantripScale: true },
     'hunters-mark': { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true, effect: { type: 'MARK_EXTRA_DAMAGE', damage: '1d6', damageType: 'fuerza' } },
     'lesser-restoration': { utility: true, target: 'ally', range: 5, slot: true, effect: { type: 'REMOVE_CONDITIONS', conditions: ['Cegado', 'Ensordecido', 'Paralizado', 'Envenenado'] } },
     'acid-splash': { save: 'DEX', damage: '1d6', damageType: 'acido', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 5 }, cantripScale: true },
@@ -257,7 +265,7 @@ function spellProfile(spell, character) {
         reactionEffect: economy === 'reaction' ? (named.reactionEffect || inferReactionEffect(spell.name, text, named)) : null,
         target,
         range,
-        area: area ? { ...area, sizePct: Math.max(5, Math.min(36, Number(area.feet) * 0.8)) } : null,
+        area: combatAreaProfile(area),
         attackBonus: attack ? proficiencyBonus(character) + abilityMod : null,
         saveAbility: save,
         saveDc: save ? 8 + proficiencyBonus(character) + abilityMod : null,
@@ -350,7 +358,7 @@ function npcActionProfile(action, allActions = []) {
         reactionEffect: economy === 'reaction' ? inferReactionEffect(action.name, action.description, { ...action.toJSON?.(), ...action, ...override }) : null,
         target,
         range: Number(override.range) || Number(String(source.reach || '').match(/\d+/)?.[0]) || 5,
-        area: override.area ? { ...override.area, sizePct: Math.max(5, Math.min(36, Number(override.area.feet) * 0.8)) } : null,
+        area: combatAreaProfile(override.area),
         attackBonus: source.attack_bonus == null ? null : Number(source.attack_bonus),
         saveAbility: source.save_ability || null,
         saveDc: source.save_dc == null ? null : Number(source.save_dc),
@@ -431,7 +439,7 @@ function customFeatureProfiles(character) {
             reactionEffect,
             target: override.target || (areaFeet ? 'area-enemy' : override.healing ? 'ally' : damage || attack ? 'enemy' : 'self'),
             range,
-            area: override.area || (areaFeet ? { shape: areaShape, feet: areaFeet, sizePct: Math.max(5, Math.min(36, areaFeet * 0.8)) } : null),
+            area: combatAreaProfile(override.area || (areaFeet ? { shape: areaShape, feet: areaFeet } : null)),
             attackBonus: override.attack_bonus ?? override.attackBonus ?? (attack ? proficiencyBonus(character) + abilityModifier(character, attackAbility) : null),
             saveAbility: override.save_ability || override.saveAbility || null,
             saveDc: override.save_dc ?? override.saveDc ?? null,
@@ -468,13 +476,21 @@ async function loadCombatCharacter(characterId) {
             {
                 model: EquipmentSlots,
                 as: 'equipment',
-                include: [
-                    { model: Item, as: 'primary_weapon' },
-                    { model: Item, as: 'secondary_weapon' },
-                ],
+                include: EQUIPMENT_SLOT_INCLUDES,
             },
         ],
     });
+}
+
+/**
+ * La CA que rige combate. Para PJ siempre se deriva de las piezas equipadas;
+ * para NPC conserva su CA plana configurada. No incluye bonificadores breves
+ * de la sesión (p. ej. Escudo), que se aplican encima en el socket.
+ */
+function effectiveArmorClass(character) {
+    if (!character) return 10;
+    const armor = StatEngine.computeArmor(character, character.equipment || {}, abilityModifier(character, 'DEX'));
+    return Math.max(1, Number(armor.ac) || 10);
 }
 
 async function buildActionCatalog(characterId) {
@@ -533,6 +549,34 @@ function pointDistance(left, right) {
     return Math.hypot(Number(left.x) - Number(right.x), Number(left.y) - Number(right.y));
 }
 
+function toGridPoint(point) {
+    return {
+        x: Number(point.x) * COMBAT_GRID.columns / 100,
+        y: Number(point.y) * COMBAT_GRID.rows / 100,
+    };
+}
+
+function gridDistanceFeet(left, right) {
+    const from = toGridPoint(left);
+    const to = toGridPoint(right);
+    return Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y)) * COMBAT_GRID.feetPerCell;
+}
+
+function combatAreaProfile(area) {
+    if (!area) return null;
+    const feet = Math.max(COMBAT_GRID.feetPerCell, Number(area.feet) || COMBAT_GRID.feetPerCell);
+    const distanceCells = feet / COMBAT_GRID.feetPerCell;
+    const spanCells = area.shape === 'circle' ? distanceCells * 2 : distanceCells;
+    return {
+        ...area,
+        feet,
+        cells: distanceCells,
+        spanCells,
+        widthPct: spanCells * 100 / COMBAT_GRID.columns,
+        heightPct: spanCells * 100 / COMBAT_GRID.rows,
+    };
+}
+
 // Las posiciones del tablero se guardan como porcentajes. Una casilla visible
 // mide aproximadamente 5% y una diagonal contigua cerca de 7.1%; 8% cubre
 // correctamente todo el perímetro cuerpo a cuerpo sin saltar una casilla.
@@ -542,9 +586,14 @@ function combatRangePct(rangeFeet) {
     return Math.max(8, Math.min(100, feet * 0.8));
 }
 
-function areaContains(shape, origin, center, point, size) {
-    const radius = Math.max(2, Number(size) || 10);
-    if (shape === 'square') return Math.abs(point.x - center.x) <= radius / 2 && Math.abs(point.y - center.y) <= radius / 2;
+function areaContains(area, originPct, centerPct, pointPct) {
+    const shape = area?.shape || 'circle';
+    const origin = toGridPoint(originPct);
+    const center = toGridPoint(centerPct);
+    const point = toGridPoint(pointPct);
+    const distanceCells = Math.max(1, Number(area?.cells) || 1);
+    const spanCells = Math.max(1, Number(area?.spanCells) || distanceCells);
+    if (shape === 'square') return Math.abs(point.x - center.x) <= spanCells / 2 && Math.abs(point.y - center.y) <= spanCells / 2;
     if (shape === 'line') {
         const dx = center.x - origin.x;
         const dy = center.y - origin.y;
@@ -553,34 +602,33 @@ function areaContains(shape, origin, center, point, size) {
         const py = point.y - origin.y;
         const projection = (px * dx + py * dy) / length;
         const perpendicular = Math.abs(px * dy - py * dx) / length;
-        return projection >= 0 && projection <= radius && perpendicular <= Math.max(1.8, radius * 0.12);
+        return projection >= 0 && projection <= distanceCells && perpendicular <= 0.5;
     }
     if (shape === 'cone') {
         const direction = Math.atan2(center.y - origin.y, center.x - origin.x);
         const angle = Math.atan2(point.y - origin.y, point.x - origin.x);
         const delta = Math.abs(Math.atan2(Math.sin(angle - direction), Math.cos(angle - direction)));
-        return pointDistance(origin, point) <= radius && delta <= Math.PI / 6;
+        return pointDistance(origin, point) <= distanceCells && delta <= Math.PI / 6;
     }
-    return pointDistance(center, point) <= (radius / 2) + 3;
+    return pointDistance(center, point) <= distanceCells + 0.5;
 }
 
 function resolveTargetTokens(action, actorToken, allTokens, requestedIds = [], area = null) {
     const visible = allTokens.filter(token => token.visible && token.character);
     if (action.target === 'self') return [actorToken];
-    const rangePct = combatRangePct(action.range);
     if (String(action.target).startsWith('area-')) {
-        if (!area || !Number.isFinite(Number(area.x)) || !Number.isFinite(Number(area.y))) return [];
-        const center = { x: Number(area.x), y: Number(area.y) };
         const origin = { x: Number(actorToken.x), y: Number(actorToken.y) };
-        if (pointDistance(origin, center) > rangePct) return [];
-        const shape = action.area?.shape || 'circle';
-        const size = action.area?.sizePct || 12;
-        return visible.filter(token => validRelationship(action, actorToken, token) && areaContains(shape, origin, center, { x: Number(token.x), y: Number(token.y) }, size));
+        const selfOrigin = action.area?.origin === 'self';
+        if (!selfOrigin && (!area || !Number.isFinite(Number(area.x)) || !Number.isFinite(Number(area.y)))) return [];
+        const center = selfOrigin ? origin : { x: Number(area.x), y: Number(area.y) };
+        if (!selfOrigin && gridDistanceFeet(origin, center) > Number(action.range || 5) + 0.01) return [];
+        return visible.filter(token => validRelationship(action, actorToken, token)
+            && areaContains(action.area, origin, center, { x: Number(token.x), y: Number(token.y) }));
     }
     const requested = new Set((requestedIds || []).map(String));
     return visible.filter(token => requested.has(String(token.id))
         && validRelationship(action, actorToken, token)
-        && pointDistance({ x: Number(actorToken.x), y: Number(actorToken.y) }, { x: Number(token.x), y: Number(token.y) }) <= rangePct).slice(0, 1);
+        && gridDistanceFeet(actorToken, token) <= Number(action.range || 5) + 0.01).slice(0, 1);
 }
 
 function listIncludes(values, damageType) {
@@ -623,10 +671,13 @@ function hpAfterHealing(character, amount) {
 module.exports = {
     abilityModifier,
     buildActionCatalog,
+    COMBAT_GRID,
     combatRangePct,
     customFeatureProfiles,
+    effectiveArmorClass,
     hpAfterDamage,
     hpAfterHealing,
+    gridDistanceFeet,
     loadCombatCharacter,
     parseDiceExpression,
     npcActionProfile,

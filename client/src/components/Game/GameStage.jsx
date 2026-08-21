@@ -6,6 +6,8 @@ import DiceRollOverlay from './DiceRollOverlay';
 import GameBoardVfx from './GameBoardVfx';
 import TurnActionPanel from './TurnActionPanel';
 
+const COMBAT_GRID = Object.freeze({ columns: 20, rows: 15, feetPerCell: 5 });
+
 function normalizedNpcType(token) {
   return String(token?.character?.npc_type || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
@@ -19,6 +21,13 @@ function combatRelationship(actorToken, targetToken) {
   if ((actorPlayer && targetPlayer) || ['amigo', 'companero', 'ally'].includes(targetType)) return 'ally';
   if (['enemigo', 'enemy'].includes(targetType)) return 'enemy';
   return actorPlayer ? 'enemy' : 'neutral';
+}
+
+function gridDistanceFeet(left, right) {
+  if (!left || !right) return Infinity;
+  const dx = Math.abs(Number(right.x) - Number(left.x)) * COMBAT_GRID.columns / 100;
+  const dy = Math.abs(Number(right.y) - Number(left.y)) * COMBAT_GRID.rows / 100;
+  return Math.max(dx, dy) * COMBAT_GRID.feetPerCell;
 }
 
 function validTargetRelationship(action, actorToken, targetToken) {
@@ -705,6 +714,7 @@ export default function GameStage({
       onPointerMove={event => {
         const lensPosition = positionFromEvent(event);
         if (!combatTargeting || !String(combatTargeting.action?.target).startsWith('area-')) return;
+        if (combatTargeting.action?.area?.origin === 'self') return;
         const position = lensPosition;
         if (position) setCombatPointer({ ...position, actionKey: combatTargeting.action?.key });
       }}
@@ -712,7 +722,10 @@ export default function GameStage({
         if (event.button === 0 && combatTargeting && String(combatTargeting.action?.target).startsWith('area-')) {
           event.preventDefault();
           event.stopPropagation();
-          const position = positionFromEvent(event);
+          const actor = tokens.find(token => Number(token.character_id) === Number(activeCharacterId));
+          const position = combatTargeting.action?.area?.origin === 'self' && actor
+            ? { x: Number(actor.x), y: Number(actor.y) }
+            : positionFromEvent(event);
           if (position) onCombatAreaTarget?.({ x: position.x, y: position.y });
           return;
         }
@@ -1301,7 +1314,7 @@ export default function GameStage({
                   </div>
                   <div className="game-scene-cast-preview-stats">
                     <div><Heart size={11} /><span>PG</span><strong>{npc.hp_current ?? '—'} / {npc.hp_max ?? '—'}</strong></div>
-                    <div><Shield size={11} /><span>CA</span><strong>{npc.ac_base ?? '—'}</strong></div>
+                    <div><Shield size={11} /><span>CA</span><strong>{npc.ac ?? npc.ac_base ?? '—'}</strong></div>
                     <div><Move size={11} /><span>Mov.</span><strong>{npc.speed ? `${npc.speed} ft` : '—'}</strong></div>
                   </div>
                   <p>{npc.origin || 'Información pública del personaje en escena.'}</p>
@@ -1312,17 +1325,22 @@ export default function GameStage({
         </div>
       )}
       <DiceRollOverlay rolls={(session?.rolls || []).filter(roll => !hiddenRollIds.includes(String(roll.id)))} userId={userId} isDm={isDm} onDismiss={onDismissRoll} onResolveRoll={onResolveRoll} consciousnessNotice={consciousnessNotice} combatNotice={combatUseNotice} onDismissCombatNotice={() => setCombatUseNotice(null)} reactionNotice={reactionNotice} />
-      {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && combatPointer?.actionKey === combatTargeting.action?.key && (() => {
+      {combatTargeting && String(combatTargeting.action?.target).startsWith('area-') && (combatTargeting.action?.area?.origin === 'self' || combatPointer?.actionKey === combatTargeting.action?.key) && (() => {
         const action = combatTargeting.action;
         const shape = action.area?.shape || 'circle';
-        const size = Number(action.area?.sizePct) || 12;
         const actor = tokens.find(token => Number(token.character_id) === Number(activeCharacterId));
         const origin = actor ? { x: Number(actor.x), y: Number(actor.y) } : combatPointer;
-        const angle = Math.atan2(combatPointer.y - origin.y, combatPointer.x - origin.x) * (180 / Math.PI);
+        const center = action.area?.origin === 'self' ? origin : combatPointer;
+        if (!center) return null;
+        const widthPct = Number(action.area?.widthPct) || (Number(action.area?.spanCells) || 1) * 100 / COMBAT_GRID.columns;
+        const heightPct = Number(action.area?.heightPct) || (Number(action.area?.spanCells) || 1) * 100 / COMBAT_GRID.rows;
+        const gridDx = (center.x - origin.x) * COMBAT_GRID.columns / 100;
+        const gridDy = (center.y - origin.y) * COMBAT_GRID.rows / 100;
+        const angle = Math.atan2(gridDy, gridDx) * (180 / Math.PI);
         const directional = shape === 'cone' || shape === 'line';
         const style = directional
-          ? { left: `${origin.x}%`, top: `${origin.y}%`, width: `${size}%`, '--combat-angle': `${angle}deg` }
-          : { left: `${combatPointer.x}%`, top: `${combatPointer.y}%`, width: `${size}%`, height: `${size}%` };
+          ? { left: `${origin.x}%`, top: `${origin.y}%`, width: `${widthPct}%`, '--combat-area-height': `${100 / COMBAT_GRID.rows}%`, '--combat-cone-height': `${heightPct}%`, '--combat-angle': `${angle}deg` }
+          : { left: `${center.x}%`, top: `${center.y}%`, width: `${widthPct}%`, height: `${heightPct}%` };
         return <div className={`game-combat-area-preview is-${shape}`} style={style}><span>{action.name}</span></div>;
       })()}
       {selectionBox && <div className="game-token-selection-box" style={boxStyle} />}
@@ -1356,8 +1374,7 @@ export default function GameStage({
         const targetingArea = String(combatTargeting?.action?.target || '').startsWith('area-');
         const combatActor = tokens.find(item => Number(item.character_id) === Number(activeCharacterId));
         const actionRange = Number(combatTargeting?.action?.range) || 5;
-        const rangePct = actionRange <= 5 ? 8 : Math.max(8, Math.min(100, actionRange * 0.8));
-        const withinCombatRange = !combatActor || Math.hypot(Number(token.x) - Number(combatActor.x), Number(token.y) - Number(combatActor.y)) <= rangePct;
+        const withinCombatRange = !combatActor || gridDistanceFeet(combatActor, token) <= actionRange + 0.01;
         const validCombatTarget = !combatTargeting || targetingArea || (
           withinCombatRange && validTargetRelationship(combatTargeting.action, combatActor, token)
         );
@@ -1379,7 +1396,9 @@ export default function GameStage({
                 event.preventDefault();
                 event.stopPropagation();
                 if (targetingArea) {
-                  const position = positionFromEvent(event);
+                  const position = combatTargeting.action?.area?.origin === 'self' && combatActor
+                    ? { x: Number(combatActor.x), y: Number(combatActor.y) }
+                    : positionFromEvent(event);
                   if (position) onCombatAreaTarget?.({ x: position.x, y: position.y });
                 } else if (validCombatTarget) {
                   onCombatTokenTarget?.(token);
@@ -1482,7 +1501,7 @@ export default function GameStage({
                 </form>
               )}
             </div>
-            <div><Shield size={12} /><span>CA</span><strong>{menuCharacter?.ac_base ?? '—'}</strong></div>
+            <div><Shield size={12} /><span>CA</span><strong>{menuCharacter?.ac ?? menuCharacter?.ac_base ?? '—'}</strong></div>
             <div><Move size={12} /><span>Mov.</span><strong>{menuCharacter?.speed ? `${menuCharacter.speed} ft` : '—'}</strong></div>
           </div>
           {(isDm || !!menuToken.conditions?.length) && (

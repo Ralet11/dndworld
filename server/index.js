@@ -691,6 +691,9 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
         const coreUpdates = {};
         for (const [field, type] of Object.entries(EDITABLE_CHARACTER_FIELDS)) {
             if (!Object.prototype.hasOwnProperty.call(diff, field)) continue;
+            // La CA de un PJ se deriva exclusivamente del equipo equipado.
+            // ac_base queda reservada para NPCs con CA plana.
+            if (field === 'ac_base' && !character.is_npc) continue;
             const next = normalizedFieldValue(type, diff[field]);
             if (next === null || valuesEqual(character[field], next)) continue;
             changes[field] = { before: character[field], after: next };
@@ -766,7 +769,7 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
     io.emit('stats-updated', updatedStats);
     if (character.is_npc) {
         npcSnapshot = null;
-        io.emit('all-npcs', await getNpcsForClient());
+        await emitNpcCatalog(io);
     }
     if (isDmUser(socket) && changes.gold) {
         const before = Number(changes.gold.before || 0);
@@ -785,9 +788,11 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
     return { character: updatedStats.find(item => item.id === Number(characterId)), changes };
 }
 
-const buildNpcsForClient = async () => {
+const buildNpcsForClient = async ({ partyOnly = false } = {}) => {
     const npcs = await Character.findAll({
-        where: { is_npc: true },
+        where: partyOnly
+            ? { is_npc: true, [Op.or]: [{ party_known: true }, { party_known: null }] }
+            : { is_npc: true },
         include: [
             { model: AbilityScore, as: 'abilityScores', separate: true },
             { model: Skill, as: 'skills', separate: true },
@@ -805,7 +810,8 @@ const buildNpcsForClient = async () => {
 let npcSnapshot = null;
 let npcSnapshotAt = 0;
 let npcsInFlight = null;
-const getNpcsForClient = async () => {
+const getNpcsForClient = async ({ partyOnly = false } = {}) => {
+    if (partyOnly) return buildNpcsForClient({ partyOnly: true });
     const now = Date.now();
     if (npcSnapshot && now - npcSnapshotAt < 1500) return npcSnapshot;
     if (npcsInFlight) return npcsInFlight;
@@ -817,6 +823,16 @@ const getNpcsForClient = async () => {
     } finally {
         npcsInFlight = null;
     }
+};
+
+const emitNpcCatalog = async (io) => {
+    const [dmNpcs, partyNpcs] = await Promise.all([
+        getNpcsForClient(),
+        getNpcsForClient({ partyOnly: true }),
+    ]);
+    io.sockets.sockets.forEach(client => {
+        client.emit('all-npcs', isDmUser(client) ? dmNpcs : partyNpcs);
+    });
 };
 
 io.on('connection', async (socket) => {
@@ -879,7 +895,7 @@ io.on('connection', async (socket) => {
     // The live table needs this catalog during its initial socket handshake.
     socket.on('get-all-npcs', async (ack) => {
         try {
-            const npcs = await getNpcsForClient();
+            const npcs = await getNpcsForClient({ partyOnly: !isDmUser(socket) });
             socket.emit('all-npcs', npcs);
             if (typeof ack === 'function') ack({ ok: true, npcs });
         } catch (error) {
@@ -1357,6 +1373,13 @@ io.on('connection', async (socket) => {
         }
     });
 
+    socket.on('poi:visibility-changed', async ({ poiId } = {}) => {
+        if (!isDmUser(socket)) return;
+        const poi = await PointOfInterest.findByPk(Number(poiId), { attributes: ['id', 'parent_id', 'party_known'] });
+        if (!poi) return;
+        io.emit('poi:visibility-changed', poi.toJSON());
+    });
+
     socket.on('character:item:set-quantity', async ({ characterId, itemId, quantity } = {}, reply = () => {}) => {
         try {
             if (!isDmUser(socket)) throw new Error('Sólo el DM puede administrar inventarios.');
@@ -1807,15 +1830,31 @@ io.on('connection', async (socket) => {
             const npc = await Character.create({
                 ...npcData,
                 is_npc: true,
+                party_known: Boolean(npcData.party_known),
                 hp_current: npcData.hp_max, // Default full HP
             });
             npcSnapshot = null;
-            const npcs = await getNpcsForClient();
-            io.emit('all-npcs', npcs); // Broadcast to DMs (or just emit back to socket?)
+            await emitNpcCatalog(io);
             reply({ ok: true, npc });
         } catch (e) {
             console.error('Create NPC error:', e);
             reply({ ok: false, message: e.message || 'No se pudo crear el NPC.' });
+        }
+    });
+
+    socket.on('npc:set-party-known', async ({ characterId, partyKnown } = {}, reply = () => {}) => {
+        try {
+            if (!isDmUser(socket)) throw new Error('Sólo el DM puede cambiar el conocimiento de la party.');
+            const npc = await Character.findOne({ where: { id: Number(characterId), is_npc: true } });
+            if (!npc) throw new Error('NPC no encontrado.');
+            npc.party_known = Boolean(partyKnown);
+            await npc.save();
+            npcSnapshot = null;
+            await emitNpcCatalog(io);
+            reply({ ok: true, partyKnown: npc.party_known });
+        } catch (error) {
+            console.error('NPC party knowledge error:', error);
+            reply({ ok: false, message: error.message || 'No se pudo cambiar la visibilidad del NPC.' });
         }
     });
 
@@ -1942,7 +1981,7 @@ io.on('connection', async (socket) => {
                 }
             });
             npcSnapshot = null;
-            io.emit('all-npcs', await getNpcsForClient());
+            await emitNpcCatalog(io);
             reply({ ok: true });
         } catch (error) { reply({ ok: false, message: error.message || 'No se pudieron guardar las acciones.' }); }
     });

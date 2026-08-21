@@ -4,6 +4,7 @@ const {
     AbilityScore,
     AudioTrack,
     Character,
+    EquipmentSlots,
     GameCombatAction,
     GameAsset,
     GameParticipant,
@@ -11,6 +12,7 @@ const {
     GameSession,
     GameToken,
     NpcAction,
+    Item,
     Scene,
     Skill,
     User,
@@ -20,11 +22,12 @@ const { initiativeBonus, initiativeEntry, orderByInitiative } = require('../serv
 const {
     abilityModifier,
     buildActionCatalog,
+    effectiveArmorClass,
     hpAfterDamage,
     hpAfterHealing,
+    gridDistanceFeet,
     loadCombatCharacter,
     parseDiceExpression,
-    pointDistance,
     REACTION_TRIGGERS,
     resolveTargetTokens,
     validRelationship,
@@ -38,6 +41,10 @@ const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
 const ROLL_CARD_EXIT_MS = 1150;
+const EQUIPMENT_SLOT_INCLUDES = [
+    'helmet', 'chest', 'shoulders', 'boots', 'pants', 'gloves',
+    'ring_1', 'ring_2', 'primary_weapon', 'secondary_weapon',
+].map(as => ({ model: Item, as }));
 
 function emitConsciousnessChange(io, session, token, previousHp, nextHp) {
     if (!session || !token) return;
@@ -167,6 +174,7 @@ async function loadSession(sessionId) {
                     as: 'character',
                     attributes: [
                         'id', 'name', 'race', 'class', 'level', 'npc_type', 'owner_id', 'origin',
+                        'is_npc',
                         'image_url', 'rendered_url', 'base_body_url', 'hp_current', 'hp_max', 'hp_temp', 'ac_base',
                         'initiative_bonus', 'speed', 'size', 'creature_type', 'challenge_rating',
                         'proficiency_bonus', 'passive_perception', 'saving_throws',
@@ -178,6 +186,7 @@ async function loadSession(sessionId) {
                         { model: AbilityScore, as: 'abilityScores', separate: true },
                         { model: Skill, as: 'skills', separate: true },
                         { model: NpcAction, as: 'npcActions', separate: true },
+                        { model: EquipmentSlots, as: 'equipment', include: EQUIPMENT_SLOT_INCLUDES },
                     ],
                 }],
             },
@@ -241,7 +250,7 @@ async function loadSession(sessionId) {
             where: { id: sceneNpcIds, is_npc: true },
             attributes: [
                 'id', 'name', 'race', 'class', 'level', 'npc_type', 'origin', 'creature_type',
-                'image_url', 'rendered_url', 'base_body_url', 'hp_current', 'hp_max', 'ac_base', 'speed',
+                'image_url', 'rendered_url', 'base_body_url', 'hp_current', 'hp_max', 'ac_base', 'speed', 'party_known',
             ],
         })
         : [];
@@ -350,6 +359,7 @@ function serializeSession(session, viewer) {
     payload.tokens = (payload.tokens || []).map(token => ({
         ...token,
         image_url: token.image_url || resolveCharacterImage(token.character),
+        character: token.character ? { ...token.character, ac: effectiveArmorClass(token.character) } : token.character,
     })).map(token => {
         if (!token.character) return token;
         const hasFullAccess = isDm(viewer) || token.owner_user_id === viewer?.user?.id;
@@ -372,6 +382,7 @@ function serializeSession(session, viewer) {
         delete character.spells_known;
         delete character.spells_prepared;
         delete character.notes;
+        delete character.equipment;
         return { ...token, character };
     });
     payload.dm_connected = Boolean(onlineUsers?.get(payload.dm_user_id)?.size);
@@ -492,7 +503,7 @@ function currentCombatState(session, actorCharacterId) {
 
 function combatArmorClass(session, character) {
     const bonus = Number(session?.combat_state?.acBonuses?.[character?.id]?.bonus) || 0;
-    return Math.max(1, (Number(character?.ac_base) || 10) + bonus);
+    return Math.max(1, effectiveArmorClass(character) + bonus);
 }
 
 function resourceAvailability(action, character, session) {
@@ -627,7 +638,7 @@ async function openReactionWindow(io, session, {
 }) {
     const candidateOptions = await eligibleReactionOptions(session, reactorToken, trigger);
     const options = candidateOptions.filter(action => !action.reactionEffect?.meleeOnly || (
-        sourceToken && pointDistance(reactorToken, sourceToken) <= 8
+        sourceToken && gridDistanceFeet(reactorToken, sourceToken) <= 5.01
     ));
     if (!options.length) return false;
     const id = randomUUID();
@@ -1215,7 +1226,7 @@ async function finalizeCombatAction(io, combatAction, roll) {
             }
             await character.save();
             outcomes.push({ tokenId: target.id, characterId: character.id, name: target.label, outcome: inflicted > 0 ? 'damaged' : 'saved', amount: inflicted, absorbed, mitigations, save });
-            if (retaliation && hadTemporaryHp && actorToken?.character && pointDistance(actorToken, target) <= 8) {
+            if (retaliation && hadTemporaryHp && actorToken?.character && gridDistanceFeet(actorToken, target) <= 5.01) {
                 const actorPreviousHp = actorToken.character.hp_current;
                 const reflected = hpAfterDamage(actorToken.character, retaliation.damage, retaliation.damageType);
                 actorToken.character.hp_current = reflected.hp_current;
@@ -2031,7 +2042,7 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, session.id);
     });
 
-    socket.on('game:create-npc-token', async ({ sessionId, name, hpMax, armorClass, imageUrl, npcType } = {}, reply = () => {}) => {
+    socket.on('game:create-npc-token', async ({ sessionId, name, hpMax, armorClass, imageUrl, npcType, partyKnown = false } = {}, reply = () => {}) => {
         try {
             const session = await requireHostedSession(socket, sessionId);
             if (!session) return reply({ ok: false, message: 'No tienes permiso para crear NPCs en esta sala.' });
@@ -2046,6 +2057,7 @@ function registerGameSessionSocket(io, socket) {
                 race: 'Criatura',
                 class: 'NPC',
                 is_npc: true,
+                party_known: Boolean(partyKnown),
                 npc_type: type,
                 hp_current: hp,
                 hp_max: hp,
@@ -2095,8 +2107,8 @@ function registerGameSessionSocket(io, socket) {
                 });
             for (const reactorToken of reactors) {
                 if (!validRelationship({ target: 'enemy' }, reactorToken, token)) continue;
-                const wasInReach = pointDistance(reactorToken, token) <= 8;
-                const leavesReach = pointDistance(reactorToken, destination) > 8;
+                const wasInReach = gridDistanceFeet(reactorToken, token) <= 5.01;
+                const leavesReach = gridDistanceFeet(reactorToken, destination) > 5.01;
                 if (!wasInReach || !leavesReach) continue;
                 const opened = await openReactionWindow(io, session, {
                     trigger: REACTION_TRIGGERS.ENEMY_LEAVES_REACH,
@@ -2439,7 +2451,7 @@ function registerGameSessionSocket(io, socket) {
             }
             if (action.movement) {
                 if (!area || !Number.isFinite(Number(area.x)) || !Number.isFinite(Number(area.y))) return reply({ ok: false, message: 'Marca un destino válido en el tablero.' });
-                if (pointDistance(actorToken, area) > Math.max(8, Number(action.movement.maxFeet || 5) * 0.8)) return reply({ ok: false, message: `El destino supera los ${action.movement.maxFeet} pies.` });
+                if (gridDistanceFeet(actorToken, area) > Number(action.movement.maxFeet || 5) + 0.01) return reply({ ok: false, message: `El destino supera los ${action.movement.maxFeet} pies.` });
             }
 
             const beforeState = {

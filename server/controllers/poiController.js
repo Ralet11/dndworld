@@ -1,5 +1,6 @@
 const PointOfInterest = require('../models/PointOfInterest');
 const UserPoiData = require('../models/UserPoiData');
+const { Op } = require('sequelize');
 
 exports.getAllPointsOfInterest = async (req, res) => {
     try {
@@ -9,6 +10,9 @@ exports.getAllPointsOfInterest = async (req, res) => {
         const where = {};
         if (parent_id === 'null' || parent_id === '') where.parent_id = null;
         else if (parent_id !== undefined) where.parent_id = parent_id;
+        if (req.user.role !== 'DM' && req.user.role !== 'ADMIN') {
+            where[Op.or] = [{ party_known: true }, { party_known: null }];
+        }
 
         const attributes = { exclude: [] };
         if (req.user.role !== 'DM' && req.user.role !== 'ADMIN') attributes.exclude.push('dmDescription');
@@ -22,8 +26,8 @@ exports.getAllPointsOfInterest = async (req, res) => {
 
 exports.createPointOfInterest = async (req, res) => {
     try {
-        const { title, top, left, color, type, image, description, parent_id, map_image, level } = req.body;
-        const newPoi = await PointOfInterest.create({ title, top, left, color, type, image, description, parent_id: parent_id || null, map_image, level });
+        const { title, top, left, color, type, image, description, parent_id, map_image, level, party_known } = req.body;
+        const newPoi = await PointOfInterest.create({ title, top, left, color, type, image, description, parent_id: parent_id || null, map_image, level, party_known: Boolean(party_known) });
         res.status(201).json(newPoi);
     } catch (error) {
         console.error("Error creating Point of Interest:", error);
@@ -34,7 +38,7 @@ exports.createPointOfInterest = async (req, res) => {
 exports.updatePointOfInterest = async (req, res) => {
     try {
         const { id } = req.params;
-        const { top, left, title, image, description, type, color, map_image, level } = req.body;
+        const { top, left, title, image, description, type, color, map_image, level, party_known } = req.body;
 
         const poi = await PointOfInterest.findByPk(id);
         if (!poi) {
@@ -51,6 +55,7 @@ exports.updatePointOfInterest = async (req, res) => {
         if (color !== undefined) poi.color = color;
         if (map_image !== undefined) poi.map_image = map_image;
         if (level !== undefined) poi.level = level;
+        if (party_known !== undefined) poi.party_known = Boolean(party_known);
 
         await poi.save();
 
@@ -69,9 +74,12 @@ exports.getPoiLore = async (req, res) => {
         // 1. Fetch global POI state
         const attributes = ['id', 'description', 'partyKnowledge'];
         if (req.user.role === 'DM' || req.user.role === 'ADMIN') attributes.push('dmDescription');
-        const poi = await PointOfInterest.findByPk(id, { attributes });
+        const poi = await PointOfInterest.findByPk(id, { attributes: [...attributes, 'party_known'] });
 
         if (!poi) {
+            return res.status(404).json({ error: 'Point of Interest not found' });
+        }
+        if (req.user.role !== 'DM' && req.user.role !== 'ADMIN' && poi.party_known === false) {
             return res.status(404).json({ error: 'Point of Interest not found' });
         }
 
@@ -117,6 +125,10 @@ exports.updateUserNotes = async (req, res) => {
         const requestingUser = req.user;
 
         const isDm = requestingUser.role === 'DM' || requestingUser.role === 'ADMIN';
+        const poi = await PointOfInterest.findByPk(id, { attributes: ['id', 'party_known'] });
+        if (!poi || (!isDm && poi.party_known === false)) {
+            return res.status(404).json({ error: 'POI not found' });
+        }
         if (targetUserId && !isDm) {
             return res.status(403).json({ error: 'Sólo el DM puede editar datos de otro jugador.' });
         }

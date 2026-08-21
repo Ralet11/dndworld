@@ -805,6 +805,12 @@ a:focus-visible {
 .game-reaction-options strong { font-family: var(--font-display); font-size: 14px; font-weight: 500; }
 .game-reaction-options small { color: #8fa099; font-size: 9px; line-height: 1.45; }
 .game-reaction-pass { min-height: 34px; margin-top: 12px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; color: #959f99; border: 1px solid #39433f; background: transparent; }
+.game-dm-reaction-thinking { position: fixed; top: 72px; left: 16px; z-index: 160; display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 270px; max-width: min(390px, calc(100vw - 32px)); padding: 8px 10px; color: #d7e7e3; border: 1px solid #346978; background: linear-gradient(100deg, rgba(8, 28, 31, .98), rgba(8, 17, 15, .98)); box-shadow: 0 10px 28px rgba(0, 0, 0, .46); animation: game-roll-card-arrival .38s cubic-bezier(.16, .82, .24, 1) both; }
+.game-dm-reaction-thinking > svg { color: #61d1e9; }
+.game-dm-reaction-thinking > div { min-width: 0; display: grid; gap: 2px; }
+.game-dm-reaction-thinking span { color: #62b9ca; font-size: 6px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.game-dm-reaction-thinking strong { overflow: hidden; color: #e4efeb; font-family: var(--font-display); font-size: 10px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.game-dm-reaction-thinking em { display: flex; align-items: center; gap: 3px; color: #e5c87e; font-size: 10px; font-style: normal; font-weight: 900; }
 
 @media (max-width: 1180px) {
   .bestiary-workspace { grid-template-columns: 200px minmax(330px, 1fr) 330px; }
@@ -2333,6 +2339,21 @@ a:focus-visible {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.atlas-create-card .atlas-create-visibility {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid rgba(229, 169, 72, 0.2);
+  border-radius: 10px;
+  background: rgba(229, 169, 72, 0.05);
+  cursor: pointer;
+}
+
+.atlas-create-visibility input {
+  accent-color: var(--gold);
 }
 
 .atlas-type-grid {
@@ -3922,7 +3943,7 @@ a:focus-visible {
   background-image:
     linear-gradient(color-mix(in srgb, var(--game-grid-color) 24%, transparent) 0 var(--game-grid-line-width), transparent var(--game-grid-line-width) 100%),
     linear-gradient(90deg, color-mix(in srgb, var(--game-grid-color) 24%, transparent) 0 var(--game-grid-line-width), transparent var(--game-grid-line-width) 100%);
-  background-size: 48px 48px;
+  background-size: 5% 6.6666667%;
 }
 .game-board-vfx { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .game-vfx-fallback-layer { position: absolute; inset: 0; z-index: 2; overflow: hidden; pointer-events: none; }
@@ -5459,9 +5480,9 @@ fieldset.npc-studio-card { padding-top: 15px; }
 .game-combat-area-preview { position: absolute; z-index: 13; transform: translate(-50%, -50%); border: 1px solid rgba(233, 190, 91, .95); background: rgba(198, 139, 50, .18); box-shadow: inset 0 0 28px rgba(225, 172, 62, .18), 0 0 20px rgba(225, 172, 62, .18); pointer-events: none; }
 .game-combat-area-preview.is-circle { border-radius: 50%; }
 .game-combat-area-preview.is-square { border-radius: 2px; }
-.game-combat-area-preview.is-line, .game-combat-area-preview.is-cone { height: 5%; transform: translateY(-50%) rotate(var(--combat-angle)); transform-origin: 0 50%; }
+.game-combat-area-preview.is-line, .game-combat-area-preview.is-cone { height: var(--combat-area-height, 6.6666667%); transform: translateY(-50%) rotate(var(--combat-angle)); transform-origin: 0 50%; }
 .game-combat-area-preview.is-line { border-radius: 999px; }
-.game-combat-area-preview.is-cone { height: 24%; clip-path: polygon(0 45%, 100% 0, 100% 100%, 0 55%); border: 0; }
+.game-combat-area-preview.is-cone { height: var(--combat-cone-height, 20%); clip-path: polygon(0 45%, 100% 0, 100% 100%, 0 55%); border: 0; }
 .game-combat-area-preview span { position: absolute; left: 50%; top: 50%; max-width: 140px; padding: 3px 6px; transform: translate(-50%, -50%); overflow: hidden; color: #f1d993; border: 1px solid rgba(184, 143, 65, .7); background: rgba(7, 11, 9, .82); font-size: 6px; font-weight: 900; letter-spacing: .06em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 @keyframes game-target-pulse { to { transform: scale(1.15); filter: drop-shadow(0 0 8px rgba(218, 175, 78, .75)); } }
 @keyframes game-target-ring { to { inset: -11px; opacity: .55; } }

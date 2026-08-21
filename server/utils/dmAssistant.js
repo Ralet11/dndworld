@@ -238,7 +238,7 @@ async function createNpcFromAssistant({ fields, io, getCalculatedPartyStats }) {
     if (!name) return buildReply('error', 'Para crear un NPC necesito al menos un nombre.');
     const patch = safeNpcPatch(fields);
     const hpMax = patch.hp_max || 10;
-    const npc = await Character.create({ name, is_npc: true, hp_max: hpMax, hp_current: patch.hp_current ?? hpMax, race: patch.race || 'Humanoide', class: patch.class || 'NPC', npc_type: patch.npc_type || 'neutral', level: patch.level || 1, ac_base: patch.ac_base || 10, speed: patch.speed || 30, notes: patch.notes || '', abilities_text: patch.abilities_text || '', image_url: patch.image_url || null });
+    const npc = await Character.create({ name, is_npc: true, party_known: false, hp_max: hpMax, hp_current: patch.hp_current ?? hpMax, race: patch.race || 'Humanoide', class: patch.class || 'NPC', npc_type: patch.npc_type || 'neutral', level: patch.level || 1, ac_base: patch.ac_base || 10, speed: patch.speed || 30, notes: patch.notes || '', abilities_text: patch.abilities_text || '', image_url: patch.image_url || null });
     const actionCount = await saveNpcActions(npc.id, fields.actions, fields.actionMode);
     await emitNpcRefresh(io, getCalculatedPartyStats);
     return buildReply('result', `Creé a ${npc.name}: ${npc.hp_current}/${npc.hp_max} PG, CA ${npc.ac_base}, ${npc.npc_type}${actionCount ? ` y ${actionCount} acción(es)` : ''}.`, { tool: 'npc.create', suggestions: ['editar ' + npc.name, 'activar ' + npc.name] });
@@ -458,7 +458,7 @@ function resolveObjective(quest, target) {
 async function emitCharacterRefresh(io, getCalculatedPartyStats, character) {
     if (character.is_npc) {
         const npcs = await Character.findAll({ where: { is_npc: true } });
-        io.emit('all-npcs', npcs);
+        emitNpcCatalogByRole(io, npcs);
     }
 
     if (!character.is_npc || character.is_active) {
@@ -482,10 +482,19 @@ async function emitQuestRefresh(io, getCalculatedPartyStats) {
 
 async function emitNpcRefresh(io, getCalculatedPartyStats) {
     const npcs = await Character.findAll({ where: { is_npc: true } });
-    io.emit('all-npcs', npcs);
+    emitNpcCatalogByRole(io, npcs);
     const updatedStats = await getCalculatedPartyStats();
     io.emit('players-data', updatedStats);
     io.emit('stats-updated', updatedStats);
+}
+
+function emitNpcCatalogByRole(io, npcs) {
+    const fullCatalog = (npcs || []).map(npc => typeof npc.toJSON === 'function' ? npc.toJSON() : npc);
+    const partyCatalog = fullCatalog.filter(npc => npc.party_known !== false);
+    io.sockets.sockets.forEach(client => {
+        const privileged = client.user?.role === 'DM' || client.user?.role === 'ADMIN';
+        client.emit('all-npcs', privileged ? fullCatalog : partyCatalog);
+    });
 }
 
 function rememberUndo(userId, payload) {

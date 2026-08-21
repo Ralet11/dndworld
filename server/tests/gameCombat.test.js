@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
     customFeatureProfiles,
     combatRangePct,
+    effectiveArmorClass,
     hpAfterDamage,
     hpAfterHealing,
     npcActionProfile,
@@ -60,6 +61,21 @@ test('healing never exceeds maximum hp', () => {
     });
 });
 
+test('combat armor class uses the same equipped-armor calculation shown on a player sheet', () => {
+    const player = {
+        is_npc: false,
+        ac_base: 12,
+        abilityScores: [{ ability: 'DEX', base_value: 14, bonus_value: 0 }],
+        equipment: {
+            chest: { ca_value: 1.25, armor_type: 'malla', stat_bonuses: {} },
+            ring_1: { stat_bonuses: { ac: 2 } },
+        },
+    };
+    const npc = { is_npc: true, ac_base: 15, equipment: { ring_1: { stat_bonuses: { ac: 1 } } } };
+    assert.equal(effectiveArmorClass(player), 13);
+    assert.equal(effectiveArmorClass(npc), 16);
+});
+
 test('single and circular area targeting enforce relationships', () => {
     const actor = { id: 'a', character_id: 1, owner_user_id: 'u1', x: 10, y: 10, visible: true, character: { id: 1 } };
     const ally = { id: 'b', character_id: 2, owner_user_id: 'u2', x: 20, y: 20, visible: true, character: { id: 2 } };
@@ -67,16 +83,31 @@ test('single and circular area targeting enforce relationships', () => {
     const enemyFar = { id: 'd', character_id: 4, owner_user_id: null, x: 75, y: 75, visible: true, character: { id: 4, npc_type: 'enemigo' } };
     assert.deepEqual(resolveTargetTokens({ target: 'ally', range: 30 }, actor, [actor, ally, enemyNear], ['b']).map(item => item.id), ['b']);
     assert.deepEqual(resolveTargetTokens({ target: 'enemy', range: 30 }, actor, [actor, ally, enemyNear], ['b']), []);
-    assert.deepEqual(resolveTargetTokens({ target: 'area-enemy', range: 120, area: { shape: 'circle', sizePct: 12 } }, actor, [actor, ally, enemyNear, enemyFar], [], { x: 50, y: 50 }).map(item => item.id), ['c']);
+    assert.deepEqual(resolveTargetTokens({ target: 'area-enemy', range: 120, area: { shape: 'circle', feet: 20, cells: 4, spanCells: 8 } }, actor, [actor, ally, enemyNear, enemyFar], [], { x: 50, y: 50 }).map(item => item.id), ['c']);
 });
 
 test('melee range reaches every contiguous grid square, including diagonals', () => {
     assert.equal(combatRangePct(5), 8);
     const actor = { id: 'a', character_id: 1, owner_user_id: null, x: 50, y: 50, visible: true, character: { id: 1, npc_type: 'enemigo' } };
-    const diagonalAlly = { id: 'b', character_id: 2, owner_user_id: 'u2', x: 55.5, y: 55.5, visible: true, character: { id: 2 } };
+    const diagonalAlly = { id: 'b', character_id: 2, owner_user_id: 'u2', x: 55, y: 56.6666667, visible: true, character: { id: 2 } };
     const distantAlly = { id: 'c', character_id: 3, owner_user_id: 'u3', x: 61, y: 50, visible: true, character: { id: 3 } };
     assert.deepEqual(resolveTargetTokens({ target: 'enemy', range: 5 }, actor, [actor, diagonalAlly, distantAlly], ['b']).map(item => item.id), ['b']);
     assert.deepEqual(resolveTargetTokens({ target: 'enemy', range: 5 }, actor, [actor, diagonalAlly, distantAlly], ['c']), []);
+});
+
+test('Thunderclap uses a self-centered 3 by 3 grid area', () => {
+    const character = { level: 5, class_slug: 'sorcerer', proficiency_bonus: 3, abilityScores: [{ ability: 'CHA', base_value: 16 }] };
+    const action = spellProfile({ id: 1290, slug: 'paleas-thunderclap', name: 'Thunderclap', level: 0, range: '5 ft.', casting_time: '1 Action', desc: 'Each creature must make a Constitution saving throw.' }, character);
+    assert.equal(action.area.shape, 'square');
+    assert.equal(action.area.origin, 'self');
+    assert.equal(action.area.spanCells, 3);
+    assert.equal(action.area.widthPct, 15);
+    assert.equal(action.area.heightPct, 20);
+
+    const actor = { id: 'a', character_id: 1, owner_user_id: 'u1', x: 50, y: 50, visible: true, character: { id: 1 } };
+    const adjacentEnemy = { id: 'b', character_id: 2, owner_user_id: null, x: 55, y: 56.6666667, visible: true, character: { id: 2, npc_type: 'enemigo' } };
+    const distantEnemy = { id: 'c', character_id: 3, owner_user_id: null, x: 60, y: 50, visible: true, character: { id: 3, npc_type: 'enemigo' } };
+    assert.deepEqual(resolveTargetTokens(action, actor, [actor, adjacentEnemy, distantEnemy], [], null).map(item => item.id), ['b']);
 });
 
 test('homebrew text becomes structured attacks and areas', () => {

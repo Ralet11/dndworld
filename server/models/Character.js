@@ -140,6 +140,13 @@ const Character = sequelize.define('Character', {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     },
+    // null conserva NPCs históricos como conocidos; false los mantiene sólo
+    // para el DM hasta que decida revelarlos a la party.
+    party_known: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: null
+    },
     npc_type: {
         type: DataTypes.ENUM('neutral', 'amigo', 'compañero', 'enemigo'),
         defaultValue: 'neutral',

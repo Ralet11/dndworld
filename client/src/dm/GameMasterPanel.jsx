@@ -52,6 +52,20 @@ function resolveMediaUrl(value) {
   return `${API_URL}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
+function ReactionThinkingNotice({ reactionWindow }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!reactionWindow?.expiresAt) return undefined;
+    const update = () => setSeconds(Math.max(0, Math.ceil((new Date(reactionWindow.expiresAt).getTime() - Date.now()) / 1000)));
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [reactionWindow?.id, reactionWindow?.expiresAt]);
+
+  if (!reactionWindow?.id || reactionWindow.canRespond) return null;
+  return <aside className="game-dm-reaction-thinking" role="status" aria-live="polite"><Shield size={14} /><div><span>Ventana de reacción</span><strong>{reactionWindow.reactorName} está pensando su reacción</strong></div><em><Clock3 size={12} />{seconds}s</em></aside>;
+}
+
 export default function GameMasterPanel() {
   const { socket, connected, connectionError } = useSocket();
   const { user } = useAuth();
@@ -90,7 +104,7 @@ export default function GameMasterPanel() {
   const [quickNpcOpen, setQuickNpcOpen] = useState(false);
   const [draggedTurnId, setDraggedTurnId] = useState(null);
   const [creatingNpcToken, setCreatingNpcToken] = useState(false);
-  const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
+  const [quickNpc, setQuickNpc] = useState({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '', partyKnown: false });
   const [stageToolbarHost, setStageToolbarHost] = useState(null);
   const [combatTargeting, setCombatTargeting] = useState(null);
   const [dismissedCombatNotices, setDismissedCombatNotices] = useState([]);
@@ -459,19 +473,6 @@ export default function GameMasterPanel() {
 
   const publishAsset = asset => publish(asset.url, asset.title, asset.type, asset.grid_enabled);
 
-  const switchViewMode = type => {
-    setMediaType(type);
-    if (!session.shared_url || session.shared_type === 'NONE' || session.shared_type === type) return;
-    emit('game:share', {
-      sessionId: session.id,
-      type,
-      url: session.shared_url,
-      title: session.shared_title,
-      gridEnabled: session.grid_enabled,
-      preserveNarrativeLayout: true,
-    });
-  };
-
   const reorderAssets = (draggedId, targetId) => {
     if (!draggedId || draggedId === targetId) return;
     const ordered = [...(session.assets || [])];
@@ -497,9 +498,11 @@ export default function GameMasterPanel() {
         setError(response?.message || 'No se pudo crear el NPC.');
         return;
       }
-      setQuickNpc({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '' });
+      setQuickNpc({ name: '', hpMax: 10, armorClass: 10, npcType: 'enemigo', imageUrl: '', partyKnown: false });
       setQuickNpcOpen(false);
-      socket.emit('get-all-npcs');
+      setNpcs(current => current.some(npc => Number(npc.id) === Number(response.character.id))
+        ? current
+        : [...current, response.character]);
     });
   };
 
@@ -637,6 +640,14 @@ export default function GameMasterPanel() {
     emit('game:update-turn-order', { sessionId: session.id, turnOrder: order });
   };
 
+  const toggleNpcPartyKnowledge = npc => {
+    const next = npc.party_known === false;
+    socket.emit('npc:set-party-known', { characterId: npc.id, partyKnown: next }, response => {
+      if (!response?.ok) return setError(response?.message || 'No se pudo cambiar la visibilidad del NPC.');
+      setNpcs(current => current.map(item => Number(item.id) === Number(npc.id) ? { ...item, party_known: next } : item));
+    });
+  };
+
   const setCombatMode = mode => {
     socket?.emit('game:set-combat-mode', { sessionId: session.id, mode }, response => {
       if (!response?.ok) setError(response?.message || 'No se pudo cambiar el modo de partida.');
@@ -682,6 +693,7 @@ export default function GameMasterPanel() {
       </header>
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
+      <ReactionThinkingNotice reactionWindow={session.combat_state?.reactionWindow} />
       <ReactionPrompt session={session} socket={socket} onError={setError} />
 
       <CombatResultPrompt
@@ -1068,6 +1080,7 @@ export default function GameMasterPanel() {
                         <label><span>PG</span><input type="number" min="1" value={quickNpc.hpMax} onChange={event => setQuickNpc(current => ({ ...current, hpMax: event.target.value }))} /></label>
                         <label><span>CA</span><input type="number" min="1" value={quickNpc.armorClass} onChange={event => setQuickNpc(current => ({ ...current, armorClass: event.target.value }))} /></label>
                         <label><span>Tipo</span><select value={quickNpc.npcType} onChange={event => setQuickNpc(current => ({ ...current, npcType: event.target.value }))}><option value="enemigo">Enemigo</option><option value="neutral">Neutral</option><option value="amigo">Aliado</option></select></label>
+                        <label><span>Glosario</span><select value={quickNpc.partyKnown ? 'known' : 'hidden'} onChange={event => setQuickNpc(current => ({ ...current, partyKnown: event.target.value === 'known' }))}><option value="hidden">Oculto para party</option><option value="known">Conocido por party</option></select></label>
                         <label className="is-wide"><span>URL de retrato opcional</span><input value={quickNpc.imageUrl} onChange={event => setQuickNpc(current => ({ ...current, imageUrl: event.target.value }))} placeholder="https://..." /></label>
                         <button disabled={creatingNpcToken || !quickNpc.name.trim()} onClick={createQuickNpcToken}><Skull size={13} />{creatingNpcToken ? 'Creando...' : 'Crear ficha y token'}</button>
                       </div>
@@ -1084,6 +1097,9 @@ export default function GameMasterPanel() {
                             <div><strong>{npc.name}</strong><span>{npc.race || 'Criatura'} · {npc.npc_type || 'neutral'}</span></div>
                             <small><Heart size={9} />{npc.hp_max || 10}</small><small><Shield size={9} />{npc.ac_base || 10}</small>
                             <div className="game-npc-row-actions">
+                              <button className={npc.party_known !== false ? 'is-visible' : ''} onClick={() => toggleNpcPartyKnowledge(npc)}>
+                                {npc.party_known !== false ? <EyeOff size={10} /> : <Eye size={10} />}{npc.party_known !== false ? 'Desconocer' : 'Revelar'}
+                              </button>
                               <button className={visibleInScene ? 'is-visible' : ''} onClick={() => emit('game:toggle-scene-npc', { sessionId: session.id, characterId: npc.id })}>
                                 {visibleInScene ? <EyeOff size={10} /> : <Eye size={10} />}{visibleInScene ? 'Ocultar' : 'Mostrar'}
                               </button>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ChevronLeft, Crosshair, Layers3, Map as MapIcon, MapPin, Plus, X,
+  ChevronLeft, Crosshair, Eye, EyeOff, Layers3, Map as MapIcon, MapPin, Plus, X,
 } from 'lucide-react';
 import {
   ImageOverlay, MapContainer, Marker, Tooltip, useMap, useMapEvents, ZoomControl,
@@ -132,6 +132,7 @@ export default function MapView({ onBack }) {
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('city');
   const [newLevel, setNewLevel] = useState('1');
+  const [newPartyKnown, setNewPartyKnown] = useState(false);
 
   const currentParent = parentStack.at(-1) || null;
   const currentParentId = currentParent?.id ?? null;
@@ -177,6 +178,22 @@ export default function MapView({ onBack }) {
     }
     fetchMarkers(currentParentId);
   }, [currentParentId, fetchMarkers, isContinentView]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const refreshVisibility = changed => {
+      if (!isDM && changed?.party_known === false) {
+        setSelectedPOI(current => Number(current?.id) === Number(changed.id) ? null : current);
+        setParentStack(current => {
+          const hiddenIndex = current.findIndex(item => Number(item.id) === Number(changed.id));
+          return hiddenIndex >= 0 ? current.slice(0, hiddenIndex) : current;
+        });
+      }
+      fetchMarkers(currentParentId);
+    };
+    socket.on('poi:visibility-changed', refreshVisibility);
+    return () => socket.off('poi:visibility-changed', refreshVisibility);
+  }, [socket, currentParentId, fetchMarkers, isDM]);
 
   useEffect(() => {
     if (!socket || !user) return undefined;
@@ -231,6 +248,7 @@ export default function MapView({ onBack }) {
       color: meta.color,
       type: newType,
       parent_id: currentParentId,
+      party_known: newPartyKnown,
       ...(newType === 'quest' ? { level: Number.parseInt(newLevel, 10) || 1 } : {}),
     };
 
@@ -243,11 +261,31 @@ export default function MapView({ onBack }) {
       if (!response.ok) throw new Error('No se pudo crear el punto.');
       const created = await response.json();
       setMarkers((current) => [...current, created]);
+      socket?.emit('poi:visibility-changed', { poiId: created.id });
       setShowCreate(false);
       setNewName('');
       setNewLevel('1');
+      setNewPartyKnown(false);
     } catch (createError) {
       setError(createError.message || 'No se pudo crear el punto.');
+    }
+  };
+
+  const togglePartyKnowledge = async (poi) => {
+    const next = poi.party_known === false;
+    try {
+      const response = await fetch(`${API_URL}/api/pois/${poi.id}`, {
+        method: 'PUT',
+        headers: requestHeaders,
+        body: JSON.stringify({ party_known: next }),
+      });
+      if (!response.ok) throw new Error('No se pudo cambiar la visibilidad del punto.');
+      const updated = await response.json();
+      setMarkers(current => current.map(item => item.id === poi.id ? updated : item));
+      setSelectedPOI(updated);
+      socket?.emit('poi:visibility-changed', { poiId: poi.id });
+    } catch (updateError) {
+      setError(updateError.message || 'No se pudo cambiar la visibilidad del punto.');
     }
   };
 
@@ -419,6 +457,12 @@ export default function MapView({ onBack }) {
                 <MapPin size={16} /> Entrar a {selectedPOI.title}
               </button>
             )}
+            {isDM && (
+              <button className="atlas-enter-button" onClick={() => togglePartyKnowledge(selectedPOI)}>
+                {selectedPOI.party_known !== false ? <EyeOff size={16} /> : <Eye size={16} />}
+                {selectedPOI.party_known !== false ? 'Ocultar a la party' : 'Mostrar a la party'}
+              </button>
+            )}
             {canEditPOIs && <small>Arrastra el marcador para cambiar su posicion.</small>}
           </div>
         </aside>
@@ -447,6 +491,10 @@ export default function MapView({ onBack }) {
             {newType === 'quest' && (
               <><label>Nivel recomendado</label><input className="input-base" type="number" min="1" max="20" value={newLevel} onChange={(event) => setNewLevel(event.target.value)} /></>
             )}
+            <label className="atlas-create-visibility">
+              <input type="checkbox" checked={newPartyKnown} onChange={(event) => setNewPartyKnown(event.target.checked)} />
+              Visible en el Atlas de la party desde ahora
+            </label>
             <div className="atlas-coordinate-preview">{createPosition.left} · {createPosition.top}</div>
             <button className="atlas-create-submit" onClick={handleCreate} disabled={!newName.trim()}>Crear punto</button>
           </div>

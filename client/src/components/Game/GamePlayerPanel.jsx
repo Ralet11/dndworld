@@ -460,7 +460,7 @@ function PlayerCombatSheet({ character, onRoll, onOpenSheet }) {
       </div>
       <div className="game-combat-hp" style={{ '--player-hp-color': hpColor }}><div><span><Heart size={13} /> Puntos de golpe</span><strong>{hp}<small> / {maxHp}</small></strong></div><i><b style={{ width: `${hpPercent}%` }} /></i></div>
       <div className="game-combat-vitals">
-        <div><Shield size={14} /><strong>{character.ac ?? 10}</strong><span>CA</span></div>
+        <div><Shield size={14} /><strong>{character.ac ?? character.ac_base ?? 10}</strong><span>CA</span></div>
         <div><Zap size={14} /><strong>{signed(character.initiative ?? modifier(attributes.dex))}</strong><span>Iniciativa</span></div>
         <div><Swords size={14} /><strong>{character.speed ?? 30}</strong><span>Velocidad</span></div>
       </div>

@@ -111,7 +111,9 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
     onTargetingChange?.({
       action,
       instruction: String(action.target).startsWith('area-')
-        ? `Marca el centro de ${action.name} sobre el tablero.`
+        ? action.area?.origin === 'self'
+          ? `${action.name} se centra en ${actorName || 'tu personaje'}. Haz clic en el tablero para confirmar el área.`
+          : `Marca el centro de ${action.name} sobre el tablero.`
         : `Selecciona ${String(action.target).includes('ally') ? 'un aliado' : 'un objetivo'} para ${action.name}.`,
       execute,
     });

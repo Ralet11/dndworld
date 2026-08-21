@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BookMarked,
@@ -114,7 +114,7 @@ export default function BestiaryView({ onBack }) {
   }, [socket, myCharacterId]);
 
   const knownCreatures = useMemo(
-    () => creatures.filter(creature => creature.is_known !== false),
+    () => creatures.filter(creature => creature.party_known !== false),
     [creatures],
   );
 
@@ -300,14 +300,14 @@ export default function BestiaryView({ onBack }) {
   );
 }
 
-function FilterButton({ active, label, count, color, Icon, onClick }) {
+function FilterButton({ active, label, count, color, Icon: FilterIcon, onClick }) {
   return (
     <button
       className={`bestiary-filter-button${active ? ' is-active' : ''}`}
       style={{ '--type-color': color }}
       onClick={onClick}
     >
-      <span className="bestiary-filter-icon"><Icon size={16} /></span>
+      <span className="bestiary-filter-icon">{createElement(FilterIcon, { size: 16 })}</span>
       <span>{label}</span>
       <strong>{count}</strong>
     </button>
@@ -319,8 +319,6 @@ function CreaturePortrait({ creature, large = false }) {
   const type = TYPES[normalizeType(creature.npc_type)];
   const Icon = type.Icon;
   const imageUrl = resolveImageUrl(creature.image_url);
-
-  useEffect(() => setFailed(false), [imageUrl]);
 
   return (
     <div className={`bestiary-portrait${large ? ' is-large' : ''}`} style={{ '--type-color': type.color }}>
@@ -341,7 +339,7 @@ function CreatureCard({ creature, selected, onClick }) {
       style={{ '--type-color': type.color }}
       onClick={onClick}
     >
-      <CreaturePortrait creature={creature} />
+      <CreaturePortrait key={resolveImageUrl(creature.image_url) || 'portrait'} creature={creature} />
       <span className="bestiary-card-copy">
         <strong>{creature.name}</strong>
         {creature.origin && <small className="bestiary-origin">{creature.origin}</small>}
@@ -376,7 +374,7 @@ function CreatureDetail({ creature, myCharacterId, isToggling, onToggle }) {
   return (
     <article className="bestiary-detail" style={{ '--type-color': type.color }}>
       <div className="bestiary-detail-hero">
-        <CreaturePortrait creature={creature} large />
+        <CreaturePortrait key={resolveImageUrl(creature.image_url) || 'portrait'} creature={creature} large />
         <div>
           <span className="bestiary-type-tag"><TypeIcon size={12} /> {type.singular}</span>
           <h2>{creature.name}</h2>
@@ -387,8 +385,8 @@ function CreatureDetail({ creature, myCharacterId, isToggling, onToggle }) {
 
       {(isCompanion || typeKey === 'enemigo') && (
         <div className="bestiary-metrics">
-          {metrics.map(({ label, value, Icon }) => (
-            <div key={label}><Icon size={14} /><strong>{value}</strong><span>{label}</span></div>
+          {metrics.map(({ label, value, Icon: MetricIcon }) => (
+            <div key={label}>{createElement(MetricIcon, { size: 14 })}<strong>{value}</strong><span>{label}</span></div>
           ))}
         </div>
       )}
