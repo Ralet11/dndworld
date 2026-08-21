@@ -1,7 +1,8 @@
 require('dotenv').config({ quiet: true });
 
 const sequelize = require('../config/database');
-const { Character, CharacterAuditLog, Spell } = require('../models');
+const { Op } = require('sequelize');
+const { Character, CharacterAuditLog, Skill, Spell } = require('../models');
 
 const APPLY = process.argv.includes('--apply');
 
@@ -69,8 +70,43 @@ const SPELLS = [
 
 const ZIK_FEATURES = [
     {
+        name: 'Ataque Furtivo', kind: 'Pasivo', resource: '1 vez por turno · 2d6',
+        description: 'Una vez por turno, al impactar con un arma a distancia o sutil, sumás 2d6 si atacaste con ventaja o si un aliado está a 5 pies del objetivo y no tenés desventaja. En un crítico también se duplican estos dados.',
+    },
+    {
+        name: 'Acción Astuta · Correr', kind: 'Bonus', resource: 'Sin límite',
+        description: 'Usás una acción bonus para Correr y ganás 30 pies de movimiento adicional durante este turno.',
+        combat_action: { economy: 'bonus', target: 'self', effect: { type: 'GRANT_EXTRA_MOVEMENT', feet: 30 }, summary: 'Bonus · +30 pies de movimiento este turno' },
+    },
+    {
+        name: 'Acción Astuta · Desconectarse', kind: 'Bonus', resource: 'Sin límite',
+        description: 'Usás una acción bonus para Desconectarte. Tu movimiento no provoca ataques de oportunidad durante este turno.',
+        combat_action: { economy: 'bonus', target: 'self', effect: { type: 'DISENGAGE' }, summary: 'Bonus · evita ataques de oportunidad este turno' },
+    },
+    {
+        name: 'Acción Astuta · Esconderse', kind: 'Bonus', resource: 'Sin límite',
+        description: 'Usás una acción bonus para intentar Esconderte. Al lograrlo, tu próximo ataque se realiza con ventaja; el DM valida si existe cobertura u oscuridad suficiente.',
+        combat_action: { economy: 'bonus', target: 'self', effect: { type: 'HIDE_FOR_ADVANTAGE' }, summary: 'Bonus · oculto; ventaja en el próximo ataque' },
+    },
+    {
+        name: 'Puntería Estable', kind: 'Bonus', resource: 'Sin límite',
+        description: 'Si todavía no te moviste, usás una acción bonus para obtener ventaja en tu próximo ataque de este turno. Después tu velocidad queda en 0 hasta que termine el turno.',
+        combat_action: { economy: 'bonus', target: 'self', effect: { type: 'STEADY_AIM' }, summary: 'Bonus · ventaja en el próximo ataque · velocidad 0' },
+    },
+    {
+        name: 'Manos Rápidas', kind: 'Bonus', resource: 'Sin límite',
+        description: 'Como acción bonus podés realizar una prueba de Destreza para abrir cerraduras o desactivar trampas con herramientas de ladrón, o tomar la acción Utilizar.',
+        combat_action: { economy: 'bonus', target: 'self', manualResolution: true, summary: 'Bonus · Utilizar o prueba de Destreza con herramientas' },
+    },
+    {
         name: 'Pacto de la Cadena', kind: 'Accion', resource: 'Sin ranura',
         description: 'Lanzás Encontrar familiar como acción mágica sin gastar ranura. Podés elegir una forma normal o Imp, Pseudodragón, Quasit, Esqueleto, Renacuajo de Slaad, Esfinge de las Maravillas, Duende o Serpiente venenosa. Al tomar la acción Atacar podés ceder uno de tus ataques para que el familiar ataque con su reacción.',
+        combat_action: { economy: 'action', target: 'self', manualResolution: true, summary: 'Acción mágica · invoca o configura el familiar' },
+    },
+    {
+        name: 'Ordenar ataque del familiar', kind: 'Accion', resource: 'Requiere familiar',
+        description: 'Cedés uno de tus ataques para ordenar a tu familiar que use su reacción y ataque. El DM resuelve el bloque de estadísticas de la forma invocada.',
+        combat_action: { economy: 'action', target: 'enemy', range: 120, manualResolution: true, summary: 'Acción · el familiar usa su reacción para atacar' },
     },
     {
         name: 'Descarga sobrenatural', kind: 'Accion', resource: 'Truco · +6',
@@ -92,6 +128,11 @@ const ZIK_FEATURES = [
         name: 'Magia de Pacto', kind: 'Pasivo', resource: '1 ranura nivel 1',
         description: 'Tenés una ranura de nivel 1 que recuperás al terminar un descanso corto o largo. Tu característica mágica es Carisma: ataque de conjuro +6 y CD de salvación 14.',
     },
+    { name: 'Pericia', kind: 'Pasivo', resource: 'Sigilo y Juego de Manos', description: 'Duplicás tu bonificador de competencia en Sigilo y Juego de Manos.' },
+    { name: 'Jerga de ladrones', kind: 'Pasivo', resource: 'Idioma secreto', description: 'Conocés la jerga de ladrones y sus señales ocultas.' },
+    { name: 'Trabajo en Altura', kind: 'Pasivo', resource: 'Ladrón nivel 3', description: 'Trepar ya no cuesta movimiento adicional y tus saltos con carrera aumentan según tu modificador de Destreza.' },
+    { name: 'Maestría de armas · Slow', kind: 'Pasivo', resource: 'Ballesta', description: 'Al impactar con la ballesta, reducís en 10 pies la velocidad del objetivo hasta el inicio de tu próximo turno.' },
+    { name: 'Mejora de característica', kind: 'Pasivo', resource: 'Pícaro nivel 4', description: 'La mejora de nivel 4 ya está reflejada en los valores actuales de la ficha.' },
 ];
 
 function mergeNamed(previous, additions) {
@@ -125,7 +166,7 @@ async function ensureSpell(definition, transaction) {
 }
 
 async function run() {
-    const zik = await Character.findOne({ where: { name: 'Zik' } });
+    const zik = await Character.findOne({ where: { name: { [Op.iLike]: 'Zik%' } }, order: [['id', 'ASC']] });
     if (!zik) throw new Error('No se encontró el personaje Zik.');
 
     const before = zik.toJSON();
@@ -135,6 +176,8 @@ async function run() {
         archetype_slug: 'thief',
         classes: [{ slug: 'rogue', level: 4 }, { slug: 'warlock', level: 1 }],
         level: 5,
+        proficiency_bonus: 3,
+        saving_throws: { DEX: true, INT: true },
         custom_features: mergeNamed(zik.custom_features, ZIK_FEATURES),
         spell_slots: {
             ...(zik.spell_slots || {}),
@@ -167,6 +210,11 @@ async function run() {
         const spells = [];
         for (const definition of SPELLS) spells.push(await ensureSpell(definition, transaction));
         await zik.update(next, { transaction });
+        for (const skillName of ['Sigilo', 'Juego de Manos']) {
+            const skill = await Skill.findOne({ where: { character_id: zik.id, name: { [Op.iLike]: skillName } }, transaction });
+            if (skill) await skill.update({ proficiency_level: 2 }, { transaction });
+            else await Skill.create({ character_id: zik.id, name: skillName, proficiency_level: 2 }, { transaction });
+        }
         await CharacterAuditLog.create({
             character_id: zik.id,
             actor_username: 'Codex / DM',

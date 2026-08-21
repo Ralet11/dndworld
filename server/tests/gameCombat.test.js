@@ -280,6 +280,32 @@ test('Paleas uses the correct spellcasting ability and weapon passives stay atta
     assert.equal(shortsword.effect.type, 'VEX_NEXT_ATTACK_ADVANTAGE');
 });
 
+test('Zik combat profiles model sneak attack, Slow mastery and separate Eldritch Blast beams', () => {
+    const zik = {
+        id: 3, level: 5, class_slug: 'rogue', classes: [{ slug: 'rogue', level: 4 }, { slug: 'warlock', level: 1 }], proficiency_bonus: 3,
+        abilityScores: [{ ability: 'STR', base_value: 4 }, { ability: 'DEX', base_value: 16 }, { ability: 'CHA', base_value: 16 }],
+        custom_features: [
+            { name: 'Ataque Furtivo', kind: 'Pasivo' },
+            { name: 'Acción Astuta · Desconectarse', kind: 'Bonus', combat_action: { economy: 'bonus', target: 'self', effect: { type: 'DISENGAGE' } } },
+            { name: 'Puntería Estable', kind: 'Bonus', combat_action: { economy: 'bonus', target: 'self', effect: { type: 'STEADY_AIM' } } },
+        ],
+    };
+    const crossbow = weaponProfile({ id: 30, name: 'Ballesta', damage: '1d8', damage_type: 'perforante', properties: ['Distancia', 'Munición'], mastery: { name: 'Slow' } }, zik, 'primary');
+    assert.equal(crossbow.attackBonus, 6);
+    assert.equal(crossbow.damage, '1d8+3');
+    assert.deepEqual(crossbow.conditionalExtraDamage, [{ key: 'sneak-attack', expression: '2d6', damageType: 'perforante', when: 'sneak-attack', oncePerTurn: true, source: 'Ataque Furtivo' }]);
+    assert.deepEqual(crossbow.effect, { type: 'SLOW_ON_HIT', feet: 10 });
+
+    const blast = spellProfile({ id: 90, slug: 'eldritch-blast', name: 'Eldritch Blast', dnd_class: 'Warlock', level: 0, range: '120 feet', casting_time: '1 Action' }, zik);
+    assert.equal(blast.damage, '1d10');
+    assert.equal(blast.multiattack, 2);
+    assert.equal(blast.attackBonus, 6);
+
+    const actions = customFeatureProfiles(zik);
+    assert.equal(actions.find(action => action.name.includes('Desconectarse')).effect.type, 'DISENGAGE');
+    assert.equal(actions.find(action => action.name === 'Puntería Estable').effect.type, 'STEADY_AIM');
+});
+
 test('Paleas utility area spells use grid-scaled templates and retain their real resource cost', () => {
     const paleas = { id: 31, level: 5, proficiency_bonus: 3, abilityScores: [{ ability: 'WIS', base_value: 15 }, { ability: 'CHA', base_value: 16 }] };
     const detectMagic = spellProfile({ id: 11, slug: 'paleas-detect-magic', name: 'Detect Magic', dnd_class: 'Ranger', level: 1, casting_time: '1A', range: 'Self/30 ft. Sphere' }, paleas);

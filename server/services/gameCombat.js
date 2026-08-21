@@ -28,7 +28,8 @@ const ABILITY_NAMES = {
 };
 
 const SPELL_PROFILES = {
-    'eldritch-blast': { attack: true, damage: '1d10', damageType: 'fuerza', target: 'enemy', range: 120, cantripScale: true },
+    // Scales by adding independent beams, not damage dice to one hit.
+    'eldritch-blast': { attack: true, damage: '1d10', damageType: 'fuerza', target: 'enemy', range: 120, beamScale: true },
     'poison-spray': { attack: true, damage: '1d12', damageType: 'veneno', target: 'enemy', range: 30, cantripScale: true },
     'fire-bolt': { attack: true, damage: '1d10', damageType: 'fuego', target: 'enemy', range: 120, cantripScale: true },
     'ray-of-frost': { attack: true, damage: '1d8', damageType: 'frio', target: 'enemy', range: 60, cantripScale: true },
@@ -216,7 +217,7 @@ function allDice(text) {
 
 function spellAbility(character, spell = null) {
     const source = normalize(`${spell?.dnd_class || ''} ${spell?.source || ''} ${spell?.name || ''}`);
-    if (/(sorcerer|hechicero|celestial legacy|legado celestial)/.test(source)) return 'CHA';
+    if (/(sorcerer|hechicero|warlock|brujo|celestial legacy|legado celestial)/.test(source)) return 'CHA';
     if (/(ranger|explorador)/.test(source)) return 'WIS';
     const classEntries = Array.isArray(character.classes) && character.classes.length
         ? character.classes
@@ -264,6 +265,9 @@ function spellProfile(spell, character) {
     const ability = spellAbility(character, spell);
     const abilityMod = abilityModifier(character, ability);
     const scaledDamage = named.cantripScale && level === 0 ? scaleCantrip(damage, character.level) : damage;
+    const multiattack = named.beamScale
+        ? Number(character.level) >= 17 ? 4 : Number(character.level) >= 11 ? 3 : Number(character.level) >= 5 ? 2 : 1
+        : Number(named.multiattack) || 1;
     const finalHealing = healing && named.addAbility
         ? (() => { const parsed = parseDiceExpression(healing); return parsed ? formatDice({ ...parsed, modifier: parsed.modifier + abilityMod }) : healing; })()
         : healing;
@@ -302,6 +306,7 @@ function spellProfile(spell, character) {
         temporaryHp: Number(named.temporaryHp) || null,
         effect: named.effect || null,
         forcedMovement: named.forcedMovement || null,
+        multiattack,
         manualResolution,
         spellLevel: level,
         resource,
@@ -337,9 +342,14 @@ function weaponProfile(item, character, slot) {
     const damage = parsedDamage ? formatDice({ ...parsedDamage, modifier: parsedDamage.modifier + abilityMod + (Number(override.damageBonus) || 0) }) : damageBase;
     const featureNames = (Array.isArray(character.custom_features) ? character.custom_features : []).map(feature => normalize(feature?.name));
     const hasColossusSlayer = featureNames.some(name => name.includes('colossus slayer') || name.includes('asesino de colosos'));
+    const hasSneakAttack = featureNames.some(name => name.includes('ataque furtivo'));
     const mastery = normalize(`${item.mastery?.key || ''} ${item.mastery?.name || ''}`);
     const vex = mastery.includes('vex') || /shortsword|espada corta/.test(normalize(item.name));
     const graze = mastery.includes('graze') || /greatsword|espadon/.test(normalize(item.name));
+    const slow = mastery.includes('slow') || mastery.includes('ralentizar');
+    const conditionalExtraDamage = [];
+    if (hasColossusSlayer) conditionalExtraDamage.push({ expression: '1d8', damageType: override.damageType || item.damage_type || 'fisico', when: 'target-wounded', oncePerTurn: true, source: 'Asesino de Colosos' });
+    if (hasSneakAttack && (ranged || configuredAbility === 'FINESSE')) conditionalExtraDamage.push({ key: 'sneak-attack', expression: '2d6', damageType: override.damageType || item.damage_type || 'perforante', when: 'sneak-attack', oncePerTurn: true, source: 'Ataque Furtivo' });
     return {
         key: `weapon:${slot}:${item.id}`,
         source: 'weapon',
@@ -355,8 +365,8 @@ function weaponProfile(item, character, slot) {
         extraDamage: override.extraDamage ? (Array.isArray(override.extraDamage) ? override.extraDamage : [override.extraDamage]) : [],
         extraDamageType: override.extraDamageType || override.damageType || item.damage_type || 'fisico',
         isMelee: Number(override.range) > 5 ? false : !ranged,
-        conditionalExtraDamage: hasColossusSlayer ? [{ expression: '1d8', damageType: override.damageType || item.damage_type || 'fisico', when: 'target-wounded', oncePerTurn: true, source: 'Asesino de Colosos' }] : [],
-        effect: vex ? { type: 'VEX_NEXT_ATTACK_ADVANTAGE' } : null,
+        conditionalExtraDamage,
+        effect: vex ? { type: 'VEX_NEXT_ATTACK_ADVANTAGE' } : slow ? { type: 'SLOW_ON_HIT', feet: 10 } : null,
         grazeDamage: graze ? Math.max(0, abilityMod) : 0,
         formula: damage,
         summary: `Ataque ${signed(Number.isFinite(Number(override.attackBonus)) ? Number(override.attackBonus) : proficiencyBonus(character) + abilityMod)} · ${damage} ${override.damageType || item.damage_type || ''}`.trim(),

@@ -502,6 +502,15 @@ function currentCombatState(session, actorCharacterId) {
     return { ...current, used: { ...(current.used || {}) }, resources, reactions, acBonuses, shields };
 }
 
+function activeTurnEffect(session, characterId) {
+    const effect = session?.combat_state?.turnEffects?.[characterId];
+    if (!effect) return null;
+    return Number(effect.round) === Number(session.round)
+        && Number(effect.turnIndex) === Number(session.turn_index)
+        ? effect
+        : null;
+}
+
 function combatArmorClass(session, character) {
     const bonus = Number(session?.combat_state?.acBonuses?.[character?.id]?.bonus) || 0;
     return Math.max(1, effectiveArmorClass(character) + bonus);
@@ -890,7 +899,7 @@ function refreshTurnReaction(state, characterId) {
     return { ...state, reactions, acBonuses, resources: { ...(state?.resources || {}) } };
 }
 
-async function rollTurnRecharges(session, characterId) {
+async function rollTurnRecharges(session, characterId, io = null) {
     const catalog = await buildActionCatalog(characterId);
     if (!catalog) return;
     const resources = { ...(session.combat_state?.resources || {}) };
@@ -903,7 +912,18 @@ async function rollTurnRecharges(session, characterId) {
         if (recovered) resources[key] = 0;
         rolls.push({ action: action.name, natural, recovered });
     }
-    session.combat_state = { ...(session.combat_state || {}), resources, rechargeRolls: rolls };
+    const slowEffects = { ...(session.combat_state?.slowEffects || {}) };
+    for (const [tokenId, effect] of Object.entries(slowEffects)) {
+        if (Number(effect.sourceCharacterId) !== Number(characterId)) continue;
+        const target = session.tokens.find(token => String(token.id) === String(tokenId));
+        if (target) {
+            target.conditions = (Array.isArray(target.conditions) ? target.conditions : []).filter(condition => condition !== effect.condition);
+            await target.save();
+            io?.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: target.id, conditions: target.conditions });
+        }
+        delete slowEffects[tokenId];
+    }
+    session.combat_state = { ...(session.combat_state || {}), resources, rechargeRolls: rolls, slowEffects };
 }
 
 function customTrackers(character, session) {
@@ -1182,14 +1202,29 @@ async function finalizeCombatAction(io, combatAction, roll) {
         ? [{ expression: persistentMark.damage, damageType: persistentMark.damageType }]
         : [];
     const configuredExtraDamage = (action.extraDamage || []).map(expression => ({ expression, damageType: action.extraDamageType || action.damageType }));
-    const conditionalUseKey = `${combatAction.actor_character_id}:colossus-slayer`;
-    const conditionalAvailable = !session.combat_state?.conditionalUses?.[conditionalUseKey];
     const conditionalExtraDamage = (action.conditionalExtraDamage || []).filter(component => {
         if (component.when === 'target-wounded' && !targets.some(target => Number(target.character?.hp_current) < Number(target.character?.hp_max))) return false;
-        return !component.oncePerTurn || conditionalAvailable;
+        if (component.when === 'sneak-attack') {
+            if (action.attackRollMode === 'disadvantage') return false;
+            const target = targets[0];
+            const allyInReach = session.tokens.some(candidate => candidate.visible
+                && candidate.character
+                && String(candidate.id) !== String(actorToken.id)
+                && String(candidate.id) !== String(target?.id)
+                && validRelationship({ target: 'ally' }, actorToken, candidate)
+                && gridDistanceFeet(candidate, target) <= 5.01);
+            if (action.attackRollMode !== 'advantage' && !allyInReach) return false;
+        }
+        const useKey = `${combatAction.actor_character_id}:${component.key || component.source || component.when}`;
+        return !component.oncePerTurn || !session.combat_state?.conditionalUses?.[useKey];
     });
-    if (conditionalExtraDamage.some(component => component.oncePerTurn)) {
-        session.combat_state = { ...(session.combat_state || {}), conditionalUses: { ...(session.combat_state?.conditionalUses || {}), [conditionalUseKey]: true } };
+    const usedConditionalKeys = conditionalExtraDamage
+        .filter(component => component.oncePerTurn)
+        .map(component => `${combatAction.actor_character_id}:${component.key || component.source || component.when}`);
+    if (usedConditionalKeys.length) {
+        const conditionalUses = { ...(session.combat_state?.conditionalUses || {}) };
+        usedConditionalKeys.forEach(key => { conditionalUses[key] = true; });
+        session.combat_state = { ...(session.combat_state || {}), conditionalUses };
         session.changed('combat_state', true);
         await session.save();
     }
@@ -1326,6 +1361,21 @@ async function finalizeCombatAction(io, combatAction, roll) {
     const damagedTarget = targets.find(target => outcomes.some(outcome => String(outcome.tokenId) === String(target.id) && outcome.amount > 0));
     if (damagedTarget && action.effect?.type === 'VEX_NEXT_ATTACK_ADVANTAGE') {
         session.combat_state = { ...(session.combat_state || {}), effectsByTarget: { ...(session.combat_state?.effectsByTarget || {}), [damagedTarget.id]: { nextAttackAdvantage: true, source: 'Vex' } } };
+        session.changed('combat_state', true);
+        await session.save();
+    }
+    if (damagedTarget && action.effect?.type === 'SLOW_ON_HIT') {
+        const condition = `Ralentizado ${Number(action.effect.feet) || 10} pies`;
+        damagedTarget.conditions = [...new Set([...(Array.isArray(damagedTarget.conditions) ? damagedTarget.conditions : []), condition])];
+        await damagedTarget.save();
+        io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: damagedTarget.id, conditions: damagedTarget.conditions });
+        session.combat_state = {
+            ...(session.combat_state || {}),
+            slowEffects: {
+                ...(session.combat_state?.slowEffects || {}),
+                [damagedTarget.id]: { sourceCharacterId: combatAction.actor_character_id, condition },
+            },
+        };
         session.changed('combat_state', true);
         await session.save();
     }
@@ -1963,7 +2013,7 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index = nextIndex;
         }
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
-        await rollTurnRecharges(session, session.turn_order[session.turn_index]);
+        await rollTurnRecharges(session, session.turn_order[session.turn_index], io);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -1986,7 +2036,7 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index -= 1;
         }
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
-        await rollTurnRecharges(session, session.turn_order[session.turn_index]);
+        await rollTurnRecharges(session, session.turn_order[session.turn_index], io);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -2015,7 +2065,7 @@ function registerGameSessionSocket(io, socket) {
         }
         session.turn_index = turnIndex;
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
-        await rollTurnRecharges(session, session.turn_order[session.turn_index]);
+        await rollTurnRecharges(session, session.turn_order[session.turn_index], io);
         session.changed('combat_state', true);
         await session.save();
         io.to(roomName(session.id)).emit('game:turn-updated', {
@@ -2134,7 +2184,9 @@ function registerGameSessionSocket(io, socket) {
             && (session.combat_state?.mode !== 'COMBAT' || token.character_id === activeCharacterId);
         if (!dmControl && !playerControl) return fail(socket, 'Sólo puedes mover tu token durante tu turno.');
 
-        if (session.combat_state?.mode === 'COMBAT' && !activeReactionWindow(session)) {
+        const moverEffect = activeTurnEffect(session, token.character_id);
+        if (session.combat_state?.mode === 'COMBAT' && moverEffect?.speedLocked) return fail(socket, 'Puntería Estable dejó tu velocidad en 0 durante este turno.');
+        if (session.combat_state?.mode === 'COMBAT' && !activeReactionWindow(session) && !moverEffect?.disengaged) {
             const destination = { x: clamp(x), y: clamp(y) };
             let reactionOpened = false;
             const initiativeOrder = new Map((session.turn_order || []).map((characterId, index) => [Number(characterId), index]));
@@ -2167,6 +2219,14 @@ function registerGameSessionSocket(io, socket) {
         token.x = clamp(x);
         token.y = clamp(y);
         await token.save();
+        if (session.combat_state?.mode === 'COMBAT' && Number(token.character_id) === Number(activeCharacterId)) {
+            const turnEffects = { ...(session.combat_state?.turnEffects || {}) };
+            const previous = activeTurnEffect(session, token.character_id) || {};
+            turnEffects[token.character_id] = { ...previous, round: session.round, turnIndex: session.turn_index, moved: true };
+            session.combat_state = { ...(session.combat_state || {}), turnEffects };
+            session.changed('combat_state', true);
+            await session.save();
+        }
         io.to(roomName(session.id)).emit('game:token-moved', { tokenId: token.id, x: token.x, y: token.y });
     });
 
@@ -2472,6 +2532,9 @@ function registerGameSessionSocket(io, socket) {
             const decorated = decorateActions(catalog.actions, catalog.character, session);
             const action = decorated.find(item => item.key === actionKey);
             if (!action) return reply({ ok: false, message: 'Esa acción ya no está disponible.' });
+            if (action.effect?.type === 'STEADY_AIM' && activeTurnEffect(session, actorCharacterId)?.moved) {
+                return reply({ ok: false, message: 'Puntería Estable sólo puede usarse si todavía no te moviste este turno.' });
+            }
             const reactionWindow = activeReactionWindow(session);
             if (action.economy === 'reaction' && reactionWindow?.options?.some(option => option.key === action.key)) {
                 const result = await resolveReactionWindow(io, session.id, reactionWindow.id, action.key, socket.user.id);
@@ -2525,7 +2588,9 @@ function registerGameSessionSocket(io, socket) {
                 }
                 : currentCombatState(session, actorCharacterId);
             if (action.attackBonus != null) {
-                const advantage = Boolean(combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage)
+                const actorTurnEffect = activeTurnEffect(session, actorCharacterId);
+                const advantage = Boolean(actorTurnEffect?.nextAttackAdvantage)
+                    || Boolean(combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage)
                     || (Array.isArray(targets[0].conditions) && targets[0].conditions.includes('Iluminado por Faerie Fire'));
                 const disadvantageCondition = 'Desventaja en el proximo ataque';
                 const disadvantage = Array.isArray(actorToken.conditions) && actorToken.conditions.includes(disadvantageCondition);
@@ -2534,6 +2599,15 @@ function registerGameSessionSocket(io, socket) {
                     actorToken.conditions = actorToken.conditions.filter(condition => condition !== disadvantageCondition);
                     await actorToken.save();
                     io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: actorToken.id, conditions: actorToken.conditions });
+                }
+                if (actorTurnEffect?.nextAttackAdvantage) {
+                    combatState.turnEffects = { ...(combatState.turnEffects || {}) };
+                    combatState.turnEffects[actorCharacterId] = { ...actorTurnEffect, nextAttackAdvantage: false };
+                    if (Array.isArray(actorToken.conditions) && actorToken.conditions.includes('Oculto')) {
+                        actorToken.conditions = actorToken.conditions.filter(condition => condition !== 'Oculto');
+                        await actorToken.save();
+                        io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: actorToken.id, conditions: actorToken.conditions });
+                    }
                 }
             }
             if (combatState.effectsByTarget?.[targets[0].id]?.nextAttackAdvantage) {
@@ -2599,6 +2673,25 @@ function registerGameSessionSocket(io, socket) {
             }
             if (action.effect?.type === 'GRANT_NEXT_ATTACK_ADVANTAGE') {
                 combatState.effectsByTarget = { ...(combatState.effectsByTarget || {}), [targets[0].id]: { nextAttackAdvantage: true, source: action.name } };
+            }
+            if (['GRANT_EXTRA_MOVEMENT', 'DISENGAGE', 'HIDE_FOR_ADVANTAGE', 'STEADY_AIM'].includes(action.effect?.type)) {
+                const turnEffects = { ...(combatState.turnEffects || {}) };
+                const previous = turnEffects[actorCharacterId] || {};
+                turnEffects[actorCharacterId] = {
+                    ...previous,
+                    round: session.round,
+                    turnIndex: session.turn_index,
+                    extraMovement: action.effect.type === 'GRANT_EXTRA_MOVEMENT' ? Number(action.effect.feet) || 30 : previous.extraMovement,
+                    disengaged: action.effect.type === 'DISENGAGE' || previous.disengaged,
+                    nextAttackAdvantage: ['HIDE_FOR_ADVANTAGE', 'STEADY_AIM'].includes(action.effect.type) || previous.nextAttackAdvantage,
+                    speedLocked: action.effect.type === 'STEADY_AIM' || previous.speedLocked,
+                };
+                combatState.turnEffects = turnEffects;
+                if (action.effect.type === 'HIDE_FOR_ADVANTAGE') {
+                    actorToken.conditions = [...new Set([...(Array.isArray(actorToken.conditions) ? actorToken.conditions : []), 'Oculto'])];
+                    await actorToken.save();
+                    io.to(roomName(session.id)).emit('game:token-condition-updated', { tokenId: actorToken.id, conditions: actorToken.conditions });
+                }
             }
             if (action.effect?.type === 'REMOVE_CONDITIONS') {
                 for (const target of targets) {
