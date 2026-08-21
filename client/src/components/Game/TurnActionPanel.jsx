@@ -154,7 +154,21 @@ export default function TurnActionPanel({ session, socket, isMyTurn, targeting, 
             <p>{manualActionConfirmation.resource?.type === 'spell-slot' ? `Consumirá un espacio de hechizo de nivel ${manualActionConfirmation.spellLevel}.` : manualActionConfirmation.resource?.type === 'session-use' ? 'Consumirá su uso hasta el próximo descanso largo.' : 'No consume espacios de hechizo.'} El DM resolverá el efecto narrativo.</p>
             <footer>
               <button type="button" onClick={() => setManualActionConfirmation(null)}>Cancelar</button>
-              <button type="button" className="is-confirm" onClick={() => { const action = manualActionConfirmation; setManualActionConfirmation(null); execute(action); }}>Usar {manualActionConfirmation.name}</button>
+              <button type="button" className="is-confirm" onClick={() => {
+                const action = manualActionConfirmation;
+                setManualActionConfirmation(null);
+                if (String(action.target).startsWith('area-')) {
+                  onTargetingChange?.({
+                    action,
+                    instruction: action.area?.origin === 'self'
+                      ? `${action.name} se centra en ${actorName || 'tu personaje'}. Haz clic en el tablero para confirmar el area.`
+                      : `Marca el centro de ${action.name} sobre el tablero.`,
+                    execute,
+                  });
+                  return;
+                }
+                execute(action);
+              }}>Usar {manualActionConfirmation.name}</button>
             </footer>
           </div>
         </div>

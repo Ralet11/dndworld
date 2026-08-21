@@ -267,15 +267,42 @@ test('Paleas uses the correct spellcasting ability and weapon passives stay atta
     assert.equal(shortsword.effect.type, 'VEX_NEXT_ATTACK_ADVANTAGE');
 });
 
-test('utility spells can be used manually and retain their real resource cost', () => {
+test('Paleas utility area spells use grid-scaled templates and retain their real resource cost', () => {
     const paleas = { id: 31, level: 5, proficiency_bonus: 3, abilityScores: [{ ability: 'WIS', base_value: 15 }, { ability: 'CHA', base_value: 16 }] };
-    const detectMagic = spellProfile({ id: 11, slug: 'paleas-detect-magic', name: 'Detect Magic', dnd_class: 'Ranger', level: 1, casting_time: '1A' }, paleas);
-    const light = spellProfile({ id: 12, slug: 'paleas-light', name: 'Light', dnd_class: 'Celestial Legacy', level: 0, casting_time: '1A' }, paleas);
-    const daylight = spellProfile({ id: 13, slug: 'paleas-daylight', name: 'Daylight', dnd_class: 'Celestial Legacy', level: 3, casting_time: '1A', notes: '1/LR' }, paleas);
+    const detectMagic = spellProfile({ id: 11, slug: 'paleas-detect-magic', name: 'Detect Magic', dnd_class: 'Ranger', level: 1, casting_time: '1A', range: 'Self/30 ft. Sphere' }, paleas);
+    const light = spellProfile({ id: 12, slug: 'paleas-light', name: 'Light', dnd_class: 'Celestial Legacy', level: 0, casting_time: '1A', range: 'Touch/20 ft. Sphere' }, paleas);
+    const daylight = spellProfile({ id: 13, slug: 'paleas-daylight', name: 'Daylight', dnd_class: 'Celestial Legacy', level: 3, casting_time: '1A', range: '60 ft./60 ft. Sphere', notes: '1/LR' }, paleas);
     assert.equal(detectMagic.manualResolution, true);
-    assert.equal(detectMagic.target, 'self');
+    assert.equal(detectMagic.target, 'area-all');
+    assert.equal(detectMagic.range, 0);
+    assert.deepEqual(detectMagic.area, { shape: 'circle', feet: 30, origin: 'self', cells: 6, spanCells: 12, widthPct: 60, heightPct: 80 });
     assert.deepEqual(detectMagic.resource, { type: 'spell-slot', level: 1 });
     assert.equal(light.manualResolution, true);
+    assert.equal(light.target, 'area-all');
+    assert.equal(light.range, 5);
+    assert.equal(light.area.spanCells, 8);
+    assert.equal(light.area.widthPct, 40);
+    assert.equal(light.area.heightPct, 160 / 3);
     assert.equal(light.resource, null);
+    assert.equal(daylight.target, 'area-all');
+    assert.equal(daylight.area.cells, 12);
+    assert.equal(daylight.area.spanCells, 24);
+    assert.equal(daylight.area.widthPct, 120);
+    assert.equal(daylight.area.heightPct, 160);
     assert.deepEqual(daylight.resource, { type: 'session-use', key: 'spell:daylight', max: 1, recovery: 'largo' });
+});
+
+test('Paleas Burning Hands and Rakion grenade keep their exact grid geometry', () => {
+    const paleas = { id: 31, level: 5, proficiency_bonus: 3, abilityScores: [{ ability: 'CHA', base_value: 16 }] };
+    const burningHands = spellProfile({ id: 14, slug: 'paleas-burning-hands', name: 'Burning Hands', dnd_class: 'Sorcerer', level: 1, casting_time: '1A', range: 'Self/15 ft. Cone' }, paleas);
+    assert.deepEqual(burningHands.area, { shape: 'cone', feet: 15, cells: 3, spanCells: 3, widthPct: 15, heightPct: 20 });
+
+    const [grenade] = customFeatureProfiles({
+        id: 32, level: 5, proficiency_bonus: 3,
+        abilityScores: [{ ability: 'DEX', base_value: 15 }, { ability: 'INT', base_value: 16 }],
+        custom_features: [{ name: 'Granada explosiva', kind: 'Bonus', resource: 'Maximo 2 construidas', description: 'Explota en un circulo de 20 pies y causa 2d8 de fuego.' }],
+    });
+    assert.equal(grenade.target, 'area-enemy');
+    assert.equal(grenade.range, 60);
+    assert.deepEqual(grenade.area, { shape: 'circle', feet: 20, cells: 4, spanCells: 8, widthPct: 40, heightPct: 160 / 3 });
 });

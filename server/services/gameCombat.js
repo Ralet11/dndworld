@@ -41,6 +41,9 @@ const SPELL_PROFILES = {
     'magic-missile': { damage: '3d4+3', damageType: 'fuerza', target: 'enemy', range: 120, slot: true },
     'sorcerous-burst': { attack: true, damage: '1d6', damageType: 'fuerza', target: 'enemy', range: 120, cantripScale: true },
     thunderclap: { save: 'CON', damage: '1d6', damageType: 'trueno', target: 'area-enemy', range: 0, area: { shape: 'square', feet: 15, origin: 'self' }, cantripScale: true },
+    light: { utility: true, target: 'area-all', range: 5, area: { shape: 'circle', feet: 20 } },
+    'detect-magic': { utility: true, target: 'area-all', range: 0, area: { shape: 'circle', feet: 30, origin: 'self' } },
+    daylight: { utility: true, target: 'area-all', range: 60, area: { shape: 'circle', feet: 60 } },
     'hunters-mark': { utility: true, target: 'enemy', range: 90, economy: 'bonus', slot: true, effect: { type: 'MARK_EXTRA_DAMAGE', damage: '1d6', damageType: 'fuerza' } },
     'lesser-restoration': { utility: true, target: 'ally', range: 5, slot: true, effect: { type: 'REMOVE_CONDITIONS', conditions: ['Cegado', 'Ensordecido', 'Paralizado', 'Envenenado'] } },
     'acid-splash': { save: 'DEX', damage: '1d6', damageType: 'acido', target: 'area-enemy', range: 60, area: { shape: 'circle', feet: 5 }, cantripScale: true },
@@ -225,16 +228,26 @@ function spellProfile(spell, character) {
     const abilityWord = Object.keys(ABILITY_NAMES).find(word => text.includes(`${word} saving throw`) || text.includes(`salvacion de ${word}`));
     const attack = named.attack ?? /(spell attack|ataque de conjuro|ataque magico)/.test(text);
     const save = named.save || (abilityWord ? ABILITY_NAMES[abilityWord] : null);
-    const range = Number(named.range) || Number(String(spell.range || '').match(/\d+/)?.[0]) || 5;
+    const range = named.range != null
+        ? Math.max(0, Number(named.range) || 0)
+        : Number(String(spell.range || '').match(/\d+/)?.[0]) || 5;
     let area = named.area || null;
     if (!area) {
-        const areaMatch = text.match(/(\d+)\s*(?:foot|feet|pies|pie).*?(radius|cone|line|cube|square|sphere|radio|cono|linea|cubo|cuadrado|esfera)/);
-        if (areaMatch) {
+        // Imported sheets often store geometry in `range`
+        // (for example "Self/15 ft. Cone"), rather than in the description.
+        const areaText = normalize(`${spell.range || ''} ${spell.notes || ''} ${text}`);
+        const areaMatch = areaText.match(/(\d+)\s*(?:foot|feet|pies|pie).*?(radius|cone|line|cube|square|sphere|radio|cono|linea|cubo|cuadrado|esfera)/);
+        const reversedAreaMatch = areaText.match(/(radius|cone|line|cube|square|sphere|radio|cono|linea|cubo|cuadrado|esfera)(?:\s+de|\s+of)?\s+(\d+)\s*(?:foot|feet|pies|pie)/);
+        if (areaMatch || reversedAreaMatch) {
             const shapes = { radius: 'circle', sphere: 'circle', radio: 'circle', esfera: 'circle', cone: 'cone', cono: 'cone', line: 'line', linea: 'line', cube: 'square', square: 'square', cubo: 'square', cuadrado: 'square' };
-            area = { shape: shapes[areaMatch[2]] || 'circle', feet: Number(areaMatch[1]) };
+            const shape = areaMatch?.[2] || reversedAreaMatch[1];
+            const feet = areaMatch?.[1] || reversedAreaMatch[2];
+            area = { shape: shapes[shape] || 'circle', feet: Number(feet) };
         }
     }
-    let target = named.target || (area ? (healing ? 'area-ally' : 'area-enemy') : healing ? 'ally' : damage || attack || save ? 'enemy' : 'self');
+    let target = named.target || (area
+        ? (healing ? 'area-ally' : damage || attack || save ? 'area-enemy' : 'area-all')
+        : healing ? 'ally' : damage || attack || save ? 'enemy' : 'self');
     const level = Number(spell.level) || 0;
     const casting = normalize(spell.casting_time);
     const ability = spellAbility(character, spell);
@@ -249,7 +262,9 @@ function spellProfile(spell, character) {
     // válidos de una acción y no deben quedar inutilizables en combate.
     const hasAutomaticResolution = Boolean(attack || scaledDamage || finalHealing || save || named.temporaryHp || (named.effect && named.effect.type !== 'CUSTOM'));
     const manualResolution = !hasAutomaticResolution;
-    if (manualResolution) target = 'self';
+    // A manually resolved effect can still need a spatial template. Only
+    // manual effects without an area resolve directly on the caster.
+    if (manualResolution && !area) target = 'self';
     const legacyLimitedUse = /celestial legacy|legado celestial/.test(source) && /1\s*\/\s*(lr|descanso largo)/.test(notes);
     const resource = legacyLimitedUse
         ? { type: 'session-use', key: `spell:${slug}`, max: 1, recovery: 'largo' }
