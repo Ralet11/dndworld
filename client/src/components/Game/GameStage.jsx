@@ -163,7 +163,6 @@ export default function GameStage({
   const [textEditor, setTextEditor] = useState(null);
   const [combatPointer, setCombatPointer] = useState(null);
   const [readingLens, setReadingLens] = useState(false);
-  const [lensPointer, setLensPointer] = useState({ x: 50, y: 50 });
   const activeCharacterId = session?.active_character_id;
   const hasMedia = session?.shared_type !== 'NONE' && session?.shared_url;
   const tokens = (session?.tokens || []).filter(token => token.visible);
@@ -259,10 +258,16 @@ export default function GameStage({
   }, []);
 
   useEffect(() => {
+    const root = document.getElementById('root');
+    const updateOrigin = event => {
+      if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+      root?.style.setProperty('--reading-zoom-x', `${Math.max(0, Math.min(100, (event.clientX / window.innerWidth) * 100))}%`);
+      root?.style.setProperty('--reading-zoom-y', `${Math.max(0, Math.min(100, (event.clientY / window.innerHeight) * 100))}%`);
+    };
     const keyDown = event => {
       const editable = event.target instanceof HTMLElement
         && (event.target.matches('input, textarea, select') || event.target.isContentEditable);
-      if (!editable && hasMedia && event.key.toLowerCase() === 'l') {
+      if (!editable && event.key.toLowerCase() === 'l') {
         event.preventDefault();
         setReadingLens(true);
       }
@@ -273,13 +278,20 @@ export default function GameStage({
     };
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', keyUp);
+    window.addEventListener('pointermove', updateOrigin, { passive: true });
     window.addEventListener('blur', clearLens);
     return () => {
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
+      window.removeEventListener('pointermove', updateOrigin);
       window.removeEventListener('blur', clearLens);
     };
-  }, [hasMedia]);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dndworld-reading-zoom', readingLens);
+    return () => document.documentElement.classList.remove('dndworld-reading-zoom');
+  }, [readingLens]);
 
   useEffect(() => {
     const clearNarrativeDrop = () => setNarrativeDropTarget(null);
@@ -647,7 +659,6 @@ export default function GameStage({
       onContextMenu={event => event.preventDefault()}
       onPointerMove={event => {
         const lensPosition = positionFromEvent(event);
-        if (lensPosition) setLensPointer(lensPosition);
         if (!combatTargeting || !String(combatTargeting.action?.target).startsWith('area-')) return;
         const position = lensPosition;
         if (position) setCombatPointer({ ...position, actionKey: combatTargeting.action?.key });
@@ -834,21 +845,6 @@ export default function GameStage({
       )}
 
       <GameBoardVfx effects={vfxEnabled ? renderedStageVfx : []} />
-      {readingLens && hasMedia && (
-        <aside
-          className="game-reading-lens"
-          role="status"
-          aria-label="Lupa de lectura activa"
-          style={{
-            left: `${Math.max(21, Math.min(79, lensPointer.x))}%`,
-            top: `${Math.max(18, Math.min(82, lensPointer.y))}%`,
-            backgroundImage: `url("${resolveUrl(session.shared_url)}")`,
-            backgroundPosition: `${lensPointer.x}% ${lensPointer.y}%`,
-          }}
-        >
-          <span>Lupa · suelta L para cerrar</span>
-        </aside>
-      )}
       {!vfxEnabled && !!renderedStageVfx.length && (
         <div className="game-vfx-fallback-layer" aria-label="Indicadores tácticos de efectos">
           {renderedStageVfx.map(effect => {
