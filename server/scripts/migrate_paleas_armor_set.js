@@ -15,7 +15,13 @@ const StatEngine = require('../utils/statEngine');
 
 const APPLY = process.argv.includes('--apply');
 const ARMOR_SLOTS = ['shoulders', 'chest', 'pants', 'boots'];
-const LEGACY_NAMES = ['Mithral Half Plate', 'Ajuste de CA (nivel 5)'];
+const LEGACY_ARMOR_NAMES = {
+    shoulders: 'Espaldar de malla de Paleas',
+    chest: 'Peto de malla de Paleas',
+    pants: 'Quijotes de malla de Paleas',
+    boots: 'Botas de malla de Paleas',
+};
+const LEGACY_NAMES = ['Mithral Half Plate', 'Ajuste de CA (nivel 5)', ...Object.values(LEGACY_ARMOR_NAMES)];
 const INCLUDE = [
     { model: AbilityScore, as: 'abilityScores' },
     { model: Skill, as: 'skills' },
@@ -61,7 +67,9 @@ async function run() {
     await sequelize.transaction(async transaction => {
         const armorBySlot = {};
         for (const definition of PALEAS_ARMOR) {
-            const [item] = await Item.findOrCreate({ where: { name: definition.name }, defaults: definition, transaction });
+            let item = await Item.findOne({ where: { name: definition.name }, transaction });
+            if (!item) item = await Item.findOne({ where: { name: LEGACY_ARMOR_NAMES[definition.slot] }, transaction });
+            if (!item) item = await Item.create(definition, { transaction });
             await item.update(definition, { transaction });
             armorBySlot[definition.slot] = item;
             await CharacterInventory.findOrCreate({
