@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Backpack, Check, CheckCircle, Circle, Clock, DoorOpen, Edit3, Heart, Pause, Scroll, Shield, Sparkles, Swords, Target, UserRound, Users, X, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -10,6 +10,8 @@ import GameAudioPlayer from './GameAudioPlayer';
 import TurnActionPanel from './TurnActionPanel';
 import ReactionPrompt from './ReactionPrompt';
 import CombatResultPrompt from './CombatResultPrompt';
+
+const MapView = lazy(() => import('../Lore/MapView'));
 
 export default function GamePlayerPanel() {
   const { user } = useAuth();
@@ -328,6 +330,7 @@ export default function GamePlayerPanel() {
   const participant = session.participants.find(item => item.user_id === user.id);
   const activeParticipant = session.participants.find(item => item.character_id === session.active_character_id);
   const isCombatMode = session.combat_state?.mode === 'COMBAT' || (session.combat_state?.mode == null && (session.turn_order || []).length > 0);
+  const isAtlasMode = session.combat_state?.mode === 'ATLAS';
   const isMyTurn = isCombatMode && participant?.character_id === session.active_character_id;
 
   if (session.status === 'WAITING') {
@@ -389,7 +392,11 @@ export default function GamePlayerPanel() {
 
       <div className="game-player-workspace">
         <section className="game-player-stage-wrap">
-        <GameStage
+        {isAtlasMode ? (
+          <Suspense fallback={<div className="game-atlas-loading">Abriendo Atlas...</div>}>
+            <MapView embedded readOnly sharedView={session.combat_state?.atlas_view} />
+          </Suspense>
+        ) : <GameStage
           session={session}
           userId={user.id}
           consciousnessNotice={consciousnessNotice}
@@ -401,11 +408,11 @@ export default function GamePlayerPanel() {
           hiddenRollIds={hiddenRollIds}
           onDismissRoll={rollId => setHiddenRollIds(current => current.includes(String(rollId)) ? current : [...current, String(rollId)])}
           onResolveRoll={resolveDiceRoll}
-        />
+        />}
         <div className="game-player-stage-note">
           <DiceTray onRoll={rollDice} compact />
-          <span>{isCombatMode ? 'Mapa de combate' : 'Escena narrativa'}</span>
-          <p>{isCombatMode ? (isMyTurn ? 'Puedes mover tu token durante tu turno.' : 'Espera tu turno para moverte.') : 'Puedes mover libremente tu token por la escena.'}</p>
+          <span>{isAtlasMode ? 'Atlas compartido' : isCombatMode ? 'Mapa de combate' : 'Escena narrativa'}</span>
+          <p>{isAtlasMode ? 'Estás viendo la región que explora el DM.' : isCombatMode ? (isMyTurn ? 'Puedes mover tu token durante tu turno.' : 'Espera tu turno para moverte.') : 'Puedes mover libremente tu token por la escena.'}</p>
         </div>
         </section>
 

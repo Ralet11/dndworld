@@ -1056,6 +1056,7 @@ a:focus-visible {
 .game-audio-upload > button { height: 30px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #d3ba7e; border: 1px solid #745a2f; background: #19140d; font-size: 7px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
 .game-audio-upload > button i { width: 12px; height: 12px; border: 1px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: bestiary-spin 700ms linear infinite; }
 .game-scene-visibility > button { min-height: 24px; margin-left: auto; padding: 0 8px; display: flex; align-items: center; gap: 5px; color: #d2c4a9; border: 1px solid #775b2d; background: linear-gradient(180deg, #332311, #1b140d); font-family: var(--font-display); font-size: 7px; }
+.game-scene-visibility > button:disabled { opacity: .35; cursor: not-allowed; }
 .game-scene-visibility > button svg { width: 11px; height: 11px; }
 .game-scene-visibility > .game-stage-toolbar-host { width: max-content; max-width: calc(100% - 285px); min-width: 0; min-height: 24px; flex: 0 1 auto; padding: 0; overflow: hidden; border: 0; font-size: inherit; letter-spacing: normal; text-transform: none; }
 .game-stage-toolbar-host .game-grid-tools.is-inline { width: 100%; position: static; display: block; }
@@ -1124,6 +1125,8 @@ a:focus-visible {
 .game-stage-wrap-dm .game-stage.is-map.map-fit-cover .game-stage-media { object-fit: cover; object-position: center; }
 .game-stage-wrap-dm .game-stage.is-map.map-fit-contain .game-stage-media { object-fit: contain; object-position: center; }
 .game-stage-wrap-dm .game-stage-caption { top: auto; bottom: 14px; left: 16px; padding: 8px 12px; }
+.game-stage-wrap-dm > .atlas-shell { height: 100%; min-height: 0; }
+.game-atlas-loading { width: 100%; height: 100%; min-height: 300px; display: grid; place-items: center; color: #b28c50; background: #070c0b; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 
 .game-scene-actions {
   min-height: 48px;
@@ -1137,6 +1140,7 @@ a:focus-visible {
 .game-scene-actions > button,
 .game-scene-mode button { min-height: 31px; padding: 0 11px; display: flex; align-items: center; gap: 6px; color: #97958d; border: 1px solid #303a35; background: #0c1411; font-family: var(--font-display); font-size: 8px; }
 .game-scene-actions > button:hover { color: #d7c8aa; border-color: #67502d; }
+.game-scene-actions > button:disabled { opacity: .35; cursor: not-allowed; }
 .game-scene-mode { margin-left: auto; display: flex; border: 1px solid #303a35; }
 .game-scene-mode button { min-width: 112px; justify-content: center; border: 0; background: transparent; text-transform: uppercase; letter-spacing: .08em; }
 .game-scene-mode button.is-active { color: #d3b270; background: rgba(128, 102, 54, .14); box-shadow: inset 0 -1px #b48c47; }
@@ -1850,6 +1854,9 @@ a:focus-visible {
   overflow: hidden;
   background: #0b100e;
 }
+
+.atlas-shell.is-embedded { height: 100%; min-height: 0; }
+.atlas-shell.is-following .atlas-map { cursor: default; }
 
 .atlas-map {
   width: 100%;
@@ -4557,6 +4564,7 @@ a:focus-visible {
 .game-player-presence { display: flex; align-items: center; gap: 5px; color: #737a74; font-size: 8px; text-transform: uppercase; }
 .game-player-stage-wrap { position: relative; padding: 16px 16px 0; }
 .game-player-stage-wrap .game-stage { height: clamp(330px, 48vh, 560px); min-height: 330px; }
+.game-player-stage-wrap > .atlas-shell { height: clamp(330px, 48vh, 560px); min-height: 330px; border: 1px solid #29332e; }
 .game-player-stage-note { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 8px 12px; border: 1px solid #29332e; border-top: 0; background: #0a110f; }
 .game-player-stage-note span { color: #b28c50; font-size: 8px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
 .game-player-stage-note p { color: #707870; font-size: 9px; }
@@ -4610,6 +4618,7 @@ a:focus-visible {
   .game-player-presence { display: none; }
   .game-player-stage-wrap { padding: 10px 10px 0; }
   .game-player-stage-wrap .game-stage { height: 50vh; min-height: 300px; }
+  .game-player-stage-wrap > .atlas-shell { height: 50vh; min-height: 300px; }
   .game-stage-caption { max-width: calc(100% - 24px); }
   .game-token-image { width: 36px; height: 36px; }
   .game-player-stage-note { align-items: flex-start; flex-direction: column; gap: 3px; }
@@ -5958,6 +5967,7 @@ fieldset.npc-studio-card { padding-top: 15px; }
   .game-player-workspace { height: calc(100vh - 48px); min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(360px, 30vw, 440px); }
   .game-player-stage-wrap { height: 100%; padding: 10px; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   .game-player-stage-wrap .game-stage { width: 100%; height: 100%; min-height: 0; }
+  .game-player-stage-wrap > .atlas-shell { width: 100%; height: 100%; min-height: 0; }
   .game-player-stage-note { min-height: 36px; padding: 4px 7px; gap: 9px; }
   .game-player-stage-note .game-dice-tray.is-compact { width: min(540px, 72%); }
   .game-player-stage-note span { font-size: 6px; white-space: nowrap; }

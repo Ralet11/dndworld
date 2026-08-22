@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useDeferredValue, useEffect, useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
@@ -49,6 +49,8 @@ import GameAudioControl from './GameAudioControl';
 import CombatResultPrompt from '../components/Game/CombatResultPrompt';
 import ReactionPrompt from '../components/Game/ReactionPrompt';
 import { deriveWorldConditions } from '../utils/worldTime';
+
+const MapView = lazy(() => import('../components/Lore/MapView'));
 
 function resolveMediaUrl(value) {
   if (!value || /^(?:https?:|data:|blob:)/i.test(value)) return value;
@@ -806,6 +808,12 @@ export default function GameMasterPanel() {
     });
   };
 
+  const updateSharedAtlas = patch => {
+    socket?.emit('game:update-atlas-view', { sessionId: session.id, patch }, response => {
+      if (!response?.ok) setError(response?.message || 'No se pudo compartir esa vista del Atlas.');
+    });
+  };
+
   const rollPendingDamage = action => {
     socket?.emit('game:roll-action-damage', { sessionId: session.id, combatActionId: action.id }, response => {
       if (!response?.ok) setError(response?.message || 'No se pudo iniciar la tirada de daño.');
@@ -859,14 +867,14 @@ export default function GameMasterPanel() {
         <main className="game-scene-workspace">
           <section className="game-scene-frame">
             <div className="game-scene-visibility">
-              <div className={session.shared_type === 'NONE' ? 'is-private' : 'is-public'}>
-                {session.shared_type === 'NONE' ? <LockKeyhole size={14} /> : <Radio size={14} />}
-                <strong>{session.shared_type === 'NONE' ? 'Sin publicar' : 'Visible para jugadores'}</strong>
+              <div className={session.combat_state?.mode === 'ATLAS' || session.shared_type !== 'NONE' ? 'is-public' : 'is-private'}>
+                {session.combat_state?.mode === 'ATLAS' || session.shared_type !== 'NONE' ? <Radio size={14} /> : <LockKeyhole size={14} />}
+                <strong>{session.combat_state?.mode === 'ATLAS' ? 'Atlas compartido' : session.shared_type === 'NONE' ? 'Sin publicar' : 'Visible para jugadores'}</strong>
               </div>
-              <span>{session.shared_type === 'NONE' ? 'Prepara la escena antes de mostrarla' : `${connectedPlayers} jugadores reciben este contenido en vivo`}</span>
+              <span>{session.combat_state?.mode === 'ATLAS' ? `${connectedPlayers} jugadores siguen tu navegación en vivo` : session.shared_type === 'NONE' ? 'Prepara la escena antes de mostrarla' : `${connectedPlayers} jugadores reciben este contenido en vivo`}</span>
               <GameAudioControl session={session} socket={socket} onError={setError} />
               <div ref={setStageToolbarHost} className="game-stage-toolbar-host" />
-              <button onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><MonitorUp size={14} /> Cambiar contenido</button>
+              <button disabled={session.combat_state?.mode === 'ATLAS'} onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><MonitorUp size={14} /> Cambiar contenido</button>
             </div>
             <div
               className={`game-stage-wrap-dm${assetOverStage ? ' is-asset-over' : ''}`}
@@ -892,7 +900,11 @@ export default function GameMasterPanel() {
                 if (asset) publishAsset(asset);
               }}
             >
-              <GameStage
+              {session.combat_state?.mode === 'ATLAS' ? (
+                <Suspense fallback={<div className="game-atlas-loading">Abriendo Atlas...</div>}>
+                  <MapView embedded sharedView={session.combat_state?.atlas_view} onSharedViewChange={updateSharedAtlas} />
+                </Suspense>
+              ) : <GameStage
                 session={session}
                 userId={user.id}
                 isDm
@@ -926,14 +938,15 @@ export default function GameMasterPanel() {
                 onResolveRoll={resolveDiceRoll}
                 onRollCharacter={({ characterId, label, modifier }) => rollDice({ sides: 20, quantity: 1, modifier, label, characterId })}
                 toolbarHost={stageToolbarHost}
-              />
+              />}
             </div>
             <div className="game-scene-actions">
-              <button onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><Upload size={14} /> Reemplazar</button>
-              <button onClick={() => emit('game:share', { sessionId: session.id, type: 'NONE' })}><EyeOff size={14} /> Ocultar</button>
+              <button disabled={session.combat_state?.mode === 'ATLAS'} onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><Upload size={14} /> Reemplazar</button>
+              <button disabled={session.combat_state?.mode === 'ATLAS'} onClick={() => emit('game:share', { sessionId: session.id, type: 'NONE' })}><EyeOff size={14} /> Ocultar</button>
               <div className="game-scene-mode">
-                <button className={session.combat_state?.mode !== 'COMBAT' ? 'is-active' : ''} onClick={() => setCombatMode('NARRATIVE')}><ImageIcon size={14} /> Narrativa</button>
+                <button className={!['COMBAT', 'ATLAS'].includes(session.combat_state?.mode) ? 'is-active' : ''} onClick={() => setCombatMode('NARRATIVE')}><ImageIcon size={14} /> Narrativa</button>
                 <button className={session.combat_state?.mode === 'COMBAT' ? 'is-active' : ''} onClick={() => setCombatMode('COMBAT')}><Swords size={14} /> Combate</button>
+                <button className={session.combat_state?.mode === 'ATLAS' ? 'is-active' : ''} onClick={() => setCombatMode('ATLAS')}><MapIcon size={14} /> Mapa</button>
               </div>
             </div>
           </section>

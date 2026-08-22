@@ -13,6 +13,7 @@ const {
     GameToken,
     NpcAction,
     Item,
+    PointOfInterest,
     Scene,
     Skill,
     User,
@@ -297,6 +298,7 @@ async function initializeInitiative(session, participants, tokens) {
     session.combat_state = {
         resources: {},
         reactions: {},
+        atlas_view: session.combat_state?.atlas_view,
         mode: 'COMBAT',
         awaitingInitiative: pending.length > 0,
         initiative: entries,
@@ -2376,7 +2378,7 @@ function registerGameSessionSocket(io, socket) {
             const session = await requireHostedSession(socket, sessionId);
             if (!session) return reply({ ok: false, message: 'No tienes permiso para controlar esta sala.' });
             const nextMode = String(mode || '').toUpperCase();
-            if (!['NARRATIVE', 'COMBAT'].includes(nextMode)) return reply({ ok: false, message: 'Modo de partida inválido.' });
+            if (!['NARRATIVE', 'COMBAT', 'ATLAS'].includes(nextMode)) return reply({ ok: false, message: 'Modo de partida inválido.' });
             if (await hasPendingCombatAction(session.id)) return reply({ ok: false, message: 'Hay una acción resolviéndose. Termínala o cancélala antes de cambiar de modo.' });
 
             if (nextMode === 'COMBAT') {
@@ -2389,18 +2391,88 @@ function registerGameSessionSocket(io, socket) {
                 await session.save();
                 io.to(roomName(session.id)).emit('game:initiative-requested', { sessionId: session.id, round: session.round });
             } else {
+                const previousMode = session.combat_state?.mode;
                 session.turn_order = [];
                 session.turn_index = 0;
-                session.combat_state = { resources: { ...(session.combat_state?.resources || {}) }, mode: 'NARRATIVE' };
+                session.combat_state = {
+                    resources: { ...(session.combat_state?.resources || {}) },
+                    atlas_view: session.combat_state?.atlas_view || { level: 'westamar', path: [], selectedPoiId: null, viewport: null },
+                    mode: nextMode,
+                };
                 session.changed('combat_state', true);
                 await session.save();
-                io.to(roomName(session.id)).emit('game:combat-ended', { sessionId: session.id });
+                if (previousMode === 'COMBAT') io.to(roomName(session.id)).emit('game:combat-ended', { sessionId: session.id });
             }
             await broadcastSession(io, session.id);
             reply({ ok: true, mode: nextMode });
         } catch (error) {
             console.error('game:set-combat-mode error:', error);
             reply({ ok: false, message: 'No se pudo cambiar el modo de partida.' });
+        }
+    });
+
+    socket.on('game:update-atlas-view', async ({ sessionId, patch = {} } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'No tienes permiso para controlar esta sala.' });
+            if (session.combat_state?.mode !== 'ATLAS') return reply({ ok: false, message: 'El Atlas compartido no está activo.' });
+
+            const current = session.combat_state?.atlas_view || { level: 'westamar', path: [], selectedPoiId: null, viewport: null };
+            const next = { ...current };
+            if (patch.level !== undefined) next.level = patch.level === 'continent' ? 'continent' : 'westamar';
+
+            if (patch.pathIds !== undefined) {
+                const pathIds = [...new Set((Array.isArray(patch.pathIds) ? patch.pathIds : []).map(Number).filter(Number.isInteger))].slice(0, 8);
+                const points = pathIds.length ? await PointOfInterest.findAll({
+                    where: { id: pathIds, [Op.or]: [{ party_known: true }, { party_known: null }] },
+                    attributes: ['id', 'title', 'map_image', 'type', 'parent_id'],
+                }) : [];
+                const byId = new Map(points.map(point => [Number(point.id), point]));
+                const path = pathIds.map(id => byId.get(id)).filter(Boolean);
+                const validPath = path.length === pathIds.length && path.every((point, index) => (
+                    index === 0 ? point.parent_id == null : Number(point.parent_id) === Number(path[index - 1].id)
+                ));
+                if (!validPath) return reply({ ok: false, message: 'Muestra esos lugares a la party antes de navegar por ellos.' });
+                next.path = path.map(point => ({ id: point.id, title: point.title, map_image: point.map_image, type: point.type }));
+            }
+
+            if (patch.selectedPoiId !== undefined) {
+                if (patch.selectedPoiId === null) next.selectedPoiId = null;
+                else {
+                    const selectedPoiId = Number(patch.selectedPoiId);
+                    const selected = Number.isInteger(selectedPoiId) ? await PointOfInterest.findOne({
+                        where: { id: selectedPoiId, [Op.or]: [{ party_known: true }, { party_known: null }] },
+                        attributes: ['id'],
+                    }) : null;
+                    if (!selected) return reply({ ok: false, message: 'Muestra ese lugar a la party antes de seleccionarlo.' });
+                    next.selectedPoiId = selected.id;
+                }
+            }
+
+            if (patch.viewport === null) next.viewport = null;
+            else if (patch.viewport && typeof patch.viewport === 'object') {
+                const lat = Number(patch.viewport.lat);
+                const lng = Number(patch.viewport.lng);
+                const zoom = Number(patch.viewport.zoom);
+                const mapKey = String(patch.viewport.mapKey || '').slice(0, 40);
+                if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(zoom) && mapKey) {
+                    next.viewport = {
+                        mapKey,
+                        lat: Math.max(-1600, Math.min(3200, lat)),
+                        lng: Math.max(-2400, Math.min(4800, lng)),
+                        zoom: Math.max(-2, Math.min(3, zoom)),
+                    };
+                }
+            }
+
+            session.combat_state = { ...(session.combat_state || {}), atlas_view: next };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true, atlasView: next });
+        } catch (error) {
+            console.error('game:update-atlas-view error:', error);
+            reply({ ok: false, message: 'No se pudo compartir esa vista del Atlas.' });
         }
     });
 

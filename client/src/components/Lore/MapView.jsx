@@ -114,7 +114,30 @@ function MapInteractionHandler({ placing, mapConfig, onPlace, onZoomOut }) {
   return null;
 }
 
-export default function MapView({ onBack }) {
+function SharedViewport({ mapKey, readOnly, viewport, onViewportChange }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!readOnly || viewport?.mapKey !== mapKey) return;
+    const lat = Number(viewport.lat);
+    const lng = Number(viewport.lng);
+    const zoom = Number(viewport.zoom);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(zoom)) {
+      map.setView([lat, lng], zoom, { animate: false });
+    }
+  }, [map, mapKey, readOnly, viewport]);
+
+  useMapEvents({
+    moveend() {
+      if (readOnly || !onViewportChange) return;
+      const center = map.getCenter();
+      onViewportChange({ mapKey, lat: center.lat, lng: center.lng, zoom: map.getZoom() });
+    },
+  });
+  return null;
+}
+
+export default function MapView({ onBack, embedded = false, sharedView = null, onSharedViewChange, readOnly = false }) {
   const { user, token } = useAuth();
   const { socket } = useSocket();
   const isDM = user?.role === 'DM' || user?.role === 'ADMIN';
@@ -144,7 +167,7 @@ export default function MapView({ onBack }) {
     () => L.latLngBounds([[0, 0], [mapConfig.height, mapConfig.width]]),
     [mapConfig],
   );
-  const canEditPOIs = isDM && !isContinentView;
+  const canEditPOIs = isDM && !readOnly && !isContinentView;
   const availableTypes = currentParent
     ? ['npc', 'quest', 'shop', 'place']
     : ['city', 'camp', 'dungeon', 'cave'];
@@ -209,6 +232,22 @@ export default function MapView({ onBack }) {
       socket.off('stats-updated', updateLevel);
     };
   }, [socket, user]);
+
+  useEffect(() => {
+    if (!sharedView) return;
+    setAtlasLevel(sharedView.level === 'continent' ? 'continent' : 'westamar');
+    setParentStack(Array.isArray(sharedView.path) ? sharedView.path : []);
+  }, [sharedView]);
+
+  useEffect(() => {
+    if (!readOnly || loading) return;
+    const selectedId = Number(sharedView?.selectedPoiId);
+    setSelectedPOI(Number.isInteger(selectedId) ? markers.find(poi => Number(poi.id) === selectedId) || null : null);
+  }, [loading, markers, readOnly, sharedView?.selectedPoiId]);
+
+  const shareNavigation = (level, path, selectedPoiId = null) => {
+    onSharedViewChange?.({ level, pathIds: path.map(item => item.id), selectedPoiId, viewport: null });
+  };
 
   const updateMarkerPosition = async (poi, latlng) => {
     const position = latLngToPercent(latlng, mapConfig);
@@ -283,6 +322,7 @@ export default function MapView({ onBack }) {
       const updated = await response.json();
       setMarkers(current => current.map(item => item.id === poi.id ? updated : item));
       setSelectedPOI(updated);
+      if (!next) onSharedViewChange?.({ selectedPoiId: null });
       socket?.emit('poi:visibility-changed', { poiId: poi.id });
     } catch (updateError) {
       setError(updateError.message || 'No se pudo cambiar la visibilidad del punto.');
@@ -290,33 +330,56 @@ export default function MapView({ onBack }) {
   };
 
   const enterPOI = (poi) => {
+    if (readOnly) return;
+    if (embedded && poi.party_known === false) {
+      setError('Muestra este lugar a la party antes de abrirlo en el mapa compartido.');
+      return;
+    }
+    const nextPath = [...parentStack, poi];
     setSelectedPOI(null);
-    setParentStack((current) => [...current, poi]);
+    setParentStack(nextPath);
+    shareNavigation(atlasLevel, nextPath);
   };
 
   const exitToParent = () => {
+    if (readOnly) return;
+    const nextPath = parentStack.slice(0, -1);
     setSelectedPOI(null);
-    setParentStack((current) => current.slice(0, -1));
+    setParentStack(nextPath);
+    shareNavigation(atlasLevel, nextPath);
   };
 
   const zoomOutLevel = () => {
+    if (readOnly) return;
     setSelectedPOI(null);
     setPlacingPOI(false);
     if (currentParent) {
-      setParentStack((current) => current.slice(0, -1));
+      const nextPath = parentStack.slice(0, -1);
+      setParentStack(nextPath);
+      shareNavigation(atlasLevel, nextPath);
       return;
     }
-    if (atlasLevel === 'westamar') setAtlasLevel('continent');
+    if (atlasLevel === 'westamar') {
+      setAtlasLevel('continent');
+      shareNavigation('continent', []);
+    }
   };
 
   const enterRegion = (region) => {
-    if (region.target !== 'westamar') return;
+    if (readOnly || region.target !== 'westamar') return;
     setSelectedPOI(null);
     setAtlasLevel('westamar');
+    shareNavigation('westamar', []);
+  };
+
+  const selectPOI = (poi) => {
+    if (readOnly) return;
+    setSelectedPOI(poi);
+    onSharedViewChange?.({ selectedPoiId: poi.party_known === false ? null : poi.id });
   };
 
   return (
-    <div className={`atlas-shell ${placingPOI ? 'is-placing' : ''}`}>
+    <div className={`atlas-shell${embedded ? ' is-embedded' : ''}${readOnly ? ' is-following' : ''}${placingPOI ? ' is-placing' : ''}`}>
       <MapContainer
         key={mapKey}
         className="atlas-map"
@@ -331,15 +394,22 @@ export default function MapView({ onBack }) {
         maxBoundsViscosity={1}
         zoomControl={false}
         attributionControl={false}
+        dragging={!readOnly}
+        scrollWheelZoom={!readOnly}
+        doubleClickZoom={!readOnly}
+        touchZoom={!readOnly}
+        boxZoom={!readOnly}
+        keyboard={!readOnly}
       >
         <FitImageBounds mapKey={mapKey} bounds={mapBounds} mapConfig={mapConfig} />
+        <SharedViewport mapKey={mapKey} readOnly={readOnly} viewport={sharedView?.viewport} onViewportChange={viewport => onSharedViewChange?.({ viewport })} />
         <MapInteractionHandler
-          placing={placingPOI}
+          placing={!readOnly && placingPOI}
           mapConfig={mapConfig}
           onPlace={handlePlace}
           onZoomOut={zoomOutLevel}
         />
-        <ZoomControl position="bottomright" />
+        {!readOnly && <ZoomControl position="bottomright" />}
 
         {mapImage && <ImageOverlay url={mapImage} bounds={mapBounds} />}
 
@@ -362,7 +432,7 @@ export default function MapView({ onBack }) {
             autoPan={canEditPOIs}
             bubblingMouseEvents={false}
             eventHandlers={{
-              click: () => setSelectedPOI(poi),
+              click: () => selectPOI(poi),
               dragend: (event) => updateMarkerPosition(poi, event.target.getLatLng()),
             }}
           >
@@ -383,7 +453,7 @@ export default function MapView({ onBack }) {
 
       <div className="atlas-topbar">
         <div className="atlas-topbar-left">
-          {(currentParent || onBack || atlasLevel === 'westamar') && (
+          {!readOnly && (currentParent || onBack || atlasLevel === 'westamar') && (
             <button
               className="atlas-icon-button"
               onClick={currentParent ? exitToParent : isContinentView ? onBack : zoomOutLevel}
@@ -398,7 +468,7 @@ export default function MapView({ onBack }) {
           </div>
         </div>
         <div className="atlas-map-status">
-          <Layers3 size={14} /> {isContinentView ? `${REGIONS.length} regiones` : `${markers.length} puntos`}
+          <Layers3 size={14} /> {readOnly ? 'Vista dirigida por el DM' : isContinentView ? `${REGIONS.length} regiones` : `${markers.length} puntos`}
         </div>
         {canEditPOIs && (
           <button className={`atlas-place-button ${placingPOI ? 'is-active' : ''}`} onClick={beginPlacement}>
@@ -427,9 +497,7 @@ export default function MapView({ onBack }) {
 
       {selectedPOI && (
         <aside className="atlas-inspector">
-          <button className="atlas-inspector-close" onClick={() => setSelectedPOI(null)} aria-label="Cerrar detalle">
-            <X size={18} />
-          </button>
+          {!readOnly && <button className="atlas-inspector-close" onClick={() => { setSelectedPOI(null); onSharedViewChange?.({ selectedPoiId: null }); }} aria-label="Cerrar detalle"><X size={18} /></button>}
           {(selectedPOI.image || selectedPOI.map_image) && (
             <img
               src={selectedPOI.image || selectedPOI.map_image}
@@ -452,12 +520,12 @@ export default function MapView({ onBack }) {
             <h2>{selectedPOI.title}</h2>
             {selectedPOI.type === 'quest' && <span className="atlas-level-chip">Nivel {selectedPOI.level ?? 1}</span>}
             <p>{selectedPOI.description || 'Todavia no hay una descripcion publica para este lugar.'}</p>
-            {(selectedPOI.map_image || (isDM && selectedPOI.type === 'city')) && (
+            {!readOnly && (selectedPOI.map_image || (isDM && selectedPOI.type === 'city')) && (
               <button className="atlas-enter-button" onClick={() => enterPOI(selectedPOI)}>
                 <MapPin size={16} /> Entrar a {selectedPOI.title}
               </button>
             )}
-            {isDM && (
+            {isDM && !readOnly && (
               <button className="atlas-enter-button" onClick={() => togglePartyKnowledge(selectedPOI)}>
                 {selectedPOI.party_known !== false ? <EyeOff size={16} /> : <Eye size={16} />}
                 {selectedPOI.party_known !== false ? 'Ocultar a la party' : 'Mostrar a la party'}
