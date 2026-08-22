@@ -75,7 +75,9 @@ const FEATURES = [
     },
     {
         name: 'Cámara de ventilación', kind: 'Accion', resource: '4/Descanso Largo',
-        description: 'Adaptación de Catapulta integrada al Escupefuego. Hacé un disparo con DES + competencia; al impactar causa 3d8 + DES y aplica también el efecto de la bala cargada.',
+        combat_action: { attack: true, target: 'enemy', range: 60 },
+        consumes_tracker: { key: 'escupefuego-cargador', amount: 1 },
+        description: 'Adaptación de Catapulta integrada al Escupefuego. Hacé un disparo a distancia de hasta 60 pies con DES + competencia; al impactar causa 3d8 + DES y aplica también el efecto de la bala cargada.',
     },
     {
         name: 'Escupefuego · Munición normal', kind: 'Accion', resource: '1 bala',

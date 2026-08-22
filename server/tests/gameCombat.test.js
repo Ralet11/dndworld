@@ -207,12 +207,18 @@ test('party profiles preserve dual effects, weapon jams and persistent spells', 
         custom_features: [
             { name: 'Acorde radiante', kind: 'Bonus', resource: '4/Descanso Largo (MOD CAR)', description: 'Causa 1d4 + CAR de daño radiante y cura 1d8 PV a una criatura elegida que esté a 15 pies.' },
             { name: 'Escupefuego · Munición normal', kind: 'Accion', description: 'Disparo con DES + competencia. Daño: 1d8 + DES.' },
+            { name: 'Cámara de ventilación', kind: 'Accion', resource: '4/Descanso Largo', description: 'Disparo con DES + competencia. Daño: 3d8 + DES.' },
         ],
     };
-    const [chord, firearm] = customFeatureProfiles(character);
+    const [chord, firearm, chamber] = customFeatureProfiles(character);
     assert.equal(chord.secondaryHealing, '1d8');
     assert.equal(chord.secondaryHealingRange, 15);
     assert.equal(firearm.jamOnNaturalBelow, 7);
+    assert.equal(chamber.range, 60);
+    assert.equal(chamber.attackBonus, 6);
+    assert.equal(chamber.damage, '3d8+3');
+    assert.deepEqual(chamber.trackerCost, { key: 'escupefuego-cargador', amount: 1 });
+    assert.deepEqual(chamber.resource, { type: 'session-use', key: 'custom:2', max: 4, recovery: 'largo' });
     const hex = spellProfile({ id: 5, slug: 'hex', name: 'Hex', level: 1, range: '90 feet', casting_time: '1 Bonus Action', desc: 'Curse a target.' }, character);
     const agathys = spellProfile({ id: 6, slug: 'armor-of-agathys', name: 'Armor of Agathys', level: 1, range: 'Self', casting_time: '1 Bonus Action', desc: 'Gain temporary hit points.' }, character);
     assert.equal(hex.effect.type, 'MARK_EXTRA_DAMAGE');

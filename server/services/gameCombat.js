@@ -92,7 +92,13 @@ const CUSTOM_ACTION_PROFILES = {
     'escupefuego · municion runica': { jamOnNaturalBelow: 7 },
     'escupefuego · municion runica ii': { jamOnNaturalBelow: 7 },
     'escupefuego · municion de brumante': { jamOnNaturalBelow: 7 },
-    'camara de ventilacion': { jamOnNaturalBelow: 7 },
+    'camara de ventilacion': {
+        attack: true,
+        target: 'enemy',
+        range: 60,
+        jamOnNaturalBelow: 7,
+        consumes_tracker: { key: 'escupefuego-cargador', amount: 1 },
+    },
     'desatascar escupefuego': { clearWeaponJam: true },
 };
 
