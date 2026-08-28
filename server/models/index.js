@@ -24,6 +24,8 @@ const GameParticipant = require('./GameParticipant');
 const GameToken = require('./GameToken');
 const GameAsset = require('./GameAsset');
 const GameAssetFolder = require('./GameAssetFolder');
+const GameSceneSet = require('./GameSceneSet');
+const GameSceneCue = require('./GameSceneCue');
 const GameRoll = require('./GameRoll');
 const GameCombatAction = require('./GameCombatAction');
 const NpcAction = require('./NpcAction');
@@ -119,6 +121,14 @@ GameAssetFolder.hasMany(GameAssetFolder, { foreignKey: 'parent_id', as: 'childre
 GameAssetFolder.belongsTo(GameAssetFolder, { foreignKey: 'parent_id', as: 'parent', onDelete: 'RESTRICT' });
 GameAssetFolder.hasMany(GameAsset, { foreignKey: 'folder_id', as: 'assets', onDelete: 'SET NULL' });
 GameAsset.belongsTo(GameAssetFolder, { foreignKey: 'folder_id', as: 'folder', onDelete: 'SET NULL' });
+GameSession.hasMany(GameSceneSet, { foreignKey: 'session_id', as: 'sceneSets', onDelete: 'CASCADE' });
+GameSceneSet.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session', onDelete: 'CASCADE' });
+User.hasMany(GameSceneSet, { foreignKey: 'owner_user_id', as: 'gameSceneSets', onDelete: 'CASCADE' });
+GameSceneSet.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
+GameSceneSet.hasMany(GameSceneCue, { foreignKey: 'set_id', as: 'cues', onDelete: 'CASCADE' });
+GameSceneCue.belongsTo(GameSceneSet, { foreignKey: 'set_id', as: 'set', onDelete: 'CASCADE' });
+GameAsset.hasMany(GameSceneCue, { foreignKey: 'asset_id', as: 'sceneCues', onDelete: 'CASCADE' });
+GameSceneCue.belongsTo(GameAsset, { foreignKey: 'asset_id', as: 'asset', onDelete: 'CASCADE' });
 GameSession.hasMany(GameRoll, { foreignKey: 'session_id', as: 'rolls', onDelete: 'CASCADE' });
 GameRoll.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameRoll.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -162,6 +172,8 @@ module.exports = {
     GameToken,
     GameAsset,
     GameAssetFolder,
+    GameSceneSet,
+    GameSceneCue,
     GameRoll,
     GameCombatAction,
     NpcAction,

@@ -85,6 +85,14 @@ const GameSession = sequelize.define('GameSession', {
         allowNull: false,
         defaultValue: [],
     },
+    active_scene_set_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
+    active_scene_cue_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
     stage_vfx: {
         type: DataTypes.JSONB,
         allowNull: false,

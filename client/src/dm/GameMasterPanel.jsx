@@ -28,6 +28,7 @@ import {
   SkipBack,
   SkipForward,
   Sparkles,
+  Star,
   Skull,
   Sun,
   Sunset,
@@ -129,6 +130,12 @@ export default function GameMasterPanel() {
   const [assetFolders, setAssetFolders] = useState([]);
   const [activeAssetFolder, setActiveAssetFolder] = useState(ALL_ASSETS);
   const [assetFoldersOpen, setAssetFoldersOpen] = useState(false);
+  const [assetWorkspaceView, setAssetWorkspaceView] = useState('library');
+  const [sceneSets, setSceneSets] = useState([]);
+  const [selectedSceneSetId, setSelectedSceneSetId] = useState(null);
+  const [activeSceneSetId, setActiveSceneSetId] = useState(null);
+  const [activeSceneCueId, setActiveSceneCueId] = useState(null);
+  const [sceneSetsLoading, setSceneSetsLoading] = useState(false);
   const [assetLibraryLoading, setAssetLibraryLoading] = useState(false);
   const [assetUploadProgress, setAssetUploadProgress] = useState(null);
   const directAssetInputRef = useRef(null);
@@ -356,6 +363,43 @@ export default function GameMasterPanel() {
       if (fetchError.name !== 'AbortError') setError(fetchError.message);
     }).finally(() => {
       if (!controller.signal.aborted) setAssetLibraryLoading(false);
+    });
+    return () => controller.abort();
+  }, [session?.id]);
+
+  useEffect(() => {
+    if (!sceneSets.length) return;
+    const currentIndex = Math.max(0, sceneSets.findIndex(set => set.id === (activeSceneSetId || selectedSceneSetId)));
+    const setsToPreload = sceneSets.slice(currentIndex, currentIndex + 2);
+    const urls = new Set(setsToPreload.flatMap(set => (set.cues || []).map(cue => resolveMediaUrl(cue.asset?.url))).filter(Boolean));
+    urls.forEach(url => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = url;
+    });
+  }, [sceneSets, activeSceneSetId, selectedSceneSetId]);
+
+  useEffect(() => {
+    if (!session?.id) return undefined;
+    const controller = new AbortController();
+    setSceneSetsLoading(true);
+    fetch(`${API_URL}/api/game-assets/sets?sessionId=${encodeURIComponent(session.id)}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('dnd_token')}` },
+      signal: controller.signal,
+    }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'No se pudieron cargar los preparados.');
+      const nextSets = Array.isArray(data.sets) ? data.sets : [];
+      setSceneSets(nextSets);
+      setActiveSceneSetId(data.activeSetId || null);
+      setActiveSceneCueId(data.activeCueId || null);
+      setSelectedSceneSetId(current => current && nextSets.some(set => set.id === current)
+        ? current
+        : (data.activeSetId || nextSets[0]?.id || null));
+    }).catch(fetchError => {
+      if (fetchError.name !== 'AbortError') setError(fetchError.message);
+    }).finally(() => {
+      if (!controller.signal.aborted) setSceneSetsLoading(false);
     });
     return () => controller.abort();
   }, [session?.id]);
@@ -624,6 +668,118 @@ export default function GameMasterPanel() {
 
   const publishAsset = asset => publish(asset.url, asset.title, asset.type, asset.grid_enabled);
 
+  const reloadSceneSets = async preferredSetId => {
+    const data = await assetApi(`/sets?sessionId=${encodeURIComponent(session.id)}`);
+    const nextSets = Array.isArray(data.sets) ? data.sets : [];
+    setSceneSets(nextSets);
+    setActiveSceneSetId(data.activeSetId || null);
+    setActiveSceneCueId(data.activeCueId || null);
+    setSelectedSceneSetId(current => {
+      const candidate = preferredSetId || current || data.activeSetId;
+      return nextSets.some(set => set.id === candidate) ? candidate : (nextSets[0]?.id || null);
+    });
+    return nextSets;
+  };
+
+  const createSceneSet = async () => {
+    const name = window.prompt('Nombre del nuevo set', `Set ${sceneSets.length + 1}`);
+    if (!name?.trim()) return;
+    try {
+      const data = await assetApi('/sets', { method: 'POST', body: JSON.stringify({ sessionId: session.id, name }) });
+      setSceneSets(current => [...current, data.set]);
+      setSelectedSceneSetId(data.set.id);
+      setAssetWorkspaceView('prepared');
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const renameSceneSet = async set => {
+    const name = window.prompt('Nuevo nombre del set', set.name);
+    if (!name?.trim() || name.trim() === set.name) return;
+    try {
+      await assetApi(`/sets/${set.id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+      await reloadSceneSets(set.id);
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const deleteSceneSet = async set => {
+    if (!window.confirm(`¿Eliminar “${set.name}” y su secuencia? Los assets seguirán en la biblioteca.`)) return;
+    try {
+      await assetApi(`/sets/${set.id}`, { method: 'DELETE' });
+      await reloadSceneSets();
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const addAssetToSceneSet = async (setId, asset) => {
+    try {
+      await assetApi(`/sets/${setId}/cues`, {
+        method: 'POST',
+        body: JSON.stringify({ assetId: asset.id, presentationMode: asset.type === 'MAP' ? 'COMBAT' : 'NARRATIVE' }),
+      });
+      await reloadSceneSets(setId);
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const updateSceneCue = async (setId, cueId, changes) => {
+    try {
+      await assetApi(`/cues/${cueId}`, { method: 'PATCH', body: JSON.stringify(changes) });
+      await reloadSceneSets(setId);
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const removeSceneCue = async (setId, cueId) => {
+    try {
+      await assetApi(`/cues/${cueId}`, { method: 'DELETE' });
+      await reloadSceneSets(setId);
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const moveSceneCue = async (set, cueId, direction) => {
+    const cues = [...(set.cues || [])];
+    const index = cues.findIndex(cue => cue.id === cueId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= cues.length) return;
+    [cues[index], cues[target]] = [cues[target], cues[index]];
+    setSceneSets(current => current.map(item => item.id === set.id ? { ...item, cues } : item));
+    try {
+      await assetApi(`/sets/${set.id}`, { method: 'PATCH', body: JSON.stringify({ cueIds: cues.map(cue => cue.id) }) });
+    } catch (setError) {
+      setError(setError.message);
+      await reloadSceneSets(set.id);
+    }
+  };
+
+  const showSceneCue = async (set, cue) => {
+    if (!set || !cue?.asset) return;
+    try {
+      const data = await assetApi(`/sets/${set.id}/activate`, { method: 'POST', body: JSON.stringify({ cueId: cue.id }) });
+      setActiveSceneSetId(data.setId);
+      setActiveSceneCueId(data.cueId);
+      setSelectedSceneSetId(data.setId);
+      setCombatMode(data.cue.presentation_mode === 'COMBAT' ? 'COMBAT' : 'NARRATIVE');
+      publishAsset(data.cue.asset);
+    } catch (setError) {
+      setError(setError.message);
+    }
+  };
+
+  const startSceneSet = async set => {
+    const cue = (set.cues || []).find(item => item.is_default) || set.cues?.[0];
+    if (!cue) return setError('Agrega al menos una imagen a este set.');
+    await showSceneCue(set, cue);
+  };
+
   const reorderAssets = (draggedId, targetId) => {
     if (!draggedId || draggedId === targetId) return;
     const ordered = [...(session.assets || [])];
@@ -757,6 +913,16 @@ export default function GameMasterPanel() {
   const filteredScenes = activeAssetFolder === ALL_ASSETS
     ? visibleScenes.filter(scene => !normalizedAssetSearch || scene.title.toLocaleLowerCase('es').includes(normalizedAssetSearch))
     : [];
+  const selectedSceneSet = sceneSets.find(set => set.id === selectedSceneSetId) || null;
+  const activeSceneSet = sceneSets.find(set => set.id === activeSceneSetId) || null;
+  const activeSceneCueIndex = activeSceneSet?.cues?.findIndex(cue => cue.id === activeSceneCueId) ?? -1;
+  const previousSceneCue = activeSceneCueIndex > 0 ? activeSceneSet.cues[activeSceneCueIndex - 1] : null;
+  const nextSceneCue = activeSceneCueIndex >= 0 ? activeSceneSet?.cues?.[activeSceneCueIndex + 1] || null : null;
+  const activeSceneSetIndex = sceneSets.findIndex(set => set.id === activeSceneSetId);
+  const nextSceneSet = activeSceneSetIndex >= 0 ? sceneSets[activeSceneSetIndex + 1] || null : null;
+  const sceneSetPickerAssets = (session.assets || []).filter(asset => (
+    !normalizedAssetSearch || asset.title.toLocaleLowerCase('es').includes(normalizedAssetSearch)
+  ));
   const sceneNpcOrder = new Map((session.scene_npcs || []).map((npc, index) => [npc.id, index]));
   const filteredNpcs = npcs
     .filter(npc => npc.name?.toLocaleLowerCase('es').includes(npcSearch.trim().toLocaleLowerCase('es')))
@@ -945,6 +1111,30 @@ export default function GameMasterPanel() {
                 toolbarHost={stageToolbarHost}
               />}
             </div>
+            {sceneSets.length > 0 && (
+              <div className="game-scene-runner" aria-label="Control de secuencias preparadas">
+                <label>
+                  <span>Preparado</span>
+                  <select value={selectedSceneSetId || ''} onChange={event => setSelectedSceneSetId(event.target.value)}>
+                    {sceneSets.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
+                  </select>
+                </label>
+                {!activeSceneSet || selectedSceneSet?.id !== activeSceneSet.id ? (
+                  <button className="is-primary" onClick={() => startSceneSet(selectedSceneSet)} disabled={!selectedSceneSet?.cues?.length}><Play size={13} /> {activeSceneSet ? 'Cambiar a este set' : 'Iniciar set'}</button>
+                ) : (
+                  <>
+                    <button onClick={() => showSceneCue(activeSceneSet, previousSceneCue)} disabled={!previousSceneCue} title="Escena anterior"><SkipBack size={14} /></button>
+                    <div className="game-scene-runner-status">
+                      <span>En mesa</span>
+                      <strong>{activeSceneSet.name}</strong>
+                      <small>{activeSceneCueIndex + 1} / {activeSceneSet.cues?.length || 0}</small>
+                    </div>
+                    <button onClick={() => showSceneCue(activeSceneSet, nextSceneCue)} disabled={!nextSceneCue} title="Siguiente escena"><SkipForward size={14} /></button>
+                    <button className="is-primary" onClick={() => startSceneSet(nextSceneSet)} disabled={!nextSceneSet?.cues?.length} title="Publica la escena inicial del siguiente set">Siguiente set <ChevronUp size={13} /></button>
+                  </>
+                )}
+              </div>
+            )}
             <div className="game-scene-actions">
               <button disabled={session.combat_state?.mode === 'ATLAS'} onClick={() => openComposer(session.shared_type === 'MAP' ? 'MAP' : 'IMAGE')}><Upload size={14} /> Reemplazar</button>
               <button disabled={session.combat_state?.mode === 'ATLAS'} onClick={() => emit('game:share', { sessionId: session.id, type: 'NONE' })}><EyeOff size={14} /> Ocultar</button>
@@ -996,6 +1186,11 @@ export default function GameMasterPanel() {
               </div>
             </div>
 
+            <div className="game-library-mode-tabs" role="tablist" aria-label="Vista de la biblioteca">
+              <button role="tab" aria-selected={assetWorkspaceView === 'library'} className={assetWorkspaceView === 'library' ? 'is-active' : ''} onClick={() => setAssetWorkspaceView('library')}><ImageIcon size={13} /> Biblioteca</button>
+              <button role="tab" aria-selected={assetWorkspaceView === 'prepared'} className={assetWorkspaceView === 'prepared' ? 'is-active' : ''} onClick={() => setAssetWorkspaceView('prepared')}><Sparkles size={13} /> Preparados <span>{sceneSets.length}</span></button>
+            </div>
+
             <input
               ref={directAssetInputRef}
               className="game-hidden-file-input"
@@ -1020,6 +1215,7 @@ export default function GameMasterPanel() {
               }}
             />
 
+            {assetWorkspaceView === 'library' ? (
             <div className="game-asset-browser">
               <aside className={`game-folder-tree${assetFoldersOpen ? ' is-open' : ''}`} aria-label="Carpetas de assets">
                 <button className={activeAssetFolder === ALL_ASSETS ? 'is-active' : ''} onClick={() => { setActiveAssetFolder(ALL_ASSETS); setAssetFoldersOpen(false); }}><FolderOpen size={14} /><span>Toda la biblioteca</span><small>{(session.assets || []).length}</small></button>
@@ -1185,6 +1381,87 @@ export default function GameMasterPanel() {
             </div>
               </div>
             </div>
+            ) : (
+              <div className="game-scene-set-workspace">
+                <div className="game-scene-set-tabs">
+                  <div>
+                    {sceneSets.map(set => (
+                      <button key={set.id} className={`${set.id === selectedSceneSetId ? 'is-active' : ''}${set.id === activeSceneSetId ? ' is-live' : ''}`} onClick={() => setSelectedSceneSetId(set.id)}>
+                        {set.id === activeSceneSetId && <Radio size={11} />}
+                        <span>{set.name}</span>
+                        <small>{set.cues?.length || 0}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <button className="game-new-scene-set" onClick={createSceneSet}><Plus size={13} /> Nuevo set</button>
+                </div>
+
+                {sceneSetsLoading ? (
+                  <div className="game-scene-set-empty"><i className="game-button-spinner" /><strong>Cargando preparados...</strong></div>
+                ) : selectedSceneSet ? (
+                  <>
+                    <header className="game-scene-set-header">
+                      <div>
+                        <span className="game-kicker">Secuencia preparada</span>
+                        <h3>{selectedSceneSet.name}</h3>
+                        <p>Ordena las escenas y elige cuál aparece primero. Mostrar publica al instante para toda la mesa.</p>
+                      </div>
+                      <div>
+                        <button onClick={() => renameSceneSet(selectedSceneSet)}>Renombrar</button>
+                        <button className="is-danger" onClick={() => deleteSceneSet(selectedSceneSet)}><Trash2 size={13} /> Eliminar</button>
+                        <button className="is-primary" onClick={() => startSceneSet(selectedSceneSet)} disabled={!selectedSceneSet.cues?.length}><Play size={13} /> Iniciar set</button>
+                      </div>
+                    </header>
+
+                    <div className="game-scene-cue-grid">
+                      {(selectedSceneSet.cues || []).map((cue, index) => (
+                        <article key={cue.id} className={`${cue.id === activeSceneCueId ? 'is-live' : ''}${cue.is_default ? ' is-default' : ''}`}>
+                          <div className="game-scene-cue-preview">
+                            <img src={resolveMediaUrl(cue.asset?.url)} alt="" />
+                            <span>{String(index + 1).padStart(2, '0')}</span>
+                            {cue.is_default && <small><Star size={10} /> Inicial</small>}
+                            {cue.id === activeSceneCueId && <em><Radio size={10} /> En mesa</em>}
+                          </div>
+                          <div className="game-scene-cue-copy"><strong>{cue.asset?.title || 'Asset no disponible'}</strong><small>{cue.presentation_mode === 'COMBAT' ? 'Mapa de combate' : 'Escena narrativa'}</small></div>
+                          <div className="game-scene-cue-controls">
+                            <button className="is-show" onClick={() => showSceneCue(selectedSceneSet, cue)} disabled={!cue.asset}><Eye size={12} /> Mostrar</button>
+                            <select value={cue.presentation_mode} onChange={event => updateSceneCue(selectedSceneSet.id, cue.id, { presentationMode: event.target.value })} aria-label="Modo de presentación">
+                              <option value="NARRATIVE">Narrativa</option>
+                              <option value="COMBAT">Combate</option>
+                            </select>
+                            <button className={cue.is_default ? 'is-selected' : ''} onClick={() => updateSceneCue(selectedSceneSet.id, cue.id, { isDefault: true })} title="Usar como escena inicial"><Star size={12} /></button>
+                            <button onClick={() => moveSceneCue(selectedSceneSet, cue.id, -1)} disabled={index === 0} title="Mover antes"><ChevronUp size={12} /></button>
+                            <button onClick={() => moveSceneCue(selectedSceneSet, cue.id, 1)} disabled={index === selectedSceneSet.cues.length - 1} title="Mover después"><ChevronDown size={12} /></button>
+                            <button className="is-danger" onClick={() => removeSceneCue(selectedSceneSet.id, cue.id)} title="Quitar del set"><Trash2 size={12} /></button>
+                          </div>
+                        </article>
+                      ))}
+                      {!selectedSceneSet.cues?.length && <div className="game-scene-set-empty"><Sparkles size={23} /><strong>Este set todavía está vacío</strong><span>Agrega imágenes desde tu biblioteca para preparar la secuencia.</span></div>}
+                    </div>
+
+                    <section className="game-scene-set-picker">
+                      <header>
+                        <div><span className="game-kicker">Biblioteca</span><strong>Agregar al set</strong></div>
+                        <label className="game-asset-search"><Search size={12} /><input value={assetSearch} onChange={event => setAssetSearch(event.target.value)} placeholder="Buscar assets..." />{assetSearch && <button onClick={() => setAssetSearch('')} aria-label="Limpiar búsqueda"><X size={10} /></button>}</label>
+                      </header>
+                      <div className="game-scene-picker-grid">
+                        {sceneSetPickerAssets.map(asset => (
+                          <button key={asset.id} onClick={() => addAssetToSceneSet(selectedSceneSet.id, asset)}>
+                            <img src={resolveMediaUrl(asset.url)} alt="" />
+                            <span>{asset.title}</span>
+                            <small>{asset.type === 'MAP' ? 'Mapa' : 'Narrativa'}</small>
+                            <i><Plus size={13} /></i>
+                          </button>
+                        ))}
+                        {!sceneSetPickerAssets.length && <p>No hay assets que coincidan con la búsqueda.</p>}
+                      </div>
+                    </section>
+                  </>
+                ) : (
+                  <div className="game-scene-set-empty is-intro"><Sparkles size={26} /><strong>Prepara tu sesión por bloques</strong><span>Agrupa escenas y mapas en sets. Al iniciar uno se mostrará su imagen principal y el siguiente quedará precargado.</span><button onClick={createSceneSet}><Plus size={13} /> Crear primer set</button></div>
+                )}
+              </div>
+            )}
             {(assetOverTray || trayUploading) && (
               <div className={`game-tray-drop-overlay${trayUploading ? ' is-uploading' : ''}`}>
                 {trayUploading ? (
