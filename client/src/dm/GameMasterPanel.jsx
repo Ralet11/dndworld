@@ -128,6 +128,7 @@ export default function GameMasterPanel() {
   const [assetSearch, setAssetSearch] = useState('');
   const [assetFolders, setAssetFolders] = useState([]);
   const [activeAssetFolder, setActiveAssetFolder] = useState(ALL_ASSETS);
+  const [assetFoldersOpen, setAssetFoldersOpen] = useState(false);
   const [assetLibraryLoading, setAssetLibraryLoading] = useState(false);
   const [assetUploadProgress, setAssetUploadProgress] = useState(null);
   const directAssetInputRef = useRef(null);
@@ -146,6 +147,10 @@ export default function GameMasterPanel() {
   const [combatNoticeStartedAt] = useState(() => Date.now());
   const [worldState, setWorldState] = useState({ global_time: '12:00', day_period: 'Día', temperature_c: 24 });
   const deferredAssetSearch = useDeferredValue(assetSearch);
+
+  useEffect(() => {
+    if (rightTab !== 'assets') setAssetFoldersOpen(false);
+  }, [rightTab]);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -1016,11 +1021,11 @@ export default function GameMasterPanel() {
             />
 
             <div className="game-asset-browser">
-              <aside className="game-folder-tree" aria-label="Carpetas de assets">
-                <button className={activeAssetFolder === ALL_ASSETS ? 'is-active' : ''} onClick={() => setActiveAssetFolder(ALL_ASSETS)}><FolderOpen size={14} /><span>Toda la biblioteca</span><small>{(session.assets || []).length}</small></button>
+              <aside className={`game-folder-tree${assetFoldersOpen ? ' is-open' : ''}`} aria-label="Carpetas de assets">
+                <button className={activeAssetFolder === ALL_ASSETS ? 'is-active' : ''} onClick={() => { setActiveAssetFolder(ALL_ASSETS); setAssetFoldersOpen(false); }}><FolderOpen size={14} /><span>Toda la biblioteca</span><small>{(session.assets || []).length}</small></button>
                 <button
                   className={activeAssetFolder === UNFILED_ASSETS ? 'is-active' : ''}
-                  onClick={() => setActiveAssetFolder(UNFILED_ASSETS)}
+                  onClick={() => { setActiveAssetFolder(UNFILED_ASSETS); setAssetFoldersOpen(false); }}
                   onDragOver={event => {
                     if (Array.from(event.dataTransfer.types).includes('application/x-game-asset')) event.preventDefault();
                   }}
@@ -1040,7 +1045,7 @@ export default function GameMasterPanel() {
                     key={folder.id}
                     className={activeAssetFolder === folder.id ? 'is-active' : ''}
                     style={{ '--folder-depth': folder.depth }}
-                    onClick={() => setActiveAssetFolder(folder.id)}
+                    onClick={() => { setActiveAssetFolder(folder.id); setAssetFoldersOpen(false); }}
                     onDragOver={event => {
                       if (Array.from(event.dataTransfer.types).includes('application/x-game-asset')) event.preventDefault();
                     }}
@@ -1068,7 +1073,10 @@ export default function GameMasterPanel() {
                     {activeAssetFolder === UNFILED_ASSETS && <><span>/</span><strong>Sin carpeta</strong></>}
                     {activeFolderCrumbs.map(folder => <span key={folder.id}>/ <button onClick={() => setActiveAssetFolder(folder.id)}>{folder.name}</button></span>)}
                   </div>
-                  {activeFolderRecord && <div><button onClick={() => renameAssetFolder(activeFolderRecord)}>Renombrar</button><button className="is-danger" onClick={() => deleteAssetFolder(activeFolderRecord)}>Eliminar carpeta</button></div>}
+                  <div className="game-folder-location-actions">
+                    {activeFolderRecord && <><button onClick={() => renameAssetFolder(activeFolderRecord)}>Renombrar</button><button className="is-danger" onClick={() => deleteAssetFolder(activeFolderRecord)}>Eliminar</button></>}
+                    <button className={assetFoldersOpen ? 'game-folder-browser-toggle is-active' : 'game-folder-browser-toggle'} onClick={() => setAssetFoldersOpen(open => !open)} aria-expanded={assetFoldersOpen}><FolderOpen size={13} /> Carpetas</button>
+                  </div>
                 </div>
 
             <div className="game-asset-toolbar">

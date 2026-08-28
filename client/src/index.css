@@ -5008,7 +5008,7 @@ a:focus-visible {
     transition: opacity 220ms ease, filter 220ms ease;
   }
   .game-control-grid.is-assets-expanded {
-    grid-template-columns: minmax(390px, 5fr) minmax(640px, 7fr);
+    grid-template-columns: minmax(470px, 1fr) minmax(590px, 1fr);
   }
   .game-control-grid.is-assets-expanded .game-command-bar {
     overflow: hidden;
@@ -5032,7 +5032,7 @@ a:focus-visible {
   .game-control-grid.is-assets-expanded .game-media-library.is-dock-active {
     display: flex;
     flex-direction: column;
-    padding: 18px 20px 20px;
+    padding: 15px 16px 18px;
     overflow: hidden;
     background:
       radial-gradient(circle at 78% 0, rgba(167, 126, 52, .09), transparent 28rem),
@@ -5040,11 +5040,11 @@ a:focus-visible {
     box-shadow: -22px 0 55px rgba(0, 0, 0, .34);
   }
   .game-control-grid.is-assets-expanded .game-library-header {
-    min-height: 83px;
+    min-height: 68px;
     flex: 0 0 auto;
     align-items: center;
     gap: 18px;
-    padding-bottom: 15px;
+    padding-bottom: 11px;
     border-bottom: 1px solid #303a34;
   }
   .game-control-grid.is-assets-expanded .game-library-title {
@@ -5066,14 +5066,11 @@ a:focus-visible {
     line-height: 1;
   }
   .game-control-grid.is-assets-expanded .game-library-title p {
-    display: block;
-    margin-top: 5px;
-    color: #7f8981;
-    font-size: 9px;
+    display: none;
   }
   .game-control-grid.is-assets-expanded .game-library-actions {
-    max-width: 520px;
-    flex: 1 1 430px;
+    max-width: 410px;
+    flex: 1 1 350px;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 7px;
@@ -5081,10 +5078,10 @@ a:focus-visible {
   .game-control-grid.is-assets-expanded .game-library-actions button {
     width: auto;
     min-height: 34px;
-    padding: 0 10px;
+    padding: 0 8px;
     justify-content: center;
     gap: 6px;
-    font-size: 8px;
+    font-size: 7px;
     white-space: nowrap;
   }
   .game-control-grid.is-assets-expanded .game-library-actions .game-library-close {
@@ -5094,16 +5091,33 @@ a:focus-visible {
   .game-control-grid.is-assets-expanded .game-asset-browser {
     flex: 1;
     min-height: 0;
-    margin-top: 14px;
-    grid-template-columns: 218px minmax(0, 1fr);
-    gap: 16px;
+    position: relative;
+    display: block;
+    margin-top: 10px;
   }
   .game-control-grid.is-assets-expanded .game-folder-tree {
+    width: 270px;
     min-height: 0;
     max-height: none;
+    position: absolute;
+    inset: 46px auto 0 0;
+    z-index: 18;
     padding: 9px;
+    opacity: 0;
+    visibility: hidden;
     border-color: #344039;
     background: rgba(5, 10, 8, .72);
+    box-shadow: 18px 18px 45px rgba(0, 0, 0, .58);
+    backdrop-filter: blur(9px);
+    transform: translateX(-14px);
+    pointer-events: none;
+    transition: opacity 160ms ease, visibility 160ms ease, transform 180ms ease;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-tree.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+    pointer-events: auto;
   }
   .game-control-grid.is-assets-expanded .game-folder-tree > button {
     min-height: 38px;
@@ -5128,6 +5142,7 @@ a:focus-visible {
     font-size: 9px;
   }
   .game-control-grid.is-assets-expanded .game-asset-browser-main {
+    height: 100%;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -5143,6 +5158,25 @@ a:focus-visible {
   .game-control-grid.is-assets-expanded .game-folder-location > div:last-child button {
     min-height: 28px;
     padding: 0 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-location-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-location-actions .game-folder-browser-toggle {
+    min-height: 30px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #b89b62;
+    border-color: #66502d;
+    text-transform: uppercase;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-location-actions .game-folder-browser-toggle.is-active {
+    color: #ebd49a;
+    background: rgba(128, 102, 54, .16);
   }
   .game-control-grid.is-assets-expanded .game-asset-toolbar {
     min-height: 46px;
@@ -5183,6 +5217,7 @@ a:focus-visible {
   .game-control-grid.is-assets-expanded .game-library-strip > button {
     width: 100%;
     min-width: 0;
+    min-height: 125px;
     aspect-ratio: 1.55;
     border-color: #3a453f;
     box-shadow: 0 8px 20px rgba(0, 0, 0, .24);
@@ -5218,7 +5253,7 @@ a:focus-visible {
 
 @media (min-width: 901px) and (max-width: 1180px) {
   .game-control-grid.is-assets-expanded {
-    grid-template-columns: minmax(340px, 4fr) minmax(560px, 7fr);
+    grid-template-columns: minmax(390px, 1fr) minmax(510px, 1fr);
   }
   .game-control-grid.is-assets-expanded .game-media-library.is-dock-active {
     padding-inline: 14px;
@@ -5236,10 +5271,6 @@ a:focus-visible {
     width: 34px;
     padding: 0;
     font-size: 0;
-  }
-  .game-control-grid.is-assets-expanded .game-asset-browser {
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 10px;
   }
   .game-control-grid.is-assets-expanded .game-library-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
