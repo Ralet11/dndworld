@@ -823,7 +823,7 @@ export default function GameMasterPanel() {
 
   return (
     <div className="game-dm-shell game-control-room">
-      <div className="game-control-grid">
+      <div className={`game-control-grid${rightTab === 'assets' ? ' is-assets-expanded' : ''}`}>
       <header className="game-command-bar">
         <div className="game-command-campaign">
           <span>Campaña activa</span>
@@ -976,13 +976,18 @@ export default function GameMasterPanel() {
             }}
           >
             <div className="game-library-header">
-              <div><span className="game-kicker">Biblioteca del director</span><h2>Escenas y mapas</h2></div>
+              <div className="game-library-title">
+                <span className="game-kicker">Biblioteca del director</span>
+                <h2>Biblioteca de assets</h2>
+                <p>Busca, organiza y lleva contenido a la mesa.</p>
+              </div>
               <div className="game-library-actions">
                 <button onClick={createAssetFolder}><FolderPlus size={14} /> Nueva carpeta</button>
                 <button onClick={() => { directAssetTypeRef.current = 'IMAGE'; directAssetInputRef.current?.click(); }}><ImageIcon size={14} /> Subir imágenes</button>
                 <button className="is-map-action" onClick={() => { directAssetTypeRef.current = 'MAP'; directAssetInputRef.current?.click(); }}><MapIcon size={14} /> Subir mapas</button>
                 <button onClick={() => folderImportInputRef.current?.click()}><Upload size={14} /> Importar carpeta</button>
                 <button onClick={() => openComposer('IMAGE', true)}>Usar URL</button>
+                <button className="game-library-close" onClick={() => setRightTab('session')} aria-label="Cerrar biblioteca" title="Volver a Partida"><X size={16} /></button>
               </div>
             </div>
 

@@ -4994,6 +4994,258 @@ a:focus-visible {
   .game-command-identity { display: none; }
 }
 
+/* Expanded asset workspace: temporarily gives the library room to browse. */
+.game-library-title { min-width: 0; }
+.game-library-title p { display: none; }
+.game-library-close { color: #858d85 !important; }
+.game-library-close:hover { color: #e4d5b8 !important; border-color: #796039 !important; }
+
+@media (min-width: 901px) {
+  .game-control-grid {
+    transition: grid-template-columns 280ms cubic-bezier(.2, .72, .24, 1);
+  }
+  .game-control-grid .game-scene-frame {
+    transition: opacity 220ms ease, filter 220ms ease;
+  }
+  .game-control-grid.is-assets-expanded {
+    grid-template-columns: minmax(390px, 5fr) minmax(640px, 7fr);
+  }
+  .game-control-grid.is-assets-expanded .game-command-bar {
+    overflow: hidden;
+  }
+  .game-control-grid.is-assets-expanded .game-command-scene,
+  .game-control-grid.is-assets-expanded .game-command-presence,
+  .game-control-grid.is-assets-expanded .game-command-turn,
+  .game-control-grid.is-assets-expanded .game-primary-action,
+  .game-control-grid.is-assets-expanded .game-session-actions,
+  .game-control-grid.is-assets-expanded .game-return-dashboard {
+    display: none;
+  }
+  .game-control-grid.is-assets-expanded .game-command-campaign {
+    width: min(220px, 46vw);
+    flex: 0 1 220px;
+  }
+  .game-control-grid.is-assets-expanded .game-scene-frame {
+    opacity: .72;
+    filter: saturate(.72) brightness(.8);
+  }
+  .game-control-grid.is-assets-expanded .game-media-library.is-dock-active {
+    display: flex;
+    flex-direction: column;
+    padding: 18px 20px 20px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 78% 0, rgba(167, 126, 52, .09), transparent 28rem),
+      linear-gradient(180deg, #0b1310, #070c0b 72%);
+    box-shadow: -22px 0 55px rgba(0, 0, 0, .34);
+  }
+  .game-control-grid.is-assets-expanded .game-library-header {
+    min-height: 83px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 18px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #303a34;
+  }
+  .game-control-grid.is-assets-expanded .game-library-title {
+    flex: 1 1 205px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-title .game-kicker {
+    color: #a3834a;
+    font-size: 8px;
+    letter-spacing: .15em;
+  }
+  .dm-surface .game-control-grid.is-assets-expanded .game-library-title h2 {
+    margin-top: 3px;
+    color: #eadfc9 !important;
+    font-size: clamp(21px, 1.8vw, 27px);
+    line-height: 1;
+  }
+  .game-control-grid.is-assets-expanded .game-library-title p {
+    display: block;
+    margin-top: 5px;
+    color: #7f8981;
+    font-size: 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-actions {
+    max-width: 520px;
+    flex: 1 1 430px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 7px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-actions button {
+    width: auto;
+    min-height: 34px;
+    padding: 0 10px;
+    justify-content: center;
+    gap: 6px;
+    font-size: 8px;
+    white-space: nowrap;
+  }
+  .game-control-grid.is-assets-expanded .game-library-actions .game-library-close {
+    width: 34px;
+    padding: 0;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-browser {
+    flex: 1;
+    min-height: 0;
+    margin-top: 14px;
+    grid-template-columns: 218px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-tree {
+    min-height: 0;
+    max-height: none;
+    padding: 9px;
+    border-color: #344039;
+    background: rgba(5, 10, 8, .72);
+  }
+  .game-control-grid.is-assets-expanded .game-folder-tree > button {
+    min-height: 38px;
+    padding-right: 9px;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: 8px;
+    font-size: 10px;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-tree > button svg {
+    width: 16px;
+    height: 16px;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-tree > button small {
+    min-width: 22px;
+    padding: 2px 5px;
+    border-radius: 10px;
+    background: #141d18;
+    font-size: 8px;
+    text-align: center;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-tree > p {
+    font-size: 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-browser-main {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-location {
+    min-height: 38px;
+    flex: 0 0 auto;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-location > div,
+  .game-control-grid.is-assets-expanded .game-folder-location button {
+    font-size: 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-folder-location > div:last-child button {
+    min-height: 28px;
+    padding: 0 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-toolbar {
+    min-height: 46px;
+    flex: 0 0 auto;
+    margin: 7px 0 10px;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-toolbar button {
+    height: 44px;
+    padding: 0 15px;
+    font-size: 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-search {
+    width: min(270px, 40%);
+    height: 32px;
+    padding: 0 9px;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-search input {
+    font-size: 10px;
+  }
+  .game-control-grid.is-assets-expanded .game-broadcast-composer {
+    flex: 0 0 auto;
+    max-height: 48%;
+    overflow-y: auto;
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip {
+    min-height: 0;
+    flex: 1;
+    margin-top: 0;
+    padding: 2px 5px 18px 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    gap: 12px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #66522f #09100d;
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip article,
+  .game-control-grid.is-assets-expanded .game-library-strip > button {
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 1.55;
+    border-color: #3a453f;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .24);
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip article:hover,
+  .game-control-grid.is-assets-expanded .game-library-strip > button:hover {
+    border-color: #9b773d;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, .38), 0 0 0 1px rgba(183, 141, 66, .12);
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip article > span,
+  .game-control-grid.is-assets-expanded .game-library-strip > button > span {
+    min-height: 32px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip article > small,
+  .game-control-grid.is-assets-expanded .game-library-strip > button > small {
+    top: 8px;
+    right: 8px;
+    padding: 4px 6px;
+    font-size: 7px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip article > i {
+    top: 7px;
+    left: 7px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-empty {
+    min-height: 180px;
+    grid-column: 1 / -1;
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .game-control-grid.is-assets-expanded {
+    grid-template-columns: minmax(340px, 4fr) minmax(560px, 7fr);
+  }
+  .game-control-grid.is-assets-expanded .game-media-library.is-dock-active {
+    padding-inline: 14px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-header {
+    align-items: flex-start;
+  }
+  .game-control-grid.is-assets-expanded .game-library-title p {
+    display: none;
+  }
+  .game-control-grid.is-assets-expanded .game-library-actions {
+    flex-basis: 300px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-actions button {
+    width: 34px;
+    padding: 0;
+    font-size: 0;
+  }
+  .game-control-grid.is-assets-expanded .game-asset-browser {
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .game-control-grid.is-assets-expanded .game-library-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Live dice */
 .game-dice-tray {
   margin-top: 10px;
