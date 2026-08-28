@@ -35,3 +35,11 @@ Si `.local-context/` no existe, indícalo y reconstruye sólo la información ne
 - Actualizar `.local-context/OPERATIONS.md` cuando cambien host, rutas, dominios, puertos, procesos o procedimiento de despliegue.
 - Actualizar `.local-context/PROJECT_CONTEXT.md` sólo cuando cambie la arquitectura estable o el alcance del producto.
 - Mantener los documentos breves, concretos, fechados y libres de secretos.
+
+## Sincronización del lore
+
+- `ecos_de_la_guerra` es la fuente editorial; D&D World consume un snapshot versionado, no el repositorio completo.
+- Antes de sincronizar, leer `server/docs/ecos-lore-sync.md` y confirmar que Ecos no tenga cambios sin commit.
+- Ejecutar primero `npm --prefix server run lore:sync -- ../ecos_de_la_guerra` (vista previa) y luego repetir con `--apply`.
+- Revisar y publicar los cambios generados en `server/data/lore/`; nunca sincronizar ZIP, DOCX, históricos o imágenes no referenciadas.
+- La sincronización de lore no autoriza cambios automáticos en PostgreSQL, S3, fichas, POI ni mecánicas de combate.

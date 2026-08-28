@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node tests/gameCombat.test.js",
     "combat:audit": "node scripts/audit_combat_actions.js",
+    "lore:sync": "node scripts/sync_ecos_lore.js",
     "seed": "node scripts/seed.js",
     "seed:reset": "node scripts/reset-and-seed.js --force",
     "seed:export": "node export_seed.js",
