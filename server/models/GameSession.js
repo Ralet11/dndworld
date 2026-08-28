@@ -98,6 +98,11 @@ const GameSession = sequelize.define('GameSession', {
         allowNull: false,
         defaultValue: [],
     },
+    table_messages: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+    },
     map_fit: {
         type: DataTypes.STRING(12),
         allowNull: false,

@@ -10,6 +10,7 @@ import GameAudioPlayer from './GameAudioPlayer';
 import TurnActionPanel from './TurnActionPanel';
 import ReactionPrompt from './ReactionPrompt';
 import CombatResultPrompt from './CombatResultPrompt';
+import TableChat from './TableChat';
 
 const MapView = lazy(() => import('../Lore/MapView'));
 
@@ -418,6 +419,7 @@ export default function GamePlayerPanel() {
 
         <aside className="game-player-character" aria-label="Ficha básica del personaje">
           <GameAudioPlayer session={session} />
+          <TableChat session={session} socket={socket} user={user} onError={setError} />
           <TurnActionPanel session={session} socket={socket} isMyTurn={isMyTurn} targeting={combatTargeting} onTargetingChange={setCombatTargeting} onError={setError} />
           {character ? <PlayerCombatSheet character={character} onRoll={rollDice} onOpenSheet={setSheetSection} /> : <div className="game-panel-empty">No se pudo cargar tu personaje.</div>}
         </aside>

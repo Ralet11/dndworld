@@ -1602,6 +1602,40 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, sessionId);
     });
 
+    socket.on('game:send-table-message', async ({ sessionId, text } = {}, reply = () => {}) => {
+        try {
+            const session = await GameSession.findByPk(sessionId);
+            if (!session || session.status === 'FINISHED') return reply({ ok: false, message: 'La sala ya no está disponible.' });
+
+            const isSessionDm = isDm(socket) && String(session.dm_user_id) === String(socket.user.id);
+            const participant = isSessionDm ? null : await GameParticipant.findOne({
+                where: { session_id: session.id, user_id: socket.user.id },
+                attributes: ['id'],
+            });
+            if (!isSessionDm && !participant) return reply({ ok: false, message: 'No perteneces a esta sala.' });
+
+            const message = String(text || '').trim().replace(/\s+/g, ' ').slice(0, 700);
+            if (!message) return reply({ ok: false, message: 'Escribe un mensaje antes de enviarlo.' });
+
+            const messages = Array.isArray(session.table_messages) ? session.table_messages : [];
+            session.table_messages = [...messages, {
+                id: randomUUID(),
+                text: message,
+                author_user_id: socket.user.id,
+                author_name: String(socket.user?.username || (isSessionDm ? 'Dungeon Master' : 'Jugador')).slice(0, 80),
+                author_role: isSessionDm ? 'DM' : 'PLAYER',
+                created_at: new Date().toISOString(),
+            }].slice(-120);
+            session.changed('table_messages', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:send-table-message error:', error);
+            reply({ ok: false, message: 'No se pudo enviar el mensaje.' });
+        }
+    });
+
     socket.on('game:set-status', async ({ sessionId, status } = {}) => {
         try {
             const session = await requireHostedSession(socket, sessionId);

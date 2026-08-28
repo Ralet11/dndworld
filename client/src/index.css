@@ -1234,6 +1234,28 @@ a:focus-visible {
 .game-console-section .game-turn-card { margin-top: 10px; padding: 14px; }
 .game-console-section .game-turn-card > strong { font-size: 18px; }
 .game-console-section .game-turn-card > small { display: block; margin: -5px 0 12px; color: #6f776f; font-size: 8px; }
+.game-table-chat { margin-top: 10px; overflow: hidden; border: 1px solid #304039; background: linear-gradient(145deg, rgba(21, 36, 30, .76), #090f0d); }
+.game-table-chat-header { min-height: 34px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #27352f; }
+.game-table-chat-header > div { display: flex; align-items: center; gap: 6px; color: #c5a25d; }
+.game-table-chat-header span { font-size: 8px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.game-table-chat-header small { color: #69776d; font-size: 7px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.game-table-chat-feed { max-height: 190px; min-height: 74px; padding: 8px; display: flex; flex-direction: column; gap: 7px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #455148 transparent; }
+.game-table-chat-empty { min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #6d756d; font-size: 8px; line-height: 1.5; text-align: center; }
+.game-table-chat-empty svg { flex: 0 0 auto; color: #8a7049; }
+.game-table-chat-message { max-width: 92%; padding: 7px 8px; align-self: flex-start; border: 1px solid #2f3a34; background: #0c1411; }
+.game-table-chat-message.is-dm { border-color: rgba(181, 139, 66, .58); background: linear-gradient(135deg, rgba(101, 70, 28, .2), #11140e); }
+.game-table-chat-message.is-mine { align-self: flex-end; border-color: rgba(74, 145, 161, .48); }
+.game-table-chat-message header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.game-table-chat-message strong { color: #cbb58b; font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.game-table-chat-message.is-dm strong { color: #e2bf72; }
+.game-table-chat-message time { color: #697069; font-size: 7px; white-space: nowrap; }
+.game-table-chat-message p { margin: 4px 0 0; color: #c9cdc4; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.game-table-chat-form { min-height: 39px; padding: 6px; display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 6px; border-top: 1px solid #27352f; background: #080e0c; }
+.game-table-chat-form input { min-width: 0; padding: 0 8px; color: #d8d6cc; border: 1px solid #34443b; background: #0b1310; font-size: 9px; outline: 0; }
+.game-table-chat-form input:focus { border-color: #a7874b; box-shadow: 0 0 0 1px rgba(167, 135, 75, .18); }
+.game-table-chat-form button { display: grid; place-items: center; color: #c5a25d; border: 1px solid #6e552b; background: rgba(159, 116, 37, .12); }
+.game-table-chat-form button:hover:not(:disabled) { color: #f0d28c; background: rgba(159, 116, 37, .25); }
+.game-table-chat-form button:disabled { opacity: .42; cursor: not-allowed; }
 .game-token-list-title { display: flex !important; grid-template-columns: none !important; justify-content: space-between; color: #8a7049; background: transparent !important; border: 0 !important; }
 .game-token-list-title span { font-size: 8px !important; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .game-token-list-title strong { color: #c5a25d; font-family: var(--font-display); font-weight: 500; }
@@ -4569,6 +4591,7 @@ a:focus-visible {
 .game-player-stage-note span { color: #b28c50; font-size: 8px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
 .game-player-stage-note p { color: #707870; font-size: 9px; }
 .game-player-character { margin-top: 16px; border-top: 1px solid rgba(128, 102, 54, 0.35); }
+.game-player-character .game-table-chat { margin: 14px clamp(18px, 3vw, 44px) 0; }
 .game-character-heading { padding: 18px clamp(18px, 3vw, 44px) 0; }
 .game-character-heading h2 { margin-top: 2px; font-size: 22px; }
 .game-player-character .hero-workspace.is-embedded { min-height: 0; background: transparent; }
