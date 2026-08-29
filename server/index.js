@@ -43,7 +43,7 @@ app.use(express.json());
 
 const multer = require('multer');
 const path = require('path');
-const { deleteObject, getObject, headObject, uploadBuffer } = require('./utils/s3Storage');
+const { deleteObject, getObject, headObject, isAllowedMediaKey, uploadBuffer } = require('./utils/s3Storage');
 const MAX_CONCURRENT_MEDIA_STREAMS = 8;
 let activeMediaStreams = 0;
 const upload = multer({
@@ -146,7 +146,7 @@ app.all(/^\/api\/media\/(.+)$/, async (req, res) => {
     let streamSlotAcquired = false;
     try {
         const key = decodeURIComponent(req.params[0]);
-        if (!key || key.includes('..') || !key.startsWith(`${process.env.S3_PREFIX || 'production'}/`)) return res.sendStatus(404);
+        if (!isAllowedMediaKey(key)) return res.sendStatus(404);
         if (req.method === 'HEAD') {
             const metadata = await headObject(key);
             if (metadata.ContentType) res.type(metadata.ContentType);

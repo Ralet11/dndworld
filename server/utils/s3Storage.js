@@ -34,7 +34,15 @@ function getClient() {
 
 function safeSegment(value, fallback = 'file') {
     return String(value || fallback).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-        .replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || fallback;
+        .replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100)
+        .replace(/[.-]+$/g, '') || fallback;
+}
+
+function isAllowedMediaKey(key, prefix = process.env.S3_PREFIX || 'production') {
+    if (typeof key !== 'string' || key.includes('\\') || key.includes('\0')) return false;
+    const normalizedPrefix = String(prefix).replace(/^\/+|\/+$/g, '');
+    if (!normalizedPrefix || !key.startsWith(`${normalizedPrefix}/`)) return false;
+    return key.split('/').every(segment => segment && segment !== '.' && segment !== '..');
 }
 
 function extensionFor(contentType, originalName = '') {
@@ -97,4 +105,15 @@ async function headObject(key) {
     return getClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
 }
 
-module.exports = { deleteObject, getConfig, getObject, headObject, publicUrlFor, uploadBuffer, uploadDataUri, uploadFile };
+module.exports = {
+    deleteObject,
+    getConfig,
+    getObject,
+    headObject,
+    isAllowedMediaKey,
+    publicUrlFor,
+    safeSegment,
+    uploadBuffer,
+    uploadDataUri,
+    uploadFile,
+};
