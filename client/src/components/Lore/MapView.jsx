@@ -174,6 +174,7 @@ export default function MapView({ onBack, embedded = false, sharedView = null, o
 
   const requestHeaders = useMemo(() => ({
     'Content-Type': 'application/json',
+    'X-Campaign-Id': localStorage.getItem('dnd_campaign_id') || '',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }), [token]);
 

@@ -34,6 +34,8 @@ const CharacterInventory = require('./CharacterInventory');
 const AudioTrack = require('./AudioTrack');
 const AssistantConversation = require('./AssistantConversation');
 const AssistantMessage = require('./AssistantMessage');
+const Campaign = require('./Campaign');
+const CampaignMember = require('./CampaignMember');
 
 // Character Relationships
 Character.belongsTo(Class, { foreignKey: 'class_slug', targetKey: 'slug', as: 'classData' });
@@ -105,6 +107,26 @@ UserPoiData.belongsTo(PointOfInterest, { foreignKey: 'poiId' });
 // Live game session relationships
 GameSession.belongsTo(User, { foreignKey: 'dm_user_id', as: 'dm' });
 User.hasMany(GameSession, { foreignKey: 'dm_user_id', as: 'hostedGameSessions' });
+Campaign.belongsTo(User, { foreignKey: 'owner_user_id', as: 'owner' });
+User.hasMany(Campaign, { foreignKey: 'owner_user_id', as: 'ownedCampaigns' });
+Campaign.hasMany(CampaignMember, { foreignKey: 'campaign_id', as: 'members', onDelete: 'CASCADE' });
+CampaignMember.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+CampaignMember.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(CampaignMember, { foreignKey: 'user_id', as: 'campaignMemberships' });
+Campaign.hasMany(GameSession, { foreignKey: 'campaign_id', as: 'gameSessions' });
+GameSession.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+Campaign.hasMany(Character, { foreignKey: 'campaign_id', as: 'characters' });
+Character.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+Campaign.hasMany(Scene, { foreignKey: 'campaign_id', as: 'scenes' });
+Scene.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+Campaign.hasMany(Quest, { foreignKey: 'campaign_id', as: 'quests' });
+Quest.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+Campaign.hasMany(PointOfInterest, { foreignKey: 'campaign_id', as: 'pointsOfInterest' });
+PointOfInterest.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+Campaign.hasMany(TimelineEvent, { foreignKey: 'campaign_id', as: 'timelineEvents' });
+TimelineEvent.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
+Campaign.hasMany(AssistantConversation, { foreignKey: 'campaign_id', as: 'assistantConversations' });
+AssistantConversation.belongsTo(Campaign, { foreignKey: 'campaign_id', as: 'campaign' });
 GameSession.hasMany(GameParticipant, { foreignKey: 'session_id', as: 'participants', onDelete: 'CASCADE' });
 GameParticipant.belongsTo(GameSession, { foreignKey: 'session_id', as: 'session' });
 GameParticipant.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -182,4 +204,6 @@ module.exports = {
     AudioTrack,
     AssistantConversation,
     AssistantMessage
+    ,Campaign
+    ,CampaignMember
 };

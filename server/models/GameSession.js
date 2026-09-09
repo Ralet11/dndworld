@@ -149,10 +149,14 @@ const GameSession = sequelize.define('GameSession', {
         type: DataTypes.UUID,
         allowNull: false,
     },
+    campaign_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
 }, {
     tableName: 'game_sessions',
     timestamps: true,
-    indexes: [{ fields: ['dm_user_id', 'status'] }],
+    indexes: [{ fields: ['dm_user_id', 'status'] }, { fields: ['campaign_id', 'status'] }],
 });
 
 module.exports = GameSession;

@@ -2,6 +2,7 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
 const Quest = sequelize.define('Quest', {
+    campaign_id: { type: DataTypes.UUID, allowNull: true },
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,

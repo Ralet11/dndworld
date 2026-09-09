@@ -10,6 +10,7 @@ const {
     GameParticipant,
     GameRoll,
     GameSession,
+    CampaignMember,
     GameToken,
     NpcAction,
     Item,
@@ -18,6 +19,7 @@ const {
     Skill,
     User,
 } = require('../models');
+const { canAccessCampaign, canManageCampaign, isSuperAdmin, membershipFor } = require('../services/campaignAccess');
 const { resolveCharacterImage } = require('../utils/npcImages');
 const { initiativeBonus, initiativeEntry, orderByInitiative } = require('../services/gameInitiative');
 const {
@@ -476,8 +478,12 @@ async function enterRoom(io, socket, sessionId) {
 }
 
 async function requireHostedSession(socket, sessionId) {
-    if (!isDm(socket)) return null;
-    return GameSession.findOne({ where: { id: sessionId, dm_user_id: socket.user.id } });
+    if (!isDm(socket) || !socket.activeCampaignId) return null;
+    return GameSession.findOne({ where: {
+        id: sessionId,
+        campaign_id: socket.activeCampaignId,
+        ...(!isSuperAdmin(socket.user) ? { dm_user_id: socket.user.id } : {}),
+    } });
 }
 
 async function hasPendingCombatAction(sessionId) {
@@ -1397,18 +1403,28 @@ async function finalizeCombatAction(io, combatAction, roll) {
 }
 
 function registerGameSessionSocket(io, socket) {
+    socket.on('campaign:select', async ({ campaignId } = {}, reply = () => {}) => {
+        try {
+            if (!campaignId || !await canAccessCampaign(socket.user, campaignId)) return reply({ ok: false, message: 'No tienes acceso a esta campaña.' });
+            socket.activeCampaignId = campaignId;
+            socket.campaignRole = isSuperAdmin(socket.user) ? 'SUPER_ADMIN' : (await membershipFor(socket.user.id, campaignId))?.role || null;
+            reply({ ok: true, campaignId });
+        } catch (_) { reply({ ok: false, message: 'No se pudo seleccionar la campaña.' }); }
+    });
+
     socket.on('game:get-current', async () => {
         try {
+            if (!socket.activeCampaignId) return socket.emit('game:state', null);
             let session = null;
             if (isDm(socket)) {
                 if (socket.gameSessionId) {
                     session = await GameSession.findOne({
-                        where: { id: socket.gameSessionId, dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                        where: { id: socket.gameSessionId, dm_user_id: socket.user.id, campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } },
                     });
                 }
                 if (!session) {
                     session = await GameSession.findOne({
-                        where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                        where: { dm_user_id: socket.user.id, campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } },
                         order: [['updatedAt', 'DESC']],
                     });
                 }
@@ -1416,14 +1432,14 @@ function registerGameSessionSocket(io, socket) {
                 if (socket.gameSessionId) {
                     const activeParticipant = await GameParticipant.findOne({
                         where: { session_id: socket.gameSessionId, user_id: socket.user.id },
-                        include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
+                        include: [{ model: GameSession, as: 'session', where: { campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } } }],
                     });
                     session = activeParticipant?.session || null;
                 }
                 if (!session) {
                     const participant = await GameParticipant.findOne({
                         where: { user_id: socket.user.id },
-                        include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
+                        include: [{ model: GameSession, as: 'session', where: { campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } } }],
                         order: [['updatedAt', 'DESC']],
                     });
                     session = participant?.session || null;
@@ -1443,9 +1459,9 @@ function registerGameSessionSocket(io, socket) {
 
     socket.on('game:list-hosted', async (reply = () => {}) => {
         try {
-            if (!isDm(socket)) return reply({ ok: false, message: 'Solo el DM puede administrar mesas.' });
+            if (!isDm(socket) || !socket.activeCampaignId || !await canManageCampaign(socket.user, socket.activeCampaignId)) return reply({ ok: false, message: 'No administras la campaña seleccionada.' });
             const sessions = await GameSession.findAll({
-                where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                where: { campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' }, ...(!isSuperAdmin(socket.user) ? { dm_user_id: socket.user.id } : {}) },
                 attributes: ['id', 'title', 'code', 'status', 'round', 'updatedAt'],
                 order: [['updatedAt', 'DESC']],
             });
@@ -1459,7 +1475,7 @@ function registerGameSessionSocket(io, socket) {
     socket.on('game:open-hosted', async ({ sessionId } = {}, reply = () => {}) => {
         try {
             if (!isDm(socket)) return reply({ ok: false, message: 'Solo el DM puede administrar mesas.' });
-            const session = await GameSession.findOne({ where: { id: sessionId, dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } } });
+            const session = await GameSession.findOne({ where: { id: sessionId, campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' }, ...(!isSuperAdmin(socket.user) ? { dm_user_id: socket.user.id } : {}) } });
             if (!session) return reply({ ok: false, message: 'La mesa elegida no existe o ya finalizo.' });
             await enterRoom(io, socket, session.id);
             reply({ ok: true, sessionId: session.id, code: session.code });
@@ -1494,7 +1510,7 @@ function registerGameSessionSocket(io, socket) {
             const participants = await GameParticipant.findAll({
                 where: { user_id: socket.user.id },
                 attributes: ['id', 'session_id', 'character_id', 'is_ready', 'updatedAt'],
-                include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } }, attributes: ['id', 'title', 'code', 'status', 'round', 'updatedAt'] }],
+                include: [{ model: GameSession, as: 'session', where: { campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } }, attributes: ['id', 'title', 'code', 'status', 'round', 'updatedAt'] }],
                 order: [['updatedAt', 'DESC']],
             });
             reply({ ok: true, sessions: participants.map(item => ({ ...item.session.toJSON(), characterId: item.character_id, isReady: item.is_ready, isCurrent: Number(item.session_id) === Number(socket.gameSessionId) })) });
@@ -1509,7 +1525,7 @@ function registerGameSessionSocket(io, socket) {
             if (isDm(socket)) return reply({ ok: false, message: 'El DM abre sus mesas desde su panel.' });
             const participant = await GameParticipant.findOne({
                 where: { session_id: sessionId, user_id: socket.user.id },
-                include: [{ model: GameSession, as: 'session', where: { status: { [Op.ne]: 'FINISHED' } } }],
+                include: [{ model: GameSession, as: 'session', where: { campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } } }],
             });
             if (!participant?.session) return reply({ ok: false, message: 'No perteneces a esa mesa o ya fue finalizada.' });
             await enterRoom(io, socket, participant.session.id);
@@ -1546,14 +1562,16 @@ function registerGameSessionSocket(io, socket) {
                 fail(socket, message);
                 return reply({ ok: false, message });
             }
+            if (!socket.activeCampaignId || !await canManageCampaign(socket.user, socket.activeCampaignId)) return reply({ ok: false, message: 'No tienes permiso para crear mesas en esta campaña.' });
             const existing = await GameSession.findOne({
-                where: { dm_user_id: socket.user.id, status: { [Op.ne]: 'FINISHED' } },
+                where: { dm_user_id: socket.user.id, campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } },
                 order: [['updatedAt', 'DESC']],
             });
             const session = (!forceNew && existing) ? existing : await GameSession.create({
                 code: await makeCode(),
                 title: String(title || 'La campaña actual').trim().slice(0, 120),
                 dm_user_id: socket.user.id,
+                campaign_id: socket.activeCampaignId,
             });
             await enterRoom(io, socket, session.id);
             reply({ ok: true, sessionId: session.id, code: session.code });
@@ -1569,9 +1587,10 @@ function registerGameSessionSocket(io, socket) {
         try {
             if (isDm(socket)) return fail(socket, 'El DM administra la sala desde su panel.');
             const session = await GameSession.findOne({
-                where: { code: String(code || '').trim().toUpperCase(), status: { [Op.ne]: 'FINISHED' } },
+                where: { code: String(code || '').trim().toUpperCase(), campaign_id: socket.activeCampaignId, status: { [Op.ne]: 'FINISHED' } },
             });
             if (!session) return fail(socket, 'Código de sala inválido o partida finalizada.');
+            if (!await CampaignMember.findOne({ where: { campaign_id: session.campaign_id, user_id: socket.user.id } })) return fail(socket, 'No fuiste invitado a esta campaña.');
 
             const character = characterId
                 ? await Character.findOne({ where: { id: characterId, UserId: socket.user.id, is_npc: false } })

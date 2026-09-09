@@ -20,6 +20,7 @@ const { getAssistantContext, executeAssistantCommand } = require('./utils/dmAssi
 const { registerGameSessionSocket } = require('./sockets/gameSessionSocket');
 const { resolveCharacterImage } = require('./utils/npcImages');
 const { deriveWorldConditions, normalizeWorldTime } = require('./utils/worldTime');
+const { isSuperAdmin } = require('./services/campaignAccess');
 
 const app = express();
 const server = http.createServer(app);
@@ -59,12 +60,15 @@ const audioUpload = multer({
 const authController = require('./controllers/authController');
 const { verifyToken, isDm } = require('./middleware/auth');
 const gameAssetRoutes = require('./routes/gameAssetRoutes');
+const campaignRoutes = require('./routes/campaignRoutes');
+const { ensureLegacyCampaign } = require('./services/campaignAccess');
 
 // Auth Routes
 app.post('/api/auth/register', authController.register);
 app.post('/api/auth/login', authController.login);
 app.get('/api/auth/me', verifyToken, authController.getMe);
 app.use('/api/game-assets', gameAssetRoutes);
+app.use('/api/campaigns', campaignRoutes);
 
 // POI Routes
 app.use('/api/pois', require('./routes/poiRoutes'));
@@ -481,9 +485,10 @@ app.post('/api/characters/:id/render', verifyToken, async (req, res) => {
 });
 
 // Helper to get full calculated stats for all characters (Players only by default)
-const buildCalculatedPartyStats = async () => {
+const buildCalculatedPartyStats = async (campaignId) => {
     const characters = await Character.findAll({
         where: {
+            campaign_id: campaignId,
             [Op.or]: [
                 { is_npc: false },
                 { is_active: true }
@@ -607,21 +612,9 @@ const buildCalculatedPartyStats = async () => {
     });
 };
 
-let partyStatsSnapshot = null;
-let partyStatsSnapshotAt = 0;
-let partyStatsInFlight = null;
-const getCalculatedPartyStats = async () => {
-    const now = Date.now();
-    if (partyStatsSnapshot && now - partyStatsSnapshotAt < 1500) return partyStatsSnapshot;
-    if (partyStatsInFlight) return partyStatsInFlight;
-    partyStatsInFlight = buildCalculatedPartyStats();
-    try {
-        partyStatsSnapshot = await partyStatsInFlight;
-        partyStatsSnapshotAt = Date.now();
-        return partyStatsSnapshot;
-    } finally {
-        partyStatsInFlight = null;
-    }
+const getCalculatedPartyStats = async (campaignId) => {
+    if (!campaignId) return [];
+    return buildCalculatedPartyStats(campaignId);
 };
 
 const DM_ROLES = new Set(['DM', 'ADMIN']);
@@ -638,7 +631,7 @@ const EDITABLE_CHARACTER_FIELDS = {
 };
 
 function isDmUser(socket) {
-    return DM_ROLES.has(socket.user?.role);
+    return isSuperAdmin(socket.user) || (socket.user?.role === 'DM' && socket.campaignRole === 'DM');
 }
 
 function fail(socket, message) {
@@ -656,6 +649,12 @@ function canEditCharacter(socket, character) {
 
 function playerRoom(userId) {
     return `player:${userId}`;
+}
+
+function emitToCampaign(io, campaignId, event, payload) {
+    io.sockets.sockets.forEach(client => {
+        if (String(client.activeCampaignId) === String(campaignId)) client.emit(event, payload);
+    });
 }
 
 function emitPlayerToast(io, character, payload) {
@@ -682,7 +681,7 @@ function valuesEqual(before, after) {
 }
 
 async function updateCharacterSecure(io, socket, characterId, diff = {}, source = 'character-editor') {
-    const character = await Character.findByPk(characterId, {
+    const character = await Character.findOne({ where: { id: characterId, campaign_id: socket.activeCampaignId },
         include: [{ model: AbilityScore, as: 'abilityScores' }, { model: Skill, as: 'skills' }],
     });
     if (!character) throw new Error('Personaje no encontrado.');
@@ -767,11 +766,11 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
         }
     });
 
-    const updatedStats = await getCalculatedPartyStats();
-    io.emit('stats-updated', updatedStats);
+    const updatedStats = await getCalculatedPartyStats(socket.activeCampaignId);
+    emitToCampaign(io, socket.activeCampaignId, 'stats-updated', updatedStats);
     if (character.is_npc) {
         npcSnapshot = null;
-        await emitNpcCatalog(io);
+        await emitNpcCatalog(io, socket.activeCampaignId);
     }
     if (isDmUser(socket) && changes.gold) {
         const before = Number(changes.gold.before || 0);
@@ -790,11 +789,11 @@ async function updateCharacterSecure(io, socket, characterId, diff = {}, source 
     return { character: updatedStats.find(item => item.id === Number(characterId)), changes };
 }
 
-const buildNpcsForClient = async ({ partyOnly = false } = {}) => {
+const buildNpcsForClient = async ({ partyOnly = false, campaignId } = {}) => {
     const npcs = await Character.findAll({
         where: partyOnly
-            ? { is_npc: true, [Op.or]: [{ party_known: true }, { party_known: null }] }
-            : { is_npc: true },
+            ? { campaign_id: campaignId, is_npc: true, [Op.or]: [{ party_known: true }, { party_known: null }] }
+            : { campaign_id: campaignId, is_npc: true },
         include: [
             { model: AbilityScore, as: 'abilityScores', separate: true },
             { model: Skill, as: 'skills', separate: true },
@@ -812,12 +811,13 @@ const buildNpcsForClient = async ({ partyOnly = false } = {}) => {
 let npcSnapshot = null;
 let npcSnapshotAt = 0;
 let npcsInFlight = null;
-const getNpcsForClient = async ({ partyOnly = false } = {}) => {
-    if (partyOnly) return buildNpcsForClient({ partyOnly: true });
+const getNpcsForClient = async ({ partyOnly = false, campaignId } = {}) => {
+    if (!campaignId) return [];
+    if (partyOnly) return buildNpcsForClient({ partyOnly: true, campaignId });
     const now = Date.now();
     if (npcSnapshot && now - npcSnapshotAt < 1500) return npcSnapshot;
     if (npcsInFlight) return npcsInFlight;
-    npcsInFlight = buildNpcsForClient();
+    npcsInFlight = buildNpcsForClient({ campaignId });
     try {
         npcSnapshot = await npcsInFlight;
         npcSnapshotAt = Date.now();
@@ -827,13 +827,13 @@ const getNpcsForClient = async ({ partyOnly = false } = {}) => {
     }
 };
 
-const emitNpcCatalog = async (io) => {
+const emitNpcCatalog = async (io, campaignId) => {
     const [dmNpcs, partyNpcs] = await Promise.all([
-        getNpcsForClient(),
-        getNpcsForClient({ partyOnly: true }),
+        getNpcsForClient({ campaignId }),
+        getNpcsForClient({ partyOnly: true, campaignId }),
     ]);
     io.sockets.sockets.forEach(client => {
-        client.emit('all-npcs', isDmUser(client) ? dmNpcs : partyNpcs);
+        if (String(client.activeCampaignId) === String(campaignId)) client.emit('all-npcs', isDmUser(client) ? dmNpcs : partyNpcs);
     });
 };
 
@@ -897,7 +897,7 @@ io.on('connection', async (socket) => {
     // The live table needs this catalog during its initial socket handshake.
     socket.on('get-all-npcs', async (ack) => {
         try {
-            const npcs = await getNpcsForClient({ partyOnly: !isDmUser(socket) });
+            const npcs = await getNpcsForClient({ partyOnly: !isDmUser(socket), campaignId: socket.activeCampaignId });
             socket.emit('all-npcs', npcs);
             if (typeof ack === 'function') ack({ ok: true, npcs });
         } catch (error) {
@@ -916,7 +916,7 @@ io.on('connection', async (socket) => {
                     throw new Error('No tienes acceso a esta escena.');
                 }
             }
-            const whereClause = {};
+            const whereClause = { campaign_id: socket.activeCampaignId };
             if (sceneId) {
                 whereClause.scene_id = sceneId;
             } else {
@@ -950,6 +950,7 @@ io.on('connection', async (socket) => {
     socket.on('get-scenes', async () => {
         try {
             const scenes = await Scene.findAll({
+                where: { campaign_id: socket.activeCampaignId },
                 order: [['updatedAt', 'DESC']],
                 include: [{ model: Character, as: 'participants' }]
             });
@@ -967,6 +968,7 @@ io.on('connection', async (socket) => {
             if (!isDmUser(socket)) throw new Error('Sólo el DM puede crear escenas.');
             const { title, description, imageUrl, participants } = data;
             const newScene = await Scene.create({
+                campaign_id: socket.activeCampaignId,
                 title,
                 description,
                 imageUrl,
@@ -975,13 +977,13 @@ io.on('connection', async (socket) => {
 
             // If participants sent (array of character IDs)
             if (participants && participants.length > 0) {
-                const chars = await Character.findAll({ where: { id: participants } });
+                const chars = await Character.findAll({ where: { id: participants, campaign_id: socket.activeCampaignId } });
                 await newScene.addParticipants(chars);
             }
 
             // Broadcast new scene list
-            const scenes = await Scene.findAll({ order: [['updatedAt', 'DESC']] });
-            io.emit('scenes-data', scenes);
+            const scenes = await Scene.findAll({ where: { campaign_id: socket.activeCampaignId }, order: [['updatedAt', 'DESC']] });
+            emitToCampaign(io, socket.activeCampaignId, 'scenes-data', scenes);
         } catch (err) {
             console.error('Create scene error:', err);
         }
@@ -991,22 +993,23 @@ io.on('connection', async (socket) => {
         try {
             if (!isDmUser(socket)) throw new Error('Sólo el DM puede cambiar participantes.');
             const { sceneId, participants } = data;
-            const scene = await Scene.findByPk(sceneId);
+            const scene = await Scene.findOne({ where: { id: sceneId, campaign_id: socket.activeCampaignId } });
             if (!scene) return;
 
             // Set participants (replaces existing list)
-            const chars = await Character.findAll({ where: { id: participants } });
+            const chars = await Character.findAll({ where: { id: participants, campaign_id: socket.activeCampaignId } });
             await scene.setParticipants(chars);
 
             // Broadcast updated scene list to everyone
             const scenes = await Scene.findAll({
+                where: { campaign_id: socket.activeCampaignId },
                 order: [['updatedAt', 'DESC']],
                 include: [{ model: Character, as: 'participants' }]
             });
-            io.emit('scenes-data', scenes);
+            emitToCampaign(io, socket.activeCampaignId, 'scenes-data', scenes);
 
             // Also notify specifically for this scene update if needed
-            io.emit('scene-updated', { sceneId, participants: chars });
+            emitToCampaign(io, socket.activeCampaignId, 'scene-updated', { sceneId, participants: chars });
         } catch (err) {
             console.error('Update scene participants error:', err);
         }
@@ -1039,7 +1042,7 @@ io.on('connection', async (socket) => {
 
     socket.on('get-players', async () => {
         try {
-            const players = await getCalculatedPartyStats();
+            const players = await getCalculatedPartyStats(socket.activeCampaignId);
             socket.emit('players-data', players);
         } catch (err) {
             console.error('Get players error:', err);
@@ -1831,12 +1834,13 @@ io.on('connection', async (socket) => {
             if (!isDmUser(socket)) throw new Error('Sólo el DM puede crear NPCs.');
             const npc = await Character.create({
                 ...npcData,
+                campaign_id: socket.activeCampaignId,
                 is_npc: true,
                 party_known: Boolean(npcData.party_known),
                 hp_current: npcData.hp_max, // Default full HP
             });
             npcSnapshot = null;
-            await emitNpcCatalog(io);
+            await emitNpcCatalog(io, socket.activeCampaignId);
             reply({ ok: true, npc });
         } catch (e) {
             console.error('Create NPC error:', e);
@@ -1847,12 +1851,12 @@ io.on('connection', async (socket) => {
     socket.on('npc:set-party-known', async ({ characterId, partyKnown } = {}, reply = () => {}) => {
         try {
             if (!isDmUser(socket)) throw new Error('Sólo el DM puede cambiar el conocimiento de la party.');
-            const npc = await Character.findOne({ where: { id: Number(characterId), is_npc: true } });
+            const npc = await Character.findOne({ where: { id: Number(characterId), campaign_id: socket.activeCampaignId, is_npc: true } });
             if (!npc) throw new Error('NPC no encontrado.');
             npc.party_known = Boolean(partyKnown);
             await npc.save();
             npcSnapshot = null;
-            await emitNpcCatalog(io);
+            await emitNpcCatalog(io, socket.activeCampaignId);
             reply({ ok: true, partyKnown: npc.party_known });
         } catch (error) {
             console.error('NPC party knowledge error:', error);
@@ -1983,7 +1987,7 @@ io.on('connection', async (socket) => {
                 }
             });
             npcSnapshot = null;
-            await emitNpcCatalog(io);
+            await emitNpcCatalog(io, socket.activeCampaignId);
             reply({ ok: true });
         } catch (error) { reply({ ok: false, message: error.message || 'No se pudieron guardar las acciones.' }); }
     });
@@ -2132,6 +2136,7 @@ const RUN_STARTUP_SEED = /^(1|true|yes)$/i.test(String(process.env.RUN_STARTUP_S
 // Database Sync and Server Launch
 sequelize.sync({ alter: true }).then(async () => {
     console.log('Database connected and synced.');
+    await ensureLegacyCampaign();
     if (RUN_STARTUP_SEED) {
         console.warn('RUN_STARTUP_SEED habilitado: ejecutando seed de arranque.');
         await seedDatabase();

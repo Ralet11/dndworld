@@ -2,6 +2,7 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
 const PointOfInterest = sequelize.define('PointOfInterest', {
+    campaign_id: { type: DataTypes.UUID, allowNull: true },
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,

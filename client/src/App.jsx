@@ -5,6 +5,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import PlayerLayout from './layouts/PlayerLayout';
 import DmLayout from './layouts/DmLayout';
+import CampaignHub from './pages/CampaignHub';
+import { CampaignProvider, useCampaign } from './context/CampaignContext';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -28,10 +30,21 @@ function AppRoutes() {
     );
   }
 
+  return <CampaignProvider><CampaignRoutes /></CampaignProvider>;
+}
+
+function CampaignRoutes() {
+  const { campaign, campaignReady, loading } = useCampaign();
+  const { user } = useAuth();
+  if (loading) return null;
+  if (!campaign) return <Routes><Route path="/campaigns" element={<CampaignHub />} /><Route path="*" element={<Navigate to="/campaigns" replace />} /></Routes>;
+  if (!campaignReady) return <div className="min-h-screen grid place-items-center" style={{ background: '#0F1518', color: '#C8A36A' }}>Abriendo campaña...</div>;
+  const campaignRoute = <Route path="/campaigns" element={<CampaignHub />} />;
   // DM y ADMIN van al panel maestro
   if (user.role === 'DM' || user.role === 'ADMIN') {
     return (
       <Routes>
+        {campaignRoute}
         <Route path="/dm/*" element={<DmLayout />} />
         <Route path="*" element={<Navigate to="/dm" replace />} />
       </Routes>
@@ -41,6 +54,7 @@ function AppRoutes() {
   // PLAYER va al layout con tabs
   return (
     <Routes>
+      {campaignRoute}
       <Route path="/*" element={<PlayerLayout />} />
     </Routes>
   );

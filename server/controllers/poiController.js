@@ -7,15 +7,15 @@ exports.getAllPointsOfInterest = async (req, res) => {
         // Filtro por nivel: ?parent_id=null (mundo) | ?parent_id=<id> (hijos de
         // una ciudad). Sin parámetro → todos (retrocompat).
         const { parent_id } = req.query;
-        const where = {};
+        const where = { campaign_id: req.campaignId };
         if (parent_id === 'null' || parent_id === '') where.parent_id = null;
         else if (parent_id !== undefined) where.parent_id = parent_id;
-        if (req.user.role !== 'DM' && req.user.role !== 'ADMIN') {
+        if (!['DM', 'SUPER_ADMIN'].includes(req.campaignRole)) {
             where[Op.or] = [{ party_known: true }, { party_known: null }];
         }
 
         const attributes = { exclude: [] };
-        if (req.user.role !== 'DM' && req.user.role !== 'ADMIN') attributes.exclude.push('dmDescription');
+        if (!['DM', 'SUPER_ADMIN'].includes(req.campaignRole)) attributes.exclude.push('dmDescription');
         const pois = await PointOfInterest.findAll({ where, attributes });
         res.status(200).json(pois);
     } catch (error) {
@@ -27,7 +27,7 @@ exports.getAllPointsOfInterest = async (req, res) => {
 exports.createPointOfInterest = async (req, res) => {
     try {
         const { title, top, left, color, type, image, description, parent_id, map_image, level, party_known } = req.body;
-        const newPoi = await PointOfInterest.create({ title, top, left, color, type, image, description, parent_id: parent_id || null, map_image, level, party_known: Boolean(party_known) });
+        const newPoi = await PointOfInterest.create({ campaign_id: req.campaignId, title, top, left, color, type, image, description, parent_id: parent_id || null, map_image, level, party_known: Boolean(party_known) });
         res.status(201).json(newPoi);
     } catch (error) {
         console.error("Error creating Point of Interest:", error);
@@ -40,7 +40,7 @@ exports.updatePointOfInterest = async (req, res) => {
         const { id } = req.params;
         const { top, left, title, image, description, type, color, map_image, level, party_known } = req.body;
 
-        const poi = await PointOfInterest.findByPk(id);
+        const poi = await PointOfInterest.findOne({ where: { id, campaign_id: req.campaignId } });
         if (!poi) {
             return res.status(404).json({ error: 'Point of Interest not found' });
         }
@@ -73,13 +73,13 @@ exports.getPoiLore = async (req, res) => {
 
         // 1. Fetch global POI state
         const attributes = ['id', 'description', 'partyKnowledge'];
-        if (req.user.role === 'DM' || req.user.role === 'ADMIN') attributes.push('dmDescription');
-        const poi = await PointOfInterest.findByPk(id, { attributes: [...attributes, 'party_known'] });
+        if (['DM', 'SUPER_ADMIN'].includes(req.campaignRole)) attributes.push('dmDescription');
+        const poi = await PointOfInterest.findOne({ where: { id, campaign_id: req.campaignId }, attributes: [...attributes, 'party_known'] });
 
         if (!poi) {
             return res.status(404).json({ error: 'Point of Interest not found' });
         }
-        if (req.user.role !== 'DM' && req.user.role !== 'ADMIN' && poi.party_known === false) {
+        if (!['DM', 'SUPER_ADMIN'].includes(req.campaignRole) && poi.party_known === false) {
             return res.status(404).json({ error: 'Point of Interest not found' });
         }
 
@@ -104,7 +104,7 @@ exports.updateGlobalLore = async (req, res) => {
     try {
         const { id } = req.params;
         const { dmDescription, partyKnowledge } = req.body;
-        const poi = await PointOfInterest.findByPk(id);
+        const poi = await PointOfInterest.findOne({ where: { id, campaign_id: req.campaignId } });
         if (!poi) return res.status(404).json({ error: 'POI not found' });
 
         if (dmDescription !== undefined) poi.dmDescription = dmDescription;
@@ -124,8 +124,8 @@ exports.updateUserNotes = async (req, res) => {
         const { userNotes, specializedKnowledge, targetUserId } = req.body;
         const requestingUser = req.user;
 
-        const isDm = requestingUser.role === 'DM' || requestingUser.role === 'ADMIN';
-        const poi = await PointOfInterest.findByPk(id, { attributes: ['id', 'party_known'] });
+        const isDm = ['DM', 'SUPER_ADMIN'].includes(req.campaignRole);
+        const poi = await PointOfInterest.findOne({ where: { id, campaign_id: req.campaignId }, attributes: ['id', 'party_known'] });
         if (!poi || (!isDm && poi.party_known === false)) {
             return res.status(404).json({ error: 'POI not found' });
         }

@@ -2,6 +2,10 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
 const Character = sequelize.define('Character', {
+    campaign_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+    },
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
