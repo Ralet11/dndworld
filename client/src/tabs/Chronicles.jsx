@@ -1,5 +1,7 @@
-import { ArrowLeft, BookOpen, CalendarDays, MapPin, Scroll } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, BookOpen, CalendarDays, MapPin, Scroll, Share2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const CHRONICLE_PATH = '/chronicles/informes-de-herbolago';
 
@@ -105,7 +107,9 @@ Lysa anotó la orden.`.split('\n\n');
 
 export default function Chronicles() {
   const { pathname } = useLocation();
-  return pathname.replace(/\/$/, '') === CHRONICLE_PATH ? <ChronicleReader /> : <ChronicleArchive />;
+  const { user } = useAuth();
+  const canShare = user?.role === 'DM' || user?.role === 'ADMIN';
+  return pathname.replace(/\/$/, '') === CHRONICLE_PATH ? <ChronicleReader canShare={canShare} /> : <ChronicleArchive />;
 }
 
 function ChronicleArchive() {
@@ -119,9 +123,39 @@ function ChronicleArchive() {
   </section>;
 }
 
-function ChronicleReader() {
+function ChronicleReader({ canShare }) {
+  const [shareNotice, setShareNotice] = useState('');
+  const [isSharing, setIsSharing] = useState(false);
+  const shareChronicle = async () => {
+    const url = window.location.href;
+    const title = 'Informes de Herbolago';
+    const text = 'Una derrota en Thanemor. Cuatro supervivientes. Y una senda que no debió existir.';
+    const shareData = { title, text, url };
+    setIsSharing(true);
+    setShareNotice('');
+    try {
+      let imageFile = null;
+      const imageResponse = await fetch('/chronicles/informes-de-herbolago.png');
+      if (imageResponse.ok) {
+        const imageBlob = await imageResponse.blob();
+        imageFile = new File([imageBlob], 'informes-de-herbolago.png', { type: imageBlob.type || 'image/png' });
+      }
+      if (imageFile && navigator.canShare?.({ files: [imageFile] })) {
+        await navigator.share({ ...shareData, files: [imageFile] });
+        setShareNotice('Imagen y enlace listos para compartir.');
+      } else if (navigator.share) {
+        await navigator.share(shareData);
+        setShareNotice('Enlace listo para compartir.');
+      } else {
+        window.open(`https://wa.me/?text=${encodeURIComponent(`${title}\n${text}\n${url}`)}`, '_blank', 'noopener,noreferrer');
+        setShareNotice('Se abrió WhatsApp con el enlace.');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') setShareNotice('No se pudo abrir el menú para compartir.');
+    } finally { setIsSharing(false); }
+  };
   return <article className="chronicle-reader">
-    <header className="chronicle-reader-bar"><Link className="chronicle-back" to="/chronicles"><ArrowLeft size={16} /> Volver a Crónicas</Link><p>Archivo Central · Prontera</p><span>Registro 01</span></header>
+    <header className="chronicle-reader-bar"><Link className="chronicle-back" to="/chronicles"><ArrowLeft size={16} /> Volver a Crónicas</Link><p>Archivo Central · Prontera</p>{canShare ? <div className="chronicle-reader-share"><button type="button" onClick={shareChronicle} disabled={isSharing}><Share2 size={14} />{isSharing ? 'Preparando…' : 'Compartir'}</button>{shareNotice && <small aria-live="polite">{shareNotice}</small>}</div> : <span>Registro 01</span>}</header>
     <main className="chronicle-book"><section className="chronicle-page chronicle-page-story">
       <div className="chronicle-page-head"><span>01.</span><div><small>Archivo Central · Prontera</small><small>Año 203 d.F. · Día 127</small></div></div>
       <h1>Informes de Herbolago</h1><div className="chronicle-flourish">✦</div>
