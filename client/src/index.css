@@ -300,6 +300,7 @@ a:focus-visible {
 /* Chronicles: archive shelf and illustrated folio. */
 .chronicle-archive { width: min(100%, 1240px); min-height: calc(100vh - 64px); margin: 0 auto; padding: clamp(28px, 4vw, 58px); }
 .chronicle-archive-header { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.chronicle-archive-actions { display: flex; align-items: center; gap: 12px; }.chronicle-campaign-link { min-height: 34px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #d7bd7b; border: 1px solid rgba(155,122,62,.52); background: rgba(10,16,14,.76); font-family: var(--font-display); font-size: 8px; letter-spacing: .1em; text-decoration: none; text-transform: uppercase; }.chronicle-campaign-link:hover { color: #f0d99c; border-color: #d1ad68; }
 .chronicle-archive-count { min-width: 104px; padding: 13px 15px; display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 9px; color: #b89552; border: 1px solid rgba(128,102,54,.4); background: rgba(10,16,14,.72); }
 .chronicle-archive-count span { font-family: var(--font-display); font-size: 22px; line-height: 1; }.chronicle-archive-count small { grid-column: 2; color: #797467; font-family: var(--font-display); font-size: 7px; letter-spacing: .13em; text-transform: uppercase; }
 .chronicle-archive-rule { height: 1px; margin: 28px 0; background: linear-gradient(90deg, #806636, rgba(128,102,54,.16) 62%, transparent); }.chronicle-grid { display: grid; grid-template-columns: minmax(260px, 420px); }
@@ -465,6 +466,7 @@ a:focus-visible {
   .chronicle-empty-content { padding: 38px 24px; }
   .chronicle-archive { min-height: calc(100vh - 118px); padding: 24px 16px; }
   .chronicle-archive-header { align-items: flex-start; }
+  .chronicle-archive-actions { align-items: flex-end; flex-direction: column; gap: 8px; }.chronicle-campaign-link { min-height: 30px; padding-inline: 8px; font-size: 7px; }
   .chronicle-archive-count { min-width: 76px; padding: 10px; }
   .chronicle-grid { grid-template-columns: 1fr; }
   .chronicle-card-image { height: 210px; }

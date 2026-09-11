@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, MapPin, Scroll, Share2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, LogIn, MapPin, Scroll, Share2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -109,12 +109,16 @@ export default function Chronicles() {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const canShare = user?.role === 'DM' || user?.role === 'ADMIN';
-  return pathname.replace(/\/$/, '') === CHRONICLE_PATH ? <ChronicleReader canShare={canShare} /> : <ChronicleArchive />;
+  const campaignPath = user ? (canShare ? '/dm' : '/game') : '/login';
+  const campaignLabel = user ? (canShare ? 'Panel DM' : 'Campaña') : 'Entrar';
+  return pathname.replace(/\/$/, '') === CHRONICLE_PATH
+    ? <ChronicleReader canShare={canShare} campaignPath={campaignPath} campaignLabel={campaignLabel} />
+    : <ChronicleArchive campaignPath={campaignPath} campaignLabel={campaignLabel} />;
 }
 
-function ChronicleArchive() {
+function ChronicleArchive({ campaignPath, campaignLabel }) {
   return <section className="chronicle-archive">
-    <header className="chronicle-archive-header"><div><p className="section-kicker">Archivo central · Prontera</p><h1 className="section-title">Crónicas</h1><p className="section-lead">Relatos preservados de los sucesos que han dejado una marca en el mundo.</p></div><div className="chronicle-archive-count"><Scroll size={17} /><span>01</span><small>registro</small></div></header>
+    <header className="chronicle-archive-header"><div><p className="section-kicker">Archivo central · Prontera</p><h1 className="section-title">Crónicas</h1><p className="section-lead">Relatos preservados de los sucesos que han dejado una marca en el mundo.</p></div><div className="chronicle-archive-actions"><Link className="chronicle-campaign-link" to={campaignPath}><LogIn size={13} />{campaignLabel}</Link><div className="chronicle-archive-count"><Scroll size={17} /><span>01</span><small>registro</small></div></div></header>
     <div className="chronicle-archive-rule" />
     <div className="chronicle-grid"><Link to={CHRONICLE_PATH} className="chronicle-card">
       <div className="chronicle-card-image"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel Venn y Lysa Marek revisando informes en el Archivo Central" /><span className="chronicle-card-number">01.</span></div>
@@ -123,7 +127,7 @@ function ChronicleArchive() {
   </section>;
 }
 
-function ChronicleReader({ canShare }) {
+function ChronicleReader({ canShare, campaignPath, campaignLabel }) {
   const [shareNotice, setShareNotice] = useState('');
   const [isSharing, setIsSharing] = useState(false);
   const shareChronicle = async () => {
@@ -155,7 +159,7 @@ function ChronicleReader({ canShare }) {
     } finally { setIsSharing(false); }
   };
   return <article className="chronicle-reader">
-    <header className="chronicle-reader-bar"><Link className="chronicle-back" to="/chronicles"><ArrowLeft size={16} /> Volver a Crónicas</Link><p>Archivo Central · Prontera</p>{canShare ? <div className="chronicle-reader-share"><button type="button" onClick={shareChronicle} disabled={isSharing}><Share2 size={14} />{isSharing ? 'Preparando…' : 'Compartir'}</button>{shareNotice && <small aria-live="polite">{shareNotice}</small>}</div> : <span>Registro 01</span>}</header>
+    <header className="chronicle-reader-bar"><Link className="chronicle-back" to="/chronicles"><ArrowLeft size={16} /> Volver a Crónicas</Link><p>Archivo Central · Prontera</p>{canShare ? <div className="chronicle-reader-share"><button type="button" onClick={shareChronicle} disabled={isSharing}><Share2 size={14} />{isSharing ? 'Preparando…' : 'Compartir'}</button>{shareNotice && <small aria-live="polite">{shareNotice}</small>}</div> : <Link className="chronicle-campaign-link" to={campaignPath}><LogIn size={13} />{campaignLabel}</Link>}</header>
     <main className="chronicle-book"><section className="chronicle-page chronicle-page-story">
       <div className="chronicle-page-head"><span>01.</span><div><small>Archivo Central · Prontera</small><small>Año 203 d.F. · Día 127</small></div></div>
       <h1>Informes de Herbolago</h1><div className="chronicle-flourish">✦</div>
