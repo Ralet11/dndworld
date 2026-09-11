@@ -1,8 +1,107 @@
-import { ArrowLeft, BookOpen, CalendarDays, Feather, MapPin, Scroll } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, MapPin, Scroll } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const CHRONICLE_PATH = '/chronicles/informes-de-herbolago';
-const chapters = ['El sello de cobre', 'El informe de Herbólago', 'La Quietud Blanca', 'Una orden para el norte'];
+
+const story = `Aurel Venn intentaba recuperar un sello de cobre de una rata.
+
+—Devuélvemelo —dijo.
+
+La rata, sentada sobre el libro mayor de suministros, continuó mordiendo el sello.
+
+—Cronista —dijo Lysa Marek desde la puerta—, eso no parece un procedimiento oficial.
+
+—Esta rata ha robado propiedad de Prontera.
+
+—También parece que ha comido el informe de recaudación.
+
+Aurel entrecerró los ojos.
+
+—Entonces tiene antecedentes.
+
+La rata tomó el sello entre los dientes y desapareció bajo un estante.
+
+Aurel miró a Lysa.
+
+—No lo menciones en el registro.
+
+Lysa dejó un tubo de cuero sobre el escritorio. El sello de Prontera, intacto, brillaba en la cera.
+
+—Este llegó desde Herbolago. Y, para su tranquilidad, ninguna rata lo trajo.
+
+El humor abandonó el rostro de Aurel.
+
+Rompió el sello.
+
+El informe era breve. Demasiado breve para una derrota.
+
+Las huestes del comandante Harven Taal habían sido vencidas al otro lado de Thanemor. La retirada había roto las compañías, dispersado a los heridos y dejado el camino lleno de uniformes de Prontera sin hombres dentro.
+
+Durante días, supervivientes habían alcanzado Herbolago en grupos pequeños: sin oficiales, sin equipo, con heridas mal vendadas y silencios demasiado largos.
+
+Pero entre ellos habían llegado cuatro con una noticia distinta.
+
+Tres soldados. Un mago de pelotón.
+
+Aurel leyó sobre Valnevar: nieve bajo un cielo que no debía producirla; granizo sobre los techos; una niebla que congelaba cerraduras y pulmones. Criaturas de hielo que bajaban cada noche para exigir sacrificios.
+
+Luego, una fractura.
+
+Una cámara bajo tierra. Un muro de hielo. Una figura enorme detrás de él, más alta que un orco, con colmillos pálidos y los ojos cerrados. Un portal abierto junto a la criatura. Una tormenta naciendo de aquella herida.
+
+Y, al final:
+
+El mago de pelotón cerró la senda. Método desconocido. Los cuatro supervivientes llegaron a Herbolago con vida.
+
+—Un mago cerró una senda —dijo Lysa.
+
+—Eso parece.
+
+—¿Es una buena noticia?
+
+Aurel abrió el armario de mapas y sacó una tablilla cubierta por una tela gris. Sus signos eran viejos, angulosos, imposibles de leer sin sentir que algo los leía de vuelta.
+
+—Los Urdh-Akan —dijo—. Una raza olvidada antes de la Fractura. Sus prisiones no tenían guardias. Tenían hielo.
+
+Lysa observó la tablilla.
+
+—¿Y la criatura?
+
+—Un prisionero.
+
+Aurel señaló uno de los símbolos.
+
+—Su senda se llama Vael Khur, la Quietud Blanca. Congela procesos. Una tormenta. Una vida. A veces, una época entera.
+
+Un escalofrío le recorrió el cuerpo.
+
+Si el informe era correcto, la criatura había gobernado el hielo de Valnevar desde el interior de su prisión. Había creado sirvientes. Había extendido la tormenta. Había usado la fractura para empujar contra sus muros.
+
+Aurel no dijo lo que eso sugería.
+
+Sólo volvió a leer la descripción de los colmillos, del muro de hielo y del portal abierto junto a la criatura.
+
+—Tenemos que encontrar a esos soldados —dijo.
+
+—¿Para premiarlos?
+
+—Para preguntarles qué fue lo que vieron. Y qué estaba intentando abrirse.
+
+Lysa miró hacia el agujero bajo el estante, donde la rata había desaparecido con el sello.
+
+—Cronista, antes de enviar gente a Herbolago… ¿qué hacemos con las ratas de Prontera?
+
+Aurel suspiró.
+
+Bajo la ciudad, las alcantarillas ya no eran sólo alcantarillas. Había nidos demasiado grandes, mordidas en tuberías de brumante y animales que aprendían a no caer dos veces en la misma trampa. Nadie hablaba aún de mutaciones. Nadie quería ser el primero.
+
+—Manda otra cuadrilla —dijo.
+
+—La última volvió sin botas.
+
+—Entonces manda una cuadrilla con botas mejores.
+
+Lysa anotó la orden.`.split('\n\n');
 
 export default function Chronicles() {
   const { pathname } = useLocation();
@@ -15,7 +114,7 @@ function ChronicleArchive() {
     <div className="chronicle-archive-rule" />
     <div className="chronicle-grid"><Link to={CHRONICLE_PATH} className="chronicle-card">
       <div className="chronicle-card-image"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel Venn y Lysa Marek revisando informes en el Archivo Central" /><span className="chronicle-card-number">01.</span></div>
-      <div className="chronicle-card-body"><p className="chronicle-card-kicker">Registro del Archivo Central</p><h2>Informes de Herbólago</h2><p className="chronicle-card-excerpt">Una derrota en Tanemor. Cuatro supervivientes. Y una senda que no debió existir.</p><div className="chronicle-card-meta"><span><MapPin size={13} />Prontera, Westamar</span><span><CalendarDays size={13} />Día 127 · Año 203 d.F.</span></div><span className="chronicle-read-link">Abrir crónica <BookOpen size={14} /></span></div>
+      <div className="chronicle-card-body"><p className="chronicle-card-kicker">Registro del Archivo Central</p><h2>Informes de Herbolago</h2><p className="chronicle-card-excerpt">Una derrota en Thanemor. Cuatro supervivientes. Y una senda que no debió existir.</p><div className="chronicle-card-meta"><span><MapPin size={13} />Prontera, Westamar</span><span><CalendarDays size={13} />Día 127 · Año 203 d.F.</span></div><span className="chronicle-read-link">Abrir crónica <BookOpen size={14} /></span></div>
     </Link></div>
   </section>;
 }
@@ -23,16 +122,12 @@ function ChronicleArchive() {
 function ChronicleReader() {
   return <article className="chronicle-reader">
     <header className="chronicle-reader-bar"><Link className="chronicle-back" to="/chronicles"><ArrowLeft size={16} /> Volver a Crónicas</Link><p>Archivo Central · Prontera</p><span>Registro 01</span></header>
-    <div className="chronicle-book">
-      <section className="chronicle-page chronicle-page-story"><div className="chronicle-page-head"><span>01.</span><div><small>Archivo Central · Prontera</small><small>Año 203 d.F. · Día 127</small></div></div><h1>Informes de Herbólago</h1><div className="chronicle-flourish">✦</div><p className="chronicle-dek">Una derrota en Tanemor. Cuatro supervivientes.<br />Y una senda que no debió existir.</p><div className="chronicle-prose"><p className="chronicle-dropcap">Aurel Venn intentaba recuperar un sello de cobre de una rata.</p><p>—Devuélvemelo —dijo.</p><p>La rata, sentada sobre el libro mayor de suministros, continuó comiendo una miga de pan.</p><p>—Cronista —dijo Lysa Marek desde la puerta—, eso no parece un procedimiento oficial.</p><p>—Ha robado propiedad de Prontera.</p><p>—También ha comido el informe de recaudación.</p><p>Aurel entrecerró los ojos.</p><p>—Entonces tiene antecedentes.</p><p>La rata tomó el sello entre los dientes y desapareció bajo un estante.</p><p>—No lo menciones en el registro.</p><p>—¿El robo?</p><p>—Que el archivo central perdió contra un roedor.</p><p>Lysa dejó un tubo de cuero sobre el escritorio. El sello de Prontera, intacto, brillaba en la cera.</p><p>—Este llegó desde Herbólago. Y, para su tranquilidad, ninguna rata lo trajo.</p><p>El humor abandonó el rostro de Aurel.</p><p>Rompió el sello.</p><p>El informe era breve. Demasiado breve para una derrota.</p></div></section>
-      <aside className="chronicle-page chronicle-page-aside"><figure className="chronicle-illustration"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel y Lysa revisando los informes de Herbólago" /><figcaption>Aurel Venn y Lysa Marek revisando los informes en el Archivo Central de Prontera.</figcaption></figure><blockquote>“Algunas verdades no se escriben para ser leídas, sino para que no se repitan.”<cite>— Aurel Venn —</cite></blockquote><section className="chronicle-index"><div><BookOpen size={18} /><span>Nota del cronista</span></div><p>El informe completo ha sido resguardado. Continúa la lectura para conocer lo ocurrido más allá de Tanemor.</p><ol>{chapters.map((chapter, index) => <li key={chapter}><span>{String(index + 1).padStart(2, '0')}</span>{chapter}</li>)}</ol></section><div className="chronicle-location"><MapPin size={16} /><div><small>Donde transcurre</small><strong>Prontera, Westamar</strong><span>Día 127 del año 203 luego de la Fractura</span></div></div></aside>
-    </div>
-    <section className="chronicle-continuation"><Feather size={19} /><Story /></section>
+    <main className="chronicle-book"><section className="chronicle-page chronicle-page-story">
+      <div className="chronicle-page-head"><span>01.</span><div><small>Archivo Central · Prontera</small><small>Año 203 d.F. · Día 127</small></div></div>
+      <h1>Informes de Herbolago</h1><div className="chronicle-flourish">✦</div>
+      <p className="chronicle-dek">Una derrota en Thanemor. Cuatro supervivientes.<br />Y una senda que no debió existir.</p>
+      <figure className="chronicle-illustration chronicle-feature-illustration"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel y Lysa revisando los informes de Herbolago" /><figcaption>Aurel Venn y Lysa Marek revisando los informes en el Archivo Central de Prontera.</figcaption></figure>
+      <div className="chronicle-prose">{story.map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 12)}`} className={`${index === 0 ? 'chronicle-dropcap ' : ''}${paragraph.startsWith('El mago de pelotón cerró') ? 'chronicle-quoted-line' : ''}`}>{paragraph}</p>)}</div>
+    </section></main>
   </article>;
-}
-
-function Story() {
-  return <div className="chronicle-prose">
-    <p>Las huestes del comandante Harven Taal habían sido vencidas al otro lado de Tanemor. La retirada había roto las compañías, dispersado a los heridos y dejado el camino lleno de uniformes de Prontera sin hombres dentro.</p><p>Durante días, supervivientes habían alcanzado Herbólago en grupos pequeños: sin oficiales, sin equipo, con heridas mal vendadas y silencios demasiado largos.</p><p>Pero entre ellos habían llegado cuatro con una noticia distinta.</p><p>Tres soldados. Un mago de pelotón.</p><p>No eran los únicos supervivientes de la derrota. Sólo eran los únicos que traían consigo una senda cerrada, una tormenta imposible y una historia que nadie en Herbólago parecía dispuesto a contar dos veces.</p><p>Aurel leyó sobre Valnevar: nieve bajo un cielo que no debía producirla; granizo en los techos; una niebla que congelaba cerraduras y pulmones. Criaturas de hielo que bajaban cada noche para exigir sacrificios.</p><p>Luego, una fractura.</p><p>Una cámara bajo tierra. Un muro de hielo. Una figura enorme detrás de él, más alta que un orco, con colmillos pálidos y ojos cerrados. Un portal abierto junto a la criatura. Una tormenta naciendo de esa herida.</p><p>Y, al final:</p><p className="chronicle-quoted-line">El mago de pelotón cerró la senda. Método desconocido. Los cuatro supervivientes llegaron a Herbólago con vida.</p><p>—Un mago cerró una senda —dijo Lysa.</p><p>—Eso parece.</p><p>—¿Es una buena noticia?</p><p>Aurel abrió el armario de mapas y sacó una tablilla cubierta por tela gris. Sus signos eran viejos, angulosos, imposibles de leer sin sentir que algo los leía de vuelta.</p><p>—Los Urdh-Akan —dijo—. Una raza olvidada antes de la Fractura. Sus prisiones no tenían guardias. Tenían hielo.</p><p>Lysa observó la tablilla.</p><p>—¿Y la criatura?</p><p>—Un prisionero.</p><p>Aurel señaló un símbolo.</p><p>—Su arte se llamaba Vael Khur, la Quietud Blanca. No congelaba cosas: detenía procesos. Una tormenta. Una vida. Una senda. A veces, una época entera.</p><p>El frío le recorrió el pescuezo.</p><p>La criatura estaba atrapada en hielo, pero había logrado gobernar el hielo de Valnevar desde su prisión. Había creado sirvientes. Había extendido la tormenta. Había usado la fractura para empujar contra sus muros.</p><p>Aurel no dijo lo que eso sugería.</p><p>Sólo volvió a leer la descripción de los colmillos, del muro y de los ojos cerrados.</p><p>—Tenemos que encontrar al mago —dijo.</p><p>—¿Para premiarlo?</p><p>—Para preguntarle qué cerró. Y qué estaba intentando abrirse.</p><p>Lysa miró hacia el agujero bajo el estante, donde la rata había desaparecido con el sello.</p><p>—Cronista, antes de enviar gente a Herbólago… ¿qué hacemos con las ratas de Prontera?</p><p>Aurel suspiró.</p><p>Bajo la ciudad, las alcantarillas ya no eran sólo alcantarillas. Había nidos demasiado grandes, mordidas en tuberías de brumante y animales que aprendían a no caer en las trampas dos veces. Nadie hablaba aún de mutaciones. Nadie quería ser el primero.</p><p>—Manda otra cuadrilla —dijo.</p><p>—La última volvió sin botas.</p><p>—Entonces manda una cuadrilla con botas mejores.</p><p>Lysa anotó la orden.</p>
-  </div>;
 }

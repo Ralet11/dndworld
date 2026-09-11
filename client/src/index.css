@@ -344,6 +344,9 @@ a:focus-visible {
 .chronicle-page-story .chronicle-prose, .chronicle-continuation .chronicle-prose { max-width: 680px; margin-inline: auto; }.chronicle-prose { color: #37281c; text-wrap: pretty; }.chronicle-prose p { margin-bottom: .84em; }.chronicle-dropcap::first-letter { margin: 5px 10px 0 0; color: #70492b; font-size: 71px; }
 .chronicle-page-aside { padding: 10px clamp(38px, 8vw, 104px) 42px; background: transparent; }.chronicle-illustration { max-width: 680px; margin: 0 auto; padding: 12px; border-color: #735333; background: #4d3522; box-shadow: 0 14px 28px rgba(65,38,16,.31); }.chronicle-illustration img { filter: saturate(.88) contrast(1.03); }.chronicle-illustration figcaption { margin: 12px 4px 2px; color: #654d36; font-size: 11px; text-align: center; }
 .chronicle-continuation { margin: 0 auto 46px; padding: 14px clamp(38px, 8vw, 104px) clamp(58px, 8vw, 94px); border: 1px solid #8e7048; border-top: 0; background-color: #e7d8bd; box-shadow: 0 30px 76px rgba(0,0,0,.58), inset 0 -40px 60px rgba(72,43,18,.08); }.chronicle-continuation::before { top: 0; border-top: 0; }.chronicle-continuation .chronicle-quoted-line { margin: 1.8em 0; padding: 18px 22px; color: #4c3827; border-left-width: 4px; background: rgba(118,83,43,.07); font-size: 1.04em; }
+.chronicle-book { border-bottom: 1px solid #8e7048; }
+.chronicle-page-story { padding-bottom: clamp(58px, 8vw, 94px); }
+.chronicle-feature-illustration { margin: 0 auto 42px; }
 
 .campfire-layout { display: grid; grid-template-columns: minmax(270px, 0.75fr) minmax(420px, 1.25fr); gap: 12px; }
 .campfire-hero { min-height: 430px; padding: 34px; position: relative; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; border: 1px solid rgba(128, 102, 54, 0.4); background: radial-gradient(circle at 50% 72%, rgba(166, 55, 43, 0.18), transparent 30%), linear-gradient(180deg, #111916, #080d0c); }
