@@ -132,8 +132,8 @@ function ChronicleReader({ canShare, campaignPath, campaignLabel }) {
   const [isSharing, setIsSharing] = useState(false);
   const shareChronicle = async () => {
     const url = window.location.href;
-    const title = 'Informes de Herbolago';
-    const text = 'La guerra ruge, el silencio avanza.';
+    const title = 'Crónica 01: Informes de Herbolago';
+    const text = 'Crónica 01: Informes de Herbolago';
     const shareData = { title, text, url };
     setIsSharing(true);
     setShareNotice('');
