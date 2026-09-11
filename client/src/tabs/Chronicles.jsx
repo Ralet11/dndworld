@@ -63,7 +63,7 @@ El mago de pelotón cerró la senda. Método desconocido. Los cuatro supervivien
 
 Aurel abrió el armario de mapas y sacó una tablilla cubierta por una tela gris. Sus signos eran viejos, angulosos, imposibles de leer sin sentir que algo los leía de vuelta.
 
-—Los Urdh-Akan —dijo—. Una raza olvidada antes de la Fractura. Sus prisiones no tenían guardias. Tenían hielo.
+—Los Urdh-Akan —dijo—. Una raza olvidada antes de la Fractura. Sus gélidas prisiones no necesitaban guardias.
 
 Lysa observó la tablilla.
 
@@ -118,7 +118,7 @@ function ChronicleArchive() {
     <div className="chronicle-archive-rule" />
     <div className="chronicle-grid"><Link to={CHRONICLE_PATH} className="chronicle-card">
       <div className="chronicle-card-image"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel Venn y Lysa Marek revisando informes en el Archivo Central" /><span className="chronicle-card-number">01.</span></div>
-      <div className="chronicle-card-body"><p className="chronicle-card-kicker">Registro del Archivo Central</p><h2>Informes de Herbolago</h2><p className="chronicle-card-excerpt">La guerra dejó de rugir en los campos: ahora avanza en silencio bajo las ruinas del mundo.</p><div className="chronicle-card-meta"><span><MapPin size={13} />Prontera, Westamar</span><span><CalendarDays size={13} />Día 127 · Año 203 d.F.</span></div><span className="chronicle-read-link">Abrir crónica <BookOpen size={14} /></span></div>
+      <div className="chronicle-card-body"><p className="chronicle-card-kicker">Registro del Archivo Central</p><h2>Informes de Herbolago</h2><p className="chronicle-card-excerpt">La guerra ruge, el silencio avanza.</p><div className="chronicle-card-meta"><span><MapPin size={13} />Prontera, Westamar</span><span><CalendarDays size={13} />Día 127 · Año 203 d.F.</span></div><span className="chronicle-read-link">Abrir crónica <BookOpen size={14} /></span></div>
     </Link></div>
   </section>;
 }
@@ -129,7 +129,7 @@ function ChronicleReader({ canShare }) {
   const shareChronicle = async () => {
     const url = window.location.href;
     const title = 'Informes de Herbolago';
-    const text = 'La guerra dejó de rugir en los campos: ahora avanza en silencio bajo las ruinas del mundo.';
+    const text = 'La guerra ruge, el silencio avanza.';
     const shareData = { title, text, url };
     setIsSharing(true);
     setShareNotice('');
@@ -159,7 +159,7 @@ function ChronicleReader({ canShare }) {
     <main className="chronicle-book"><section className="chronicle-page chronicle-page-story">
       <div className="chronicle-page-head"><span>01.</span><div><small>Archivo Central · Prontera</small><small>Año 203 d.F. · Día 127</small></div></div>
       <h1>Informes de Herbolago</h1><div className="chronicle-flourish">✦</div>
-      <p className="chronicle-dek">La guerra dejó de rugir en los campos:<br />ahora avanza en silencio bajo las ruinas del mundo.</p>
+      <p className="chronicle-dek">La guerra ruge, el silencio avanza.</p>
       <div className="chronicle-prose">{story.map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 12)}`} className={`${index === 0 ? 'chronicle-dropcap ' : ''}${paragraph.startsWith('El mago de pelotón cerró') ? 'chronicle-quoted-line' : ''}`}>{paragraph}</p>)}</div>
       <figure className="chronicle-illustration chronicle-feature-illustration"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel y Lysa revisando los informes de Herbolago" /><figcaption>Aurel Venn y Lysa Marek revisando los informes en el Archivo Central de Prontera.</figcaption></figure>
     </section></main>
