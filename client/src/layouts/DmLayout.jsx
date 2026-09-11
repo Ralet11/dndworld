@@ -1,5 +1,6 @@
 import { createElement, lazy, Suspense, useState } from 'react';
 import { BookMarked, Compass, Image as ImageIcon, LogOut, Map, Menu, Package, Scroll, Skull, Sparkles, Swords, Users, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import PartyPanel from '../dm/PartyPanel';
@@ -17,6 +18,7 @@ const TOOLS = [
   { id: 'game', label: 'Mesa', Icon: Swords, subtitle: 'Sesión de juego en vivo' },
   { id: 'assistant', label: 'Oracle IA', Icon: Sparkles, subtitle: 'Copiloto privado del director', oracle: true },
   { id: 'atlas', label: 'Atlas', Icon: Map, subtitle: 'Cartografía del mundo' },
+  { id: 'chronicles', label: 'Crónicas', Icon: Scroll, subtitle: 'Archivo público de la campaña' },
   { id: 'party', label: 'Grupo', Icon: Users, subtitle: 'Estado de los aventureros' },
   { id: 'scenes', label: 'Escenas', Icon: Scroll, subtitle: 'Crónicas y narrativa' },
   { id: 'items', label: 'Objetos', Icon: Package, subtitle: 'Tesoros y equipo' },
@@ -50,12 +52,18 @@ function AtlasPanel() {
 export default function DmLayout() {
   const { user, logout } = useAuth();
   const { connected } = useSocket();
+  const navigate = useNavigate();
   const [active, setActive] = useState('game');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const ActivePanel = PANELS[active];
   const activeTool = TOOLS.find(tool => tool.id === active) || TOOLS[0];
 
   const chooseTool = id => {
+    if (id === 'chronicles') {
+      setSidebarOpen(false);
+      navigate('/chronicles');
+      return;
+    }
     setActive(id);
     setSidebarOpen(false);
   };

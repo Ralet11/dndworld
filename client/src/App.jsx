@@ -46,6 +46,7 @@ function CampaignRoutes() {
     return (
       <Routes>
         {campaignRoute}
+        <Route path="/chronicles/*" element={<Chronicles />} />
         <Route path="/dm/*" element={<DmLayout />} />
         <Route path="*" element={<Navigate to="/dm" replace />} />
       </Routes>
