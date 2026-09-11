@@ -22,11 +22,31 @@ export function CampaignProvider({ children }) {
 
   useEffect(() => { refresh().catch(() => setCampaigns([])).finally(() => setLoading(false)); }, []);
   useEffect(() => {
-    if (!campaign || !socket || !connected) return;
-    setCampaignReady(false);
-    socket.timeout(5000).emit('campaign:select', { campaignId: campaign.id }, (timeoutError, response) => {
-      if (!timeoutError && response?.ok) setCampaignReady(true);
-    });
+    if (!campaign || !socket || !connected) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    let retryTimer;
+    const activateCampaign = () => {
+      attempts += 1;
+      setCampaignReady(false);
+      socket.timeout(5000).emit('campaign:select', { campaignId: campaign.id }, (timeoutError, response) => {
+        if (cancelled) return;
+        if (!timeoutError && response?.ok) {
+          setCampaignReady(true);
+          return;
+        }
+        if (attempts < 3) {
+          retryTimer = window.setTimeout(activateCampaign, 800);
+          return;
+        }
+        // Never leave the player on an infinite loading screen if the socket
+        // cannot validate the saved campaign (for example, after access changed).
+        localStorage.removeItem('dnd_campaign_id');
+        setCampaign(null);
+      });
+    };
+    activateCampaign();
+    return () => { cancelled = true; window.clearTimeout(retryTimer); };
   }, [campaign?.id, socket, connected]);
   const selectCampaign = next => { localStorage.setItem('dnd_campaign_id', next.id); setCampaignReady(false); setCampaign(next); };
   return <CampaignContext.Provider value={{ campaigns, campaign, campaignReady, loading, refresh, selectCampaign }}>{children}</CampaignContext.Provider>;
