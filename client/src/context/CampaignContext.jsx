@@ -22,15 +22,16 @@ export function CampaignProvider({ children }) {
 
   useEffect(() => { refresh().catch(() => setCampaigns([])).finally(() => setLoading(false)); }, []);
   useEffect(() => {
-    if (!campaign || !socket || !connected) return undefined;
+    if (!campaign) return undefined;
+    // Campaign access is already authorized by REST. The socket is only needed
+    // for live-table state and must not prevent navigation through the app.
+    setCampaignReady(true);
+    if (!socket || !connected) return undefined;
     let cancelled = false;
     let attempts = 0;
     let retryTimer;
     const activateCampaign = () => {
       attempts += 1;
-      // The REST list already verified that this user may access the campaign.
-      // Do not block the entire application while the live-table socket catches up.
-      setCampaignReady(true);
       socket.timeout(5000).emit('campaign:select', { campaignId: campaign.id }, (timeoutError, response) => {
         if (cancelled) return;
         if (!timeoutError && response?.ok) {
