@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { Campaign, CampaignMember, GameSession, User, Character, Scene, Quest, PointOfInterest, TimelineEvent, AssistantConversation } = require('../models');
 
 const isSuperAdmin = user => user?.role === 'ADMIN';
@@ -34,6 +35,20 @@ async function ensureLegacyCampaign() {
         TimelineEvent.update({ campaign_id: campaign.id }, { where: { campaign_id: null } }),
         AssistantConversation.update({ campaign_id: campaign.id }, { where: { campaign_id: null } }),
     ]);
+    // Las cuentas que ya existían al crear la campaña son parte del mundo heredado.
+    // Las cuentas nuevas siguen requiriendo una invitación explícita del Super Admin.
+    const legacyUsers = await User.findAll({
+        where: { createdAt: { [Op.lte]: campaign.createdAt } },
+        attributes: ['id', 'role'],
+    });
+    await CampaignMember.bulkCreate(
+        legacyUsers.map(user => ({
+            campaign_id: campaign.id,
+            user_id: user.id,
+            role: user.role === 'DM' || user.role === 'ADMIN' ? 'DM' : 'PLAYER',
+        })),
+        { ignoreDuplicates: true }
+    );
     return campaign;
 }
 
