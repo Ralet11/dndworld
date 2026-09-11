@@ -28,21 +28,17 @@ export function CampaignProvider({ children }) {
     let retryTimer;
     const activateCampaign = () => {
       attempts += 1;
-      setCampaignReady(false);
+      // The REST list already verified that this user may access the campaign.
+      // Do not block the entire application while the live-table socket catches up.
+      setCampaignReady(true);
       socket.timeout(5000).emit('campaign:select', { campaignId: campaign.id }, (timeoutError, response) => {
         if (cancelled) return;
         if (!timeoutError && response?.ok) {
-          setCampaignReady(true);
           return;
         }
         if (attempts < 3) {
           retryTimer = window.setTimeout(activateCampaign, 800);
-          return;
         }
-        // Never leave the player on an infinite loading screen if the socket
-        // cannot validate the saved campaign (for example, after access changed).
-        localStorage.removeItem('dnd_campaign_id');
-        setCampaign(null);
       });
     };
     activateCampaign();
