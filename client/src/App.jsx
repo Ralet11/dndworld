@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import PlayerLayout from './layouts/PlayerLayout';
 import DmLayout from './layouts/DmLayout';
 import CampaignHub from './pages/CampaignHub';
+import Chronicles from './tabs/Chronicles';
 import { CampaignProvider, useCampaign } from './context/CampaignContext';
 
 function AppRoutes() {
@@ -23,6 +24,7 @@ function AppRoutes() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/chronicles/*" element={<Chronicles />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
