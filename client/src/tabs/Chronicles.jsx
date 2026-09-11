@@ -126,8 +126,8 @@ function ChronicleReader() {
       <div className="chronicle-page-head"><span>01.</span><div><small>Archivo Central · Prontera</small><small>Año 203 d.F. · Día 127</small></div></div>
       <h1>Informes de Herbolago</h1><div className="chronicle-flourish">✦</div>
       <p className="chronicle-dek">Una derrota en Thanemor. Cuatro supervivientes.<br />Y una senda que no debió existir.</p>
-      <figure className="chronicle-illustration chronicle-feature-illustration"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel y Lysa revisando los informes de Herbolago" /><figcaption>Aurel Venn y Lysa Marek revisando los informes en el Archivo Central de Prontera.</figcaption></figure>
       <div className="chronicle-prose">{story.map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 12)}`} className={`${index === 0 ? 'chronicle-dropcap ' : ''}${paragraph.startsWith('El mago de pelotón cerró') ? 'chronicle-quoted-line' : ''}`}>{paragraph}</p>)}</div>
+      <figure className="chronicle-illustration chronicle-feature-illustration"><img src="/chronicles/informes-de-herbolago.png" alt="Aurel y Lysa revisando los informes de Herbolago" /><figcaption>Aurel Venn y Lysa Marek revisando los informes en el Archivo Central de Prontera.</figcaption></figure>
     </section></main>
   </article>;
 }
