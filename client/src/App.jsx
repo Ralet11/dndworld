@@ -34,11 +34,10 @@ function AppRoutes() {
 }
 
 function CampaignRoutes() {
-  const { campaign, campaignReady, loading } = useCampaign();
+  const { campaign, loading } = useCampaign();
   const { user } = useAuth();
   if (loading) return null;
   if (!campaign) return <Routes><Route path="/campaigns" element={<CampaignHub />} /><Route path="*" element={<Navigate to="/campaigns" replace />} /></Routes>;
-  if (!campaignReady) return <div className="min-h-screen grid place-items-center" style={{ background: '#0F1518', color: '#C8A36A' }}>Abriendo campaña...</div>;
   const campaignRoute = <Route path="/campaigns" element={<CampaignHub />} />;
   // DM y ADMIN van al panel maestro
   if (user.role === 'DM' || user.role === 'ADMIN') {
