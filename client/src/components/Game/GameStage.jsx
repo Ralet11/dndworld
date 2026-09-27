@@ -1303,10 +1303,6 @@ export default function GameStage({
           <div className="game-combat-narrative-image">
             <img src={resolveUrl(combatNarrativeCard.url)} alt={combatNarrativeCard.title || 'Imagen narrativa de combate'} draggable={false} />
           </div>
-          <footer>
-            <span>Visión narrativa</span>
-            <strong>{combatNarrativeCard.title || 'Escena narrativa'}</strong>
-          </footer>
           {isDm && (
             <button type="button" onClick={() => onDismissCombatNarrative?.()} aria-label="Cerrar imagen narrativa para todos" title="Cerrar para toda la mesa">
               <X size={17} />
