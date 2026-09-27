@@ -95,6 +95,36 @@ function canMoveToken(token, isDm, session, userId) {
   );
 }
 
+function CombatNarrativeCard({ card, isDm, onDismiss }) {
+  const [zoom, setZoom] = useState(1);
+  const resize = delta => setZoom(current => Math.max(0.55, Math.min(1.45, Math.round((current + delta) * 100) / 100)));
+
+  return (
+    <aside
+      className="game-combat-narrative-card"
+      role="dialog"
+      aria-live="assertive"
+      aria-label={card.title || 'Imagen narrativa de combate'}
+      style={{ width: `${58 * zoom}%`, maxWidth: `${640 * zoom}px` }}
+      onPointerDown={event => event.stopPropagation()}
+    >
+      <div className="game-combat-narrative-image">
+        <img src={resolveUrl(card.url)} alt={card.title || 'Imagen narrativa de combate'} draggable={false} />
+      </div>
+      <div className="game-combat-narrative-zoom" aria-label="Tamaño de imagen">
+        <button type="button" onClick={() => resize(-0.15)} disabled={zoom <= 0.55} aria-label="Achicar imagen" title="Achicar"><Minus size={15} /></button>
+        <output aria-live="polite">{Math.round(zoom * 100)}%</output>
+        <button type="button" onClick={() => resize(0.15)} disabled={zoom >= 1.45} aria-label="Ampliar imagen" title="Ampliar"><Plus size={15} /></button>
+      </div>
+      {isDm && (
+        <button className="game-combat-narrative-close" type="button" onClick={() => onDismiss?.()} aria-label="Cerrar imagen narrativa para todos" title="Cerrar para toda la mesa">
+          <X size={17} />
+        </button>
+      )}
+    </aside>
+  );
+}
+
 export default function GameStage({
   session,
   userId,
@@ -1292,23 +1322,12 @@ export default function GameStage({
       , toolbarHost)}
 
       {combatNarrativeCard?.url && (
-        <aside
+        <CombatNarrativeCard
           key={combatNarrativeCard.shown_at || combatNarrativeCard.url}
-          className="game-combat-narrative-card"
-          role="dialog"
-          aria-live="assertive"
-          aria-label={combatNarrativeCard.title || 'Imagen narrativa de combate'}
-          onPointerDown={event => event.stopPropagation()}
-        >
-          <div className="game-combat-narrative-image">
-            <img src={resolveUrl(combatNarrativeCard.url)} alt={combatNarrativeCard.title || 'Imagen narrativa de combate'} draggable={false} />
-          </div>
-          {isDm && (
-            <button type="button" onClick={() => onDismissCombatNarrative?.()} aria-label="Cerrar imagen narrativa para todos" title="Cerrar para toda la mesa">
-              <X size={17} />
-            </button>
-          )}
-        </aside>
+          card={combatNarrativeCard}
+          isDm={isDm}
+          onDismiss={onDismissCombatNarrative}
+        />
       )}
 
       {!!renderedSceneNpcs.length && (
