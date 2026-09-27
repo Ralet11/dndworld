@@ -140,8 +140,7 @@ export default function TableChat({ session, socket, user, isDm = false, onError
                     {!messages.length && (
                       <div className="game-direct-empty">
                         <MessageCircle size={22} />
-                        <strong>Un canal sólo para ustedes</strong>
-                        <span>{isDm ? `Escribe a ${activeName}. Los demás jugadores no verán esta conversación.` : 'Sólo tú y el Dungeon Master pueden leer estos mensajes.'}</span>
+                        <strong>Canal con el DM</strong>
                       </div>
                     )}
                     {messages.map(message => {
