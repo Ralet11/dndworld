@@ -6,6 +6,10 @@ export default function TableChat({ session, socket, user, isDm = false, onError
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [readMessageIds, setReadMessageIds] = useState(() => new Set());
+  const [initialMessageIds] = useState(() => new Set(
+    (Array.isArray(session?.table_messages) ? session.table_messages : []).map(message => message.id),
+  ));
   const feedRef = useRef(null);
   const participants = Array.isArray(session?.participants) ? session.participants : [];
   const selectedPlayerPresent = participants.some(item => String(item.user_id) === String(selectedPlayerId));
@@ -14,6 +18,18 @@ export default function TableChat({ session, socket, user, isDm = false, onError
   const messages = allMessages.filter(message => String(message.player_user_id) === String(activePlayerId));
   const activeParticipant = participants.find(item => String(item.user_id) === String(activePlayerId));
   const activeName = participantName(activeParticipant);
+  const unreadMessages = allMessages.filter(message => (
+    String(message.author_user_id) !== String(user?.id)
+    && !initialMessageIds.has(message.id)
+    && !readMessageIds.has(message.id)
+    && !(open && (!isDm || String(message.player_user_id) === String(activePlayerId)))
+  ));
+  const unreadByPlayer = unreadMessages.reduce((counts, message) => {
+    const playerId = String(message.player_user_id || '');
+    counts[playerId] = (counts[playerId] || 0) + 1;
+    return counts;
+  }, {});
+  const unreadCount = Object.values(unreadByPlayer).reduce((total, count) => total + count, 0);
 
   useEffect(() => {
     if (!open) return;
@@ -23,14 +39,40 @@ export default function TableChat({ session, socket, user, isDm = false, onError
 
   useEffect(() => {
     if (!open) return undefined;
-    const closeOnEscape = event => { if (event.key === 'Escape') setOpen(false); };
+    const closeOnEscape = event => {
+      if (event.key !== 'Escape') return;
+      const receivedIds = messages
+        .filter(message => String(message.author_user_id) !== String(user?.id))
+        .map(message => message.id);
+      if (receivedIds.length) setReadMessageIds(current => new Set([...current, ...receivedIds]));
+      setOpen(false);
+    };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [open]);
+  }, [open, messages, user?.id]);
+
+  const markConversationRead = conversationMessages => {
+    const receivedIds = conversationMessages
+      .filter(message => String(message.author_user_id) !== String(user?.id))
+      .map(message => message.id);
+    if (!receivedIds.length) return;
+    setReadMessageIds(current => new Set([...current, ...receivedIds]));
+  };
+
+  const openMessages = () => {
+    setOpen(true);
+    markConversationRead(messages);
+  };
+
+  const closeMessages = () => {
+    markConversationRead(messages);
+    setOpen(false);
+  };
 
   const choosePlayer = playerId => {
     setSelectedPlayerId(playerId);
     setDraft('');
+    markConversationRead(allMessages.filter(message => String(message.player_user_id) === String(playerId)));
   };
 
   const send = event => {
@@ -55,9 +97,10 @@ export default function TableChat({ session, socket, user, isDm = false, onError
   return (
     <div className={`game-direct-messages${open ? ' is-open' : ''}`}>
       {!open && (
-        <button className="game-direct-launcher" type="button" onClick={() => setOpen(true)} aria-label="Abrir mensajes privados">
+        <button className={`game-direct-launcher${unreadCount ? ' has-unread' : ''}`} type="button" onClick={openMessages} aria-label={unreadCount ? `Abrir mensajes privados, ${unreadLabel(unreadCount)}` : 'Abrir mensajes privados'}>
           <MessageCircle size={17} />
           <span>Mensajes</span>
+          {unreadCount > 0 && <strong className="game-direct-unread" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</strong>}
         </button>
       )}
 
@@ -68,7 +111,7 @@ export default function TableChat({ session, socket, user, isDm = false, onError
               <span className="game-direct-mark">{isDm ? <Shield size={16} /> : <MessageCircle size={16} />}</span>
               <div><small>Canal privado</small><strong>{isDm ? 'Mensajes de jugadores' : 'Dungeon Master'}</strong></div>
             </div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar mensajes"><X size={17} /></button>
+            <button type="button" onClick={closeMessages} aria-label="Cerrar mensajes"><X size={17} /></button>
           </header>
 
           <div className="game-direct-body">
@@ -78,9 +121,9 @@ export default function TableChat({ session, socket, user, isDm = false, onError
                 {participants.map(participant => {
                   const playerId = String(participant.user_id);
                   const name = participantName(participant);
-                  const count = allMessages.filter(message => String(message.player_user_id) === playerId).length;
+                  const count = unreadByPlayer[playerId] || 0;
                   return (
-                    <button key={playerId} type="button" className={playerId === String(activePlayerId) ? 'is-active' : ''} onClick={() => choosePlayer(playerId)}>
+                    <button key={playerId} type="button" className={`${playerId === String(activePlayerId) ? 'is-active' : ''}${count ? ' has-unread' : ''}`} onClick={() => choosePlayer(playerId)} aria-label={count ? `${name}, ${unreadLabel(count)}` : name}>
                       <i>{initials(name)}</i><span><strong>{name}</strong><small>{participant.connected ? 'En línea' : 'Desconectado'}</small></span>{count > 0 && <em>{count}</em>}<ChevronLeft size={13} />
                     </button>
                   );
@@ -137,4 +180,8 @@ function formatTime(value) {
   const date = value ? new Date(value) : null;
   if (!date || Number.isNaN(date.getTime())) return '';
   return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function unreadLabel(count) {
+  return `${count} ${count === 1 ? 'mensaje nuevo' : 'mensajes nuevos'}`;
 }

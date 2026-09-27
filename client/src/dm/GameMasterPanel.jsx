@@ -1514,7 +1514,7 @@ export default function GameMasterPanel() {
                   <div><span>Jugadores</span><strong>{connectedPlayers}/{session.participants.length}</strong></div>
                   <div><span>Tokens</span><strong>{session.tokens.length}</strong></div>
                 </div>
-                <TableChat session={session} socket={socket} user={user} isDm onError={setError} />
+                <TableChat key={session.id} session={session} socket={socket} user={user} isDm onError={setError} />
                 <DiceTray onRoll={rollDice} />
                 <div className="game-turn-card game-initiative-card">
                   <header><div><span>Control de iniciativa</span><strong>{awaitingInitiative ? `Esperando ${pendingInitiative.size} tirada(s)` : activeCharacter?.name || 'Sin iniciativa'}</strong></div>{session.combat_state?.mode === 'COMBAT' ? <button className="game-combat-end-button" onClick={() => setCombatMode('NARRATIVE')}>Finalizar combate</button> : <small>Narrativa</small>}</header>
