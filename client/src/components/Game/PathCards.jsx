@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Layers3, Sparkles, X } from 'lucide-react';
+import { Eye, EyeOff, Layers3, Minus, Sparkles, X } from 'lucide-react';
 
 const PATH_CARDS = [
   { id: 'life', tone: 'green', color: 'VERDE', name: 'SENDA DE VIDA', text: 'Mientras esta senda permanezca abierta, la muerte puede reclamar… pero no puede llevarse a nadie.' },
@@ -13,9 +13,12 @@ const PATH_CARDS = [
 
 export default function PathCards({ session, socket, isDm = false, onError }) {
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [minimizedPassiveKey, setMinimizedPassiveKey] = useState('');
   const state = session?.combat_state?.pathCards || {};
   const discarded = new Set(Array.isArray(state.discarded) ? state.discarded : []);
   const active = state.active?.round === session?.round ? PATH_CARDS.find(card => card.id === state.active.cardId) : null;
+  const activePassiveKey = active ? `${active.id}:${state.active?.round}:${state.active?.revealedAt || ''}` : '';
+  const passiveMinimized = Boolean(active && minimizedPassiveKey === activePassiveKey);
   const remaining = PATH_CARDS.length - discarded.size;
 
   const command = (event, payload = {}) => {
@@ -71,11 +74,20 @@ export default function PathCards({ session, socket, isDm = false, onError }) {
         </section>
       )}
 
-      {active && (
+      {active && passiveMinimized && (
+        <button className={`path-passive-tab is-${active.tone}`} type="button" onClick={() => setMinimizedPassiveKey('')} aria-label={`Volver a mostrar ${active.name}`}>
+          <Sparkles size={13} /><strong>{active.name}</strong><span>Ver pasiva</span>
+        </button>
+      )}
+
+      {active && !passiveMinimized && (
         <aside className={`path-passive is-${active.tone}`} aria-live="assertive">
           <span><Sparkles size={16} /></span>
           <div><small>Pasiva de ronda · {active.color}</small><strong>{active.name}</strong><p>{active.text}</p></div>
-          {isDm && <button type="button" onClick={() => command('game:dismiss-path-passive')} aria-label="Cerrar pasiva"><X size={16} /></button>}
+          <div className="path-passive-actions">
+            <button type="button" onClick={() => setMinimizedPassiveKey(activePassiveKey)} aria-label="Minimizar pasiva"><Minus size={16} /></button>
+            {isDm && <button className="is-dismiss" type="button" onClick={() => command('game:dismiss-path-passive')} aria-label="Cerrar pasiva para todos"><X size={16} /></button>}
+          </div>
         </aside>
       )}
     </>
