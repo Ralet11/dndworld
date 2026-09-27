@@ -198,6 +198,18 @@ test('Vorcan and Imperial actions become executable profiles', () => {
     const dagger = npcActionProfile({ id: 4, name: 'Daga Ígnea', action_type: 'acción', attack_bonus: 5, damage_dice: '1d4', damage_bonus: 2, damage_type: 'Perforante', description: 'Además 1d6 de fuego.' });
     assert.deepEqual(dagger.extraDamage, ['1d6']);
     assert.equal(dagger.extraDamageType, 'fuego');
+
+    const vorcanMelee = npcActionProfile({ id: 5, name: 'Ataque cuerpo a cuerpo rojo', action_type: 'acción', attack_bonus: 10, damage_dice: '2d6', damage_bonus: 6, damage_type: 'Mágico' });
+    assert.equal(vorcanMelee.damage, '2d6+6');
+    assert.deepEqual(vorcanMelee.extraDamage, ['1d6']);
+    assert.equal(vorcanMelee.extraDamageType, 'magico');
+
+    const crimsonSweep = npcActionProfile({ id: 6, name: 'Barrido Carmesí', action_type: 'acción', damage_dice: '4d8', damage_type: 'Mágico', save_ability: 'DEX', save_dc: 17, recharge: '5–6', description: 'Fallo: daño y empuje 10 pies. Éxito: mitad.' });
+    assert.equal(crimsonSweep.target, 'area-enemy');
+    assert.equal(crimsonSweep.area.origin, 'self');
+    assert.equal(crimsonSweep.area.feet, 10);
+    assert.equal(crimsonSweep.halfOnSave, true);
+    assert.deepEqual(crimsonSweep.forcedMovement, { pushFeet: 10 });
 });
 
 test('party profiles preserve dual effects, weapon jams and persistent spells', () => {

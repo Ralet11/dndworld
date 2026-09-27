@@ -80,6 +80,8 @@ const NPC_ACTION_PROFILES = {
     'fuego sectorial': { target: 'area-enemy', range: 60, area: { shape: 'square', feet: 15 }, halfOnSave: true },
     'latigazo encadenado': { target: 'enemy', range: 60, halfOnSave: true },
     'paso entre sombras': { target: 'self', movement: { type: 'TELEPORT', maxFeet: 15 } },
+    'ataque cuerpo a cuerpo rojo': { extraDamage: ['1d6'], extraDamageType: 'magico' },
+    'barrido carmesi': { target: 'area-enemy', range: 10, area: { shape: 'circle', feet: 10, origin: 'self' }, halfOnSave: true, forcedMovement: { pushFeet: 10 } },
 };
 
 const CUSTOM_ACTION_PROFILES = {
@@ -413,6 +415,7 @@ function npcActionProfile(action, allActions = []) {
         extraDamage: override.extraDamage || [],
         extraDamageType: override.extraDamageType || null,
         halfOnSave: Boolean(override.halfOnSave || /mitad del dano|mitad de dano/.test(normalize(action.description))),
+        forcedMovement: override.forcedMovement || null,
         effect: override.effect || (source.save_dc ? inferSaveEffect(action.description) : null),
         movement: override.movement || null,
         multiattack: isMultiattack ? 2 : 1,
