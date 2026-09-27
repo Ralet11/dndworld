@@ -112,6 +112,16 @@ function visibleTableMessages(messages, viewer) {
     ));
 }
 
+function normalizeCombatNarrativeCard(value, shownAt = new Date().toISOString()) {
+    const url = String(value?.url || '').trim().slice(0, 2048);
+    if (!url) return null;
+    return {
+        url,
+        title: String(value?.title || 'Escena narrativa').trim().slice(0, 160) || 'Escena narrativa',
+        shown_at: shownAt,
+    };
+}
+
 function clamp(value) {
     return Math.max(0, Math.min(100, Number(value) || 0));
 }
@@ -1802,6 +1812,39 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, session.id);
     });
 
+    socket.on('game:show-combat-narrative', async ({ sessionId, url, title } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'No tienes permiso para compartir contenido.' });
+            if (session.combat_state?.mode !== 'COMBAT') return reply({ ok: false, message: 'La tarjeta narrativa sólo se muestra durante el combate.' });
+            const narrativeCard = normalizeCombatNarrativeCard({ url, title });
+            if (!narrativeCard) return reply({ ok: false, message: 'Selecciona una imagen narrativa válida.' });
+            session.combat_state = { ...(session.combat_state || {}), narrativeCard };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:show-combat-narrative error:', error);
+            reply({ ok: false, message: 'No se pudo mostrar la imagen narrativa.' });
+        }
+    });
+
+    socket.on('game:dismiss-combat-narrative', async ({ sessionId } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session) return reply({ ok: false, message: 'No tienes permiso para cerrar este contenido.' });
+            session.combat_state = { ...(session.combat_state || {}), narrativeCard: null };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:dismiss-combat-narrative error:', error);
+            reply({ ok: false, message: 'No se pudo cerrar la imagen narrativa.' });
+        }
+    });
+
     socket.on('game:update-grid-style', async ({ sessionId, color, lineWidth, enabled, mapFit } = {}) => {
         const session = await requireHostedSession(socket, sessionId);
         if (!session) return fail(socket, 'No tienes permiso para ajustar la cuadrícula.');
@@ -3346,4 +3389,4 @@ function registerGameSessionSocket(io, socket) {
     });
 }
 
-module.exports = { expirePathCard, loadSession, normalizePathCards, registerGameSessionSocket, visibleTableMessages };
+module.exports = { expirePathCard, loadSession, normalizeCombatNarrativeCard, normalizePathCards, registerGameSessionSocket, visibleTableMessages };

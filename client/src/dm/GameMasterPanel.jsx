@@ -533,6 +533,17 @@ export default function GameMasterPanel() {
 
   const publish = (url = mediaUrl, nextTitle = mediaTitle, type = mediaType, nextGridEnabled = gridEnabled) => {
     if (!url) return setError('Selecciona una imagen o mapa antes de compartir.');
+    if (type === 'IMAGE' && session.combat_state?.mode === 'COMBAT') {
+      socket.emit('game:show-combat-narrative', {
+        sessionId: session.id,
+        url,
+        title: nextTitle || 'Escena sin título',
+      }, response => {
+        if (!response?.ok) setError(response?.message || 'No se pudo mostrar la imagen narrativa.');
+      });
+      setComposerOpen(false);
+      return;
+    }
     emit('game:share', {
       sessionId: session.id,
       type,
@@ -769,7 +780,8 @@ export default function GameMasterPanel() {
       setActiveSceneSetId(data.setId);
       setActiveSceneCueId(data.cueId);
       setSelectedSceneSetId(data.setId);
-      setCombatMode(data.cue.presentation_mode === 'COMBAT' ? 'COMBAT' : 'NARRATIVE');
+      const isNarrativeCardInCombat = session.combat_state?.mode === 'COMBAT' && data.cue.asset.type === 'IMAGE';
+      if (!isNarrativeCardInCombat) setCombatMode(data.cue.presentation_mode === 'COMBAT' ? 'COMBAT' : 'NARRATIVE');
       publishAsset(data.cue.asset);
     } catch (setError) {
       setError(setError.message);
@@ -1100,6 +1112,9 @@ export default function GameMasterPanel() {
                 onNarrativeStyleChange={settings => emit('game:update-narrative-style', { sessionId: session.id, ...settings })}
                 onNarrativePanelDrop={(slotIndex, panel) => emit('game:update-narrative-style', { sessionId: session.id, slotIndex, ...panel })}
                 onHideContent={() => emit('game:share', { sessionId: session.id, type: 'NONE' })}
+                onDismissCombatNarrative={() => socket.emit('game:dismiss-combat-narrative', { sessionId: session.id }, response => {
+                  if (!response?.ok) setError(response?.message || 'No se pudo cerrar la imagen narrativa.');
+                })}
                 onAddAnnotation={annotation => emit('game:add-annotation', { sessionId: session.id, annotation })}
                 onUpdateAnnotation={(annotationId, changes) => emit('game:update-annotation', { sessionId: session.id, annotationId, ...changes })}
                 onDeleteAnnotation={annotationId => emit('game:delete-annotation', { sessionId: session.id, annotationId })}

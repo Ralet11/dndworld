@@ -110,6 +110,7 @@ export default function GameStage({
   onNarrativeStyleChange,
   onNarrativePanelDrop,
   onHideContent,
+  onDismissCombatNarrative,
   onAddAnnotation,
   onUpdateAnnotation,
   onDeleteAnnotation,
@@ -205,6 +206,7 @@ export default function GameStage({
   const tokens = (session?.tokens || []).filter(token => token.visible);
   const sceneNpcs = session?.scene_npcs || EMPTY_SCENE_NPCS;
   const speakingNpcId = session?.speaking_npc_id;
+  const combatNarrativeCard = session?.combat_state?.mode === 'COMBAT' ? session.combat_state?.narrativeCard : null;
   const narrativeLayout = Math.max(1, Math.min(4, Number(session?.narrative_layout) || 1));
   const storedNarrativePanels = Array.isArray(session?.narrative_panels) ? session.narrative_panels : [];
   const narrativePanels = Array.from({ length: narrativeLayout }, (_, index) => {
@@ -1288,6 +1290,30 @@ export default function GameStage({
             </div>
         </div>
       , toolbarHost)}
+
+      {combatNarrativeCard?.url && (
+        <aside
+          key={combatNarrativeCard.shown_at || combatNarrativeCard.url}
+          className="game-combat-narrative-card"
+          role="dialog"
+          aria-live="assertive"
+          aria-label={combatNarrativeCard.title || 'Imagen narrativa de combate'}
+          onPointerDown={event => event.stopPropagation()}
+        >
+          <div className="game-combat-narrative-image">
+            <img src={resolveUrl(combatNarrativeCard.url)} alt={combatNarrativeCard.title || 'Imagen narrativa de combate'} draggable={false} />
+          </div>
+          <footer>
+            <span>Visión narrativa</span>
+            <strong>{combatNarrativeCard.title || 'Escena narrativa'}</strong>
+          </footer>
+          {isDm && (
+            <button type="button" onClick={() => onDismissCombatNarrative?.()} aria-label="Cerrar imagen narrativa para todos" title="Cerrar para toda la mesa">
+              <X size={17} />
+            </button>
+          )}
+        </aside>
+      )}
 
       {!!renderedSceneNpcs.length && (
         <div className="game-scene-cast" aria-live="polite" aria-label="Personajes presentes en la escena">

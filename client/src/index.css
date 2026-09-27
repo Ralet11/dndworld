@@ -4302,6 +4302,34 @@ a:focus-visible {
 .game-vfx-selected-editor { padding: 7px; display: grid; gap: 7px; border: 1px solid #55472e; background: rgba(167, 125, 55, .06); }
 .game-vfx-selected-editor > strong { color: #d8bd78; font-size: 7px; letter-spacing: .09em; text-transform: uppercase; }
 .game-vfx-remove-selected { min-height: 27px; display: flex; align-items: center; justify-content: center; gap: 5px; color: #d18778; border: 1px solid rgba(194, 69, 47, .4); background: rgba(194, 69, 47, .07); font-size: 6px; font-weight: 900; text-transform: uppercase; }
+.game-combat-narrative-card {
+  width: min(640px, 58%);
+  height: clamp(260px, 78%, 620px);
+  max-height: calc(100% - 28px);
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  z-index: 180;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #a98243;
+  border-radius: 9px 3px 3px 9px;
+  background: #070b09;
+  box-shadow: -18px 22px 60px rgba(0, 0, 0, .76), inset 0 0 0 1px rgba(255, 226, 157, .08);
+  transform: translateY(-50%);
+  animation: game-combat-narrative-in 320ms cubic-bezier(.18, .82, .24, 1) both;
+}
+.game-combat-narrative-card::before { content: ""; position: absolute; inset: 0; z-index: 1; border: 5px solid rgba(8, 13, 10, .82); pointer-events: none; }
+.game-combat-narrative-image { min-height: 0; position: relative; overflow: hidden; background: radial-gradient(circle at 50% 35%, #172019, #030504 72%); }
+.game-combat-narrative-image img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.game-combat-narrative-card footer { min-height: 58px; padding: 10px 50px 10px 15px; position: relative; z-index: 2; border-top: 1px solid #55452c; background: linear-gradient(100deg, #17231c, #0a100d); }
+.game-combat-narrative-card footer span, .game-combat-narrative-card footer strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-combat-narrative-card footer span { color: #a98a50; font-size: 6px; font-weight: 900; letter-spacing: .15em; text-transform: uppercase; }
+.game-combat-narrative-card footer strong { margin-top: 5px; color: #f0e2c6; font-family: var(--font-display); font-size: clamp(15px, 1.5vw, 22px); font-weight: 500; }
+.game-combat-narrative-card > button { width: 34px; height: 34px; position: absolute; top: 11px; right: 11px; z-index: 3; display: grid; place-items: center; color: #ead39c; border: 1px solid rgba(210, 169, 87, .58); border-radius: 50%; background: rgba(7, 12, 9, .9); box-shadow: 0 5px 18px rgba(0, 0, 0, .55); }
+.game-combat-narrative-card > button:hover { color: #fff0c4; border-color: #e0b862; background: #182219; }
+@keyframes game-combat-narrative-in { from { opacity: 0; filter: blur(3px); transform: translate(70px, -50%) scale(.96); } to { opacity: 1; filter: blur(0); transform: translate(0, -50%) scale(1); } }
 .game-scene-cast {
   max-width: calc(100% - 32px);
   position: absolute;
@@ -4370,7 +4398,8 @@ a:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .game-scene-cast-entry,
-  .game-scene-cast-entry.is-leaving { animation-duration: 1ms; }
+  .game-scene-cast-entry.is-leaving,
+  .game-combat-narrative-card { animation-duration: 1ms; }
 }
 .game-scene-cast-preview {
   width: 264px;
@@ -4407,6 +4436,10 @@ a:focus-visible {
 .game-scene-cast-preview-stats span { color: #707770; font-size: 6px; font-weight: 900; text-transform: uppercase; }
 .game-scene-cast-preview-stats strong { color: #e4dac9; font-family: var(--font-display); font-size: 10px; font-weight: 500; }
 .game-scene-cast-preview > p { margin: 0; padding: 9px 11px; color: #7e877f; font-size: 7px; line-height: 1.45; }
+@media (max-width: 640px) {
+  .game-combat-narrative-card { width: calc(100% - 20px); height: 74%; right: 10px; border-radius: 8px; }
+  .game-combat-narrative-card footer { min-height: 50px; padding-block: 8px; }
+}
 
 .game-token {
   position: absolute;
