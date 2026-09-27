@@ -89,6 +89,13 @@ function isDm(socket) {
     return socket.user?.role === 'DM' || socket.user?.role === 'ADMIN';
 }
 
+function visibleTableMessages(messages, viewer) {
+    const viewerIsDm = isDm(viewer);
+    return (Array.isArray(messages) ? messages : []).filter(message => (
+        message?.player_user_id && (viewerIsDm || String(message.player_user_id) === String(viewer?.user?.id))
+    ));
+}
+
 function clamp(value) {
     return Math.max(0, Math.min(100, Number(value) || 0));
 }
@@ -356,6 +363,7 @@ async function addAutomaticInitiative(session, character, source = 'npc') {
 function serializeSession(session, viewer) {
     if (!session) return null;
     const payload = session.toJSON();
+    payload.table_messages = visibleTableMessages(payload.table_messages, viewer);
     const onlineUsers = presence.get(session.id);
     payload.participants = (payload.participants || []).map(participant => ({
         ...participant,
@@ -1621,37 +1629,53 @@ function registerGameSessionSocket(io, socket) {
         await broadcastSession(io, sessionId);
     });
 
-    socket.on('game:send-table-message', async ({ sessionId, text } = {}, reply = () => {}) => {
+    socket.on('game:send-table-message', async ({ sessionId, text, playerUserId } = {}, reply = () => {}) => {
         try {
-            const session = await GameSession.findByPk(sessionId);
-            if (!session || session.status === 'FINISHED') return reply({ ok: false, message: 'La sala ya no está disponible.' });
-
-            const isSessionDm = isDm(socket) && String(session.dm_user_id) === String(socket.user.id);
-            const participant = isSessionDm ? null : await GameParticipant.findOne({
-                where: { session_id: session.id, user_id: socket.user.id },
-                attributes: ['id'],
-            });
-            if (!isSessionDm && !participant) return reply({ ok: false, message: 'No perteneces a esta sala.' });
-
             const message = String(text || '').trim().replace(/\s+/g, ' ').slice(0, 700);
             if (!message) return reply({ ok: false, message: 'Escribe un mensaje antes de enviarlo.' });
 
-            const messages = Array.isArray(session.table_messages) ? session.table_messages : [];
-            session.table_messages = [...messages, {
-                id: randomUUID(),
-                text: message,
-                author_user_id: socket.user.id,
-                author_name: String(socket.user?.username || (isSessionDm ? 'Dungeon Master' : 'Jugador')).slice(0, 80),
-                author_role: isSessionDm ? 'DM' : 'PLAYER',
-                created_at: new Date().toISOString(),
-            }].slice(-120);
-            session.changed('table_messages', true);
-            await session.save();
-            await broadcastSession(io, session.id);
+            const savedSessionId = await GameSession.sequelize.transaction(async transaction => {
+                const session = await GameSession.findByPk(sessionId, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!session || session.status === 'FINISHED') throw Object.assign(new Error('La sala ya no está disponible.'), { publicMessage: true });
+
+                const isSessionDm = isDm(socket) && String(session.dm_user_id) === String(socket.user.id);
+                const directPlayerId = isSessionDm ? String(playerUserId || '') : String(socket.user.id);
+                const participant = directPlayerId ? await GameParticipant.findOne({
+                    where: { session_id: session.id, user_id: directPlayerId },
+                    attributes: ['id'],
+                    transaction,
+                }) : null;
+                if (!participant || (!isSessionDm && directPlayerId !== String(socket.user.id))) {
+                    throw Object.assign(new Error(isSessionDm ? 'Selecciona un jugador de esta mesa.' : 'No perteneces a esta sala.'), { publicMessage: true });
+                }
+
+                const messages = Array.isArray(session.table_messages) ? session.table_messages : [];
+                const nextMessage = {
+                    id: randomUUID(),
+                    text: message,
+                    player_user_id: directPlayerId,
+                    author_user_id: socket.user.id,
+                    author_name: String(socket.user?.username || (isSessionDm ? 'Dungeon Master' : 'Jugador')).slice(0, 80),
+                    author_role: isSessionDm ? 'DM' : 'PLAYER',
+                    created_at: new Date().toISOString(),
+                };
+                const legacyMessages = messages.filter(item => !item?.player_user_id);
+                const directMessages = [...messages.filter(item => item?.player_user_id), nextMessage];
+                const channelMessages = directMessages.filter(item => String(item.player_user_id) === directPlayerId).slice(-120);
+                session.table_messages = [
+                    ...legacyMessages,
+                    ...directMessages.filter(item => String(item.player_user_id) !== directPlayerId),
+                    ...channelMessages,
+                ];
+                session.changed('table_messages', true);
+                await session.save({ transaction });
+                return session.id;
+            });
+            await broadcastSession(io, savedSessionId);
             reply({ ok: true });
         } catch (error) {
             console.error('game:send-table-message error:', error);
-            reply({ ok: false, message: 'No se pudo enviar el mensaje.' });
+            reply({ ok: false, message: error.publicMessage ? error.message : 'No se pudo enviar el mensaje.' });
         }
     });
 
@@ -3236,4 +3260,4 @@ function registerGameSessionSocket(io, socket) {
     });
 }
 
-module.exports = { loadSession, registerGameSessionSocket };
+module.exports = { loadSession, registerGameSessionSocket, visibleTableMessages };
