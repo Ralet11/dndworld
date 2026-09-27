@@ -45,6 +45,7 @@ const PLAYER_DICE_COLORS = ['#3d8b61', '#397ca8', '#a83f35', '#c47b36', '#4f9b9a
 const BOARD_VFX_TYPES = new Set(['fire', 'ice', 'acid']);
 const BOARD_VFX_SHAPES = new Set(['point', 'line', 'circle', 'square']);
 const ROLL_CARD_EXIT_MS = 1150;
+const PATH_CARD_IDS = new Set(['life', 'death', 'mind', 'shadows', 'darkness', 'light', 'chaos']);
 const EQUIPMENT_SLOT_INCLUDES = [
     'helmet', 'chest', 'shoulders', 'boots', 'pants', 'gloves',
     'ring_1', 'ring_2', 'primary_weapon', 'secondary_weapon',
@@ -87,6 +88,21 @@ function roomName(sessionId) {
 
 function isDm(socket) {
     return socket.user?.role === 'DM' || socket.user?.role === 'ADMIN';
+}
+
+function normalizePathCards(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    const discarded = [...new Set((Array.isArray(source.discarded) ? source.discarded : []).filter(id => PATH_CARD_IDS.has(id)))];
+    const active = source.active && PATH_CARD_IDS.has(source.active.cardId) && Number.isInteger(Number(source.active.round))
+        ? { cardId: source.active.cardId, round: Number(source.active.round), revealedAt: source.active.revealedAt || null }
+        : null;
+    return { visible: Boolean(source.visible), discarded, active };
+}
+
+function expirePathCard(state, round) {
+    const current = normalizePathCards(state?.pathCards);
+    if (!current.active || current.active.round === Number(round)) return state;
+    return { ...(state || {}), pathCards: { ...current, active: null } };
 }
 
 function visibleTableMessages(messages, viewer) {
@@ -1679,6 +1695,68 @@ function registerGameSessionSocket(io, socket) {
         }
     });
 
+    socket.on('game:set-path-cards-visible', async ({ sessionId, visible } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session || session.status === 'FINISHED') return reply({ ok: false, message: 'No tienes permiso para controlar estas cartas.' });
+            const pathCards = normalizePathCards(session.combat_state?.pathCards);
+            session.combat_state = { ...(session.combat_state || {}), pathCards: { ...pathCards, visible: Boolean(visible) } };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:set-path-cards-visible error:', error);
+            reply({ ok: false, message: 'No se pudo cambiar la visibilidad de las cartas.' });
+        }
+    });
+
+    socket.on('game:reveal-path-card', async ({ sessionId, cardId } = {}, reply = () => {}) => {
+        try {
+            if (!PATH_CARD_IDS.has(cardId)) return reply({ ok: false, message: 'Esa senda no existe.' });
+            const hosted = await requireHostedSession(socket, sessionId);
+            if (!hosted || hosted.status === 'FINISHED') return reply({ ok: false, message: 'No tienes permiso para revelar estas cartas.' });
+
+            await GameSession.sequelize.transaction(async transaction => {
+                const session = await GameSession.findByPk(hosted.id, { transaction, lock: transaction.LOCK.UPDATE });
+                const pathCards = normalizePathCards(session.combat_state?.pathCards);
+                if (pathCards.discarded.includes(cardId)) throw Object.assign(new Error('Esa senda ya fue descartada.'), { publicMessage: true });
+                if (pathCards.active?.round === Number(session.round)) throw Object.assign(new Error('Ya hay una senda activa en esta ronda. Ciérrala antes de revelar otra.'), { publicMessage: true });
+                session.combat_state = {
+                    ...(session.combat_state || {}),
+                    pathCards: {
+                        ...pathCards,
+                        discarded: [...pathCards.discarded, cardId],
+                        active: { cardId, round: Number(session.round), revealedAt: new Date().toISOString() },
+                    },
+                };
+                session.changed('combat_state', true);
+                await session.save({ transaction });
+            });
+            await broadcastSession(io, hosted.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:reveal-path-card error:', error);
+            reply({ ok: false, message: error.publicMessage ? error.message : 'No se pudo revelar la senda.' });
+        }
+    });
+
+    socket.on('game:dismiss-path-passive', async ({ sessionId } = {}, reply = () => {}) => {
+        try {
+            const session = await requireHostedSession(socket, sessionId);
+            if (!session || session.status === 'FINISHED') return reply({ ok: false, message: 'No tienes permiso para cerrar esta pasiva.' });
+            const pathCards = normalizePathCards(session.combat_state?.pathCards);
+            session.combat_state = { ...(session.combat_state || {}), pathCards: { ...pathCards, active: null } };
+            session.changed('combat_state', true);
+            await session.save();
+            await broadcastSession(io, session.id);
+            reply({ ok: true });
+        } catch (error) {
+            console.error('game:dismiss-path-passive error:', error);
+            reply({ ok: false, message: 'No se pudo cerrar la pasiva.' });
+        }
+    });
+
     socket.on('game:set-status', async ({ sessionId, status } = {}) => {
         try {
             const session = await requireHostedSession(socket, sessionId);
@@ -1696,7 +1774,7 @@ function registerGameSessionSocket(io, socket) {
                 ].filter(Boolean))];
                 session.turn_index = 0;
                 session.round = 1;
-                session.combat_state = { resources: {} };
+                session.combat_state = { resources: {}, pathCards: normalizePathCards(session.combat_state?.pathCards) };
                 session.changed('combat_state', true);
             }
             session.status = status;
@@ -2084,6 +2162,7 @@ function registerGameSessionSocket(io, socket) {
         if (!session || !session.turn_order?.length) return;
         if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
         if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción de combate pendiente. Resuélvela o cancélala desde el registro de combate.');
+        const previousRound = session.round;
         const nextIndex = session.turn_index + 1;
         if (nextIndex >= session.turn_order.length) {
             session.turn_index = 0;
@@ -2092,15 +2171,18 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index = nextIndex;
         }
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
+        session.combat_state = expirePathCard(session.combat_state, session.round);
         await rollTurnRecharges(session, session.turn_order[session.turn_index], io);
         session.changed('combat_state', true);
         await session.save();
-        io.to(roomName(session.id)).emit('game:turn-updated', {
+        const turnUpdate = {
             round: session.round,
             turnIndex: session.turn_index,
             activeCharacterId: session.turn_order[session.turn_index] || null,
             turnOrder: session.turn_order,
-        });
+        };
+        if (session.round !== previousRound) await broadcastSession(io, session.id);
+        else io.to(roomName(session.id)).emit('game:turn-updated', turnUpdate);
     });
 
     socket.on('game:previous-turn', async ({ sessionId } = {}) => {
@@ -2108,6 +2190,7 @@ function registerGameSessionSocket(io, socket) {
         if (!session || !session.turn_order?.length) return;
         if (session.combat_state?.awaitingInitiative) return fail(socket, 'Aun faltan tiradas de iniciativa.');
         if (await hasPendingCombatAction(session.id)) return fail(socket, 'Hay una acción de combate pendiente. Resuélvela o cancélala desde el registro de combate.');
+        const previousRound = session.round;
         if (session.turn_index <= 0) {
             session.turn_index = session.turn_order.length - 1;
             session.round = Math.max(1, session.round - 1);
@@ -2115,15 +2198,18 @@ function registerGameSessionSocket(io, socket) {
             session.turn_index -= 1;
         }
         session.combat_state = refreshTurnReaction(session.combat_state || {}, session.turn_order[session.turn_index]);
+        session.combat_state = expirePathCard(session.combat_state, session.round);
         await rollTurnRecharges(session, session.turn_order[session.turn_index], io);
         session.changed('combat_state', true);
         await session.save();
-        io.to(roomName(session.id)).emit('game:turn-updated', {
+        const turnUpdate = {
             round: session.round,
             turnIndex: session.turn_index,
             activeCharacterId: session.turn_order[session.turn_index] || null,
             turnOrder: session.turn_order,
-        });
+        };
+        if (session.round !== previousRound) await broadcastSession(io, session.id);
+        else io.to(roomName(session.id)).emit('game:turn-updated', turnUpdate);
     });
 
     socket.on('game:set-turn', async ({ sessionId, characterId } = {}) => {
@@ -3260,4 +3346,4 @@ function registerGameSessionSocket(io, socket) {
     });
 }
 
-module.exports = { loadSession, registerGameSessionSocket, visibleTableMessages };
+module.exports = { expirePathCard, loadSession, normalizePathCards, registerGameSessionSocket, visibleTableMessages };

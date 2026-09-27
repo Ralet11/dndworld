@@ -11,6 +11,7 @@ import TurnActionPanel from './TurnActionPanel';
 import ReactionPrompt from './ReactionPrompt';
 import CombatResultPrompt from './CombatResultPrompt';
 import TableChat from './TableChat';
+import PathCards from './PathCards';
 
 const MapView = lazy(() => import('../Lore/MapView'));
 
@@ -378,6 +379,7 @@ export default function GamePlayerPanel() {
 
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
       <ReactionPrompt session={session} socket={socket} onError={setError} />
+      <PathCards session={session} socket={socket} onError={setError} />
 
       <CombatResultPrompt
         notice={pendingCombatNotice}

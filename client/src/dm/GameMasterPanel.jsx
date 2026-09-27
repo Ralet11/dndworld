@@ -50,6 +50,7 @@ import GameAudioControl from './GameAudioControl';
 import CombatResultPrompt from '../components/Game/CombatResultPrompt';
 import ReactionPrompt from '../components/Game/ReactionPrompt';
 import TableChat from '../components/Game/TableChat';
+import PathCards from '../components/Game/PathCards';
 import { deriveWorldConditions } from '../utils/worldTime';
 
 const MapView = lazy(() => import('../components/Lore/MapView'));
@@ -1027,6 +1028,7 @@ export default function GameMasterPanel() {
       {error && <div className="game-error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={14} /></button></div>}
       <ReactionThinkingNotice reactionWindow={session.combat_state?.reactionWindow} />
       <ReactionPrompt session={session} socket={socket} onError={setError} />
+      <PathCards session={session} socket={socket} isDm onError={setError} />
 
       <CombatResultPrompt
         notice={pendingCombatNotice}
