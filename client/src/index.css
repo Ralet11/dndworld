@@ -6255,19 +6255,19 @@ fieldset.npc-studio-card { padding-top: 15px; }
 .path-card-table > header h2 { margin: 3px 0 0; color: #ead9b6; font-family: var(--font-display); font-size: 23px; font-weight: 500; }
 .path-card-table > header > span { color: #837b68; font-size: 7px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .path-card-grid { padding: 18px 0 5px; display: grid; grid-template-columns: repeat(7, minmax(115px, 1fr)); gap: clamp(8px, 1.2vw, 16px); perspective: 1400px; }
-.path-card { min-width: 0; height: clamp(190px, 28vh, 255px); padding: 0; border: 0; outline: 0; background: transparent; perspective: 1000px; }
+.path-card { --path-color: #c9a258; min-width: 0; height: clamp(190px, 28vh, 255px); padding: 0; border: 0; outline: 0; background: transparent; perspective: 1000px; }
 button.path-card:not(:disabled) { cursor: pointer; }
 button.path-card:not(:disabled):hover .path-card-inner { transform: translateY(-7px) rotateX(2deg); }
 .path-card-inner { width: 100%; height: 100%; position: relative; display: block; transform-style: preserve-3d; transition: transform .75s cubic-bezier(.2,.72,.18,1); }
 .path-card.is-revealed .path-card-inner { transform: rotateY(180deg); }
 button.path-card.is-revealed:hover .path-card-inner { transform: rotateY(180deg); }
-.path-card-back, .path-card-front { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #755f37; border-radius: 8px; backface-visibility: hidden; }
-.path-card-back { color: #caa65c; background: radial-gradient(circle at center, rgba(164,124,50,.19), transparent 34%), repeating-linear-gradient(45deg, transparent 0 8px, rgba(184,146,74,.025) 8px 9px), #101711; box-shadow: inset 0 0 0 5px #0b100c, inset 0 0 0 6px rgba(174,137,68,.32), 0 12px 28px rgba(0,0,0,.5); }
-.path-card-back::before, .path-card-back::after { content: ""; width: 54%; aspect-ratio: 1; position: absolute; border: 1px solid rgba(194,154,78,.31); transform: rotate(45deg); }
-.path-card-back::after { width: 34%; border-color: rgba(194,154,78,.52); transform: rotate(45deg); }
-.path-card-back b { position: relative; z-index: 2; font-size: 30px; text-shadow: 0 0 20px rgba(220,180,93,.55); }
-.path-card-back small { position: absolute; bottom: 16px; z-index: 2; font-size: 6px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
-.path-card-front { --path-color: #aaa; padding: 15px 11px; color: #f1eee7; border-color: color-mix(in srgb, var(--path-color) 68%, #4b463b); background: radial-gradient(circle at 50% 15%, color-mix(in srgb, var(--path-color) 27%, transparent), transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--path-color) 12%, #151a16), #080c0a 72%); box-shadow: inset 0 0 32px color-mix(in srgb, var(--path-color) 12%, transparent), 0 0 22px color-mix(in srgb, var(--path-color) 15%, transparent); text-align: center; transform: rotateY(180deg); }
+.path-card-back, .path-card-front { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--path-color) 78%, #272c28); border-radius: 8px; backface-visibility: hidden; }
+.path-card-back { color: var(--path-color); background: radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--path-color) 34%, transparent), transparent 36%), linear-gradient(155deg, color-mix(in srgb, var(--path-color) 20%, #101713), color-mix(in srgb, var(--path-color) 7%, #060b08) 72%); box-shadow: inset 0 0 0 5px #080d0a, inset 0 0 0 6px color-mix(in srgb, var(--path-color) 58%, transparent), inset 0 0 42px color-mix(in srgb, var(--path-color) 20%, transparent), 0 0 20px color-mix(in srgb, var(--path-color) 24%, transparent), 0 12px 28px rgba(0,0,0,.58); }
+.path-card-back::before, .path-card-back::after { content: ""; width: 54%; aspect-ratio: 1; position: absolute; border: 1px solid color-mix(in srgb, var(--path-color) 52%, transparent); box-shadow: 0 0 13px color-mix(in srgb, var(--path-color) 16%, transparent); transform: rotate(45deg); }
+.path-card-back::after { width: 34%; border-color: color-mix(in srgb, var(--path-color) 82%, transparent); }
+.path-card-back b { position: relative; z-index: 2; color: color-mix(in srgb, var(--path-color) 88%, white); font-size: 30px; text-shadow: 0 0 11px var(--path-color), 0 0 28px var(--path-color); }
+.path-card-back small { position: absolute; bottom: 16px; z-index: 2; color: color-mix(in srgb, var(--path-color) 86%, white); font-size: 6px; font-weight: 900; letter-spacing: .14em; text-shadow: 0 1px 5px #000; text-transform: uppercase; }
+.path-card-front { padding: 15px 11px; color: #f1eee7; border-color: color-mix(in srgb, var(--path-color) 68%, #4b463b); background: radial-gradient(circle at 50% 15%, color-mix(in srgb, var(--path-color) 27%, transparent), transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--path-color) 12%, #151a16), #080c0a 72%); box-shadow: inset 0 0 32px color-mix(in srgb, var(--path-color) 12%, transparent), 0 0 22px color-mix(in srgb, var(--path-color) 15%, transparent); text-align: center; transform: rotateY(180deg); }
 .path-card-front::before { content: "✦"; margin-bottom: 10px; color: var(--path-color); font-size: 18px; text-shadow: 0 0 15px var(--path-color); }
 .path-card-front > small { color: var(--path-color); font-size: 6px; font-weight: 900; letter-spacing: .12em; }
 .path-card-front > strong { margin-top: 6px; color: #f0e6d3; font-family: var(--font-display); font-size: clamp(12px, 1.15vw, 17px); font-weight: 500; line-height: 1.05; }
@@ -6276,13 +6276,14 @@ button.path-card.is-revealed:hover .path-card-inner { transform: rotateY(180deg)
 .path-card.is-active { filter: brightness(1.14); }
 .path-card.is-active .path-card-front { animation: path-card-awaken 1.5s ease-in-out infinite alternate; }
 .path-card.is-revealed:not(.is-active) { filter: grayscale(.55) brightness(.66); }
-.path-card.is-green .path-card-front, .path-passive.is-green { --path-color: #53d277; }
-.path-card.is-spectral .path-card-front, .path-passive.is-spectral { --path-color: #e7f4ef; }
-.path-card.is-blue .path-card-front, .path-passive.is-blue { --path-color: #4aa7ff; }
-.path-card.is-violet .path-card-front, .path-passive.is-violet { --path-color: #a96cff; }
-.path-card.is-black .path-card-front, .path-passive.is-black { --path-color: #8d91a8; }
-.path-card.is-gold .path-card-front, .path-passive.is-gold { --path-color: #f2c24f; }
-.path-card.is-crimson .path-card-front, .path-passive.is-crimson { --path-color: #ed5263; }
+.path-card.is-green, .path-passive.is-green { --path-color: #42e873; }
+.path-card.is-spectral, .path-passive.is-spectral { --path-color: #edfdf8; }
+.path-card.is-blue, .path-passive.is-blue { --path-color: #3b9cff; }
+.path-card.is-violet, .path-passive.is-violet { --path-color: #a75cff; }
+.path-card.is-black, .path-passive.is-black { --path-color: #686b80; }
+.path-card.is-gold, .path-passive.is-gold { --path-color: #ffd04f; }
+.path-card.is-crimson, .path-passive.is-crimson { --path-color: #ff3f55; }
+.path-card.is-black .path-card-back { background: radial-gradient(circle at 50% 48%, rgba(103,107,131,.3), transparent 34%), linear-gradient(155deg, #161722, #010203 74%); box-shadow: inset 0 0 0 5px #020203, inset 0 0 0 6px #61657a, inset 0 0 42px rgba(64,68,91,.4), 0 0 22px rgba(89,92,117,.38), 0 12px 28px rgba(0,0,0,.72); }
 .path-card-hint { margin: 11px 0 0; color: #817761; font-size: 7px; text-align: center; }
 .path-passive { --path-color: #d1ad63; width: min(760px, calc(100vw - 32px)); min-height: 70px; position: fixed; top: 72px; left: 50%; z-index: 2050; padding: 11px 48px 11px 13px; display: grid; grid-template-columns: 38px minmax(0,1fr); align-items: center; gap: 11px; color: var(--path-color); border: 1px solid color-mix(in srgb, var(--path-color) 62%, #383a33); border-radius: 7px; background: linear-gradient(105deg, color-mix(in srgb, var(--path-color) 14%, #0a110e), rgba(5,10,8,.98)); box-shadow: 0 16px 50px rgba(0,0,0,.65), inset 3px 0 var(--path-color); transform: translateX(-50%); backdrop-filter: blur(12px); animation: path-passive-enter .45s cubic-bezier(.2,.78,.2,1) both; }
 .path-passive > span { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--path-color) 52%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--path-color) 10%, #09100d); }
