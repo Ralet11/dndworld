@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useClassSpells } from '../../hooks/useClassSpells';
+import { useState, useMemo } from 'react';
 import {
   Shield, Zap, Eye, Target, Footprints, Heart, HeartCrack,
   Scroll, Sparkles, Backpack, User, Wind, Coins,
@@ -264,7 +265,7 @@ function buildSkillRows(character, proficiency) {
 
 function SkillsBlock({ character, onRoll, grid = false, showTitle = true }) {
   const proficiency = character.proficiencyBonus || 2;
-  const skills = useMemo(() => buildSkillRows(character, proficiency), [character.skills, character.stats, proficiency]);
+  const skills = useMemo(() => buildSkillRows(character, proficiency), [character, proficiency]);
 
   return (
     <div>
@@ -315,12 +316,14 @@ function DesktopCapabilities({ character, onRoll }) {
   return (
     <>
       <div className="hero-quick-stats">
-        {quickStats.map(({ label, value, Icon, color }) => (
+        {quickStats.map(stat => {
+          const { label, value, Icon, color } = stat;
+          return (
           <div className="hero-quick-stat" key={label}>
             <Icon size={15} style={{ color }} />
             <div><strong>{value}</strong><span>{label}</span></div>
           </div>
-        ))}
+        ); })}
       </div>
 
       <div className="hero-subsection-title">
@@ -571,7 +574,7 @@ function InventoryTab({ character }) {
   const [activeTab, setActiveTab] = useState('COMBAT');
   const [slotModal, setSlotModal] = useState(null); // { item, slotId, label }
 
-  const inventory = character.inventory || [];
+  const inventory = useMemo(() => character.inventory || [], [character.inventory]);
   const equipment = character.equipment;
 
   const isEquipped = (itemId) => SLOT_KEYS.some(s => {
@@ -893,8 +896,6 @@ function RasgosTab({ character }) {
 // ─── HechizosTab ──────────────────────────────────────────────
 function HechizosTab({ character }) {
   const { socket } = useSocket();
-  const [classSpells, setClassSpells] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState('known');
   const [selected, setSelected] = useState(null);
 
@@ -902,23 +903,10 @@ function HechizosTab({ character }) {
   const preparedSlugs = useMemo(() => character.spells_prepared || [], [character.spells_prepared]);
   const spellSlots    = character.spell_slots || {};
 
-  // Fetch class spells — listener must be registered BEFORE emit (server may respond from cache)
-  useEffect(() => {
-    if (!socket) return;
-    const slugs = character.classes?.length
-      ? character.classes.map(c => c.slug)
-      : (character.class_slug ? [character.class_slug] : (character.class ? [character.class] : []));
-    if (!slugs.length) return;
-
-    setLoading(true);
-    const handle = (spells) => {
-      setClassSpells(spells.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name)));
-      setLoading(false);
-    };
-    socket.on('class-spells-result', handle);
-    socket.emit('get-class-spells', { class_names: slugs });
-    return () => socket.off('class-spells-result', handle);
-  }, [socket, character.class_slug, character.class, character.classes]);
+  const classNames = character.classes?.length
+    ? character.classes.map(c => c.slug).filter(Boolean)
+    : (character.class_slug ? [character.class_slug] : (character.class ? [character.class] : []));
+  const { spells: classSpells, loading } = useClassSpells(socket, classNames);
 
   const knownSpells    = classSpells.filter(s => knownSlugs.includes(s.slug));
   const preparedSpells = classSpells.filter(s => preparedSlugs.includes(s.slug));
@@ -1087,12 +1075,14 @@ function DesktopHeroHeader({ character }) {
 function TabBar({ active, setActive }) {
   return (
     <div className="hero-tab-list no-scrollbar">
-      {TABS.map(({ id, label, Icon }) => (
+      {TABS.map(tab => {
+        const { id, label, Icon } = tab;
+        return (
         <button key={id} onClick={() => setActive(id)}
           className={`hero-tab-button ${active === id ? 'is-active' : ''}`}>
           <Icon size={16} /><span>{label}</span>
         </button>
-      ))}
+      ); })}
     </div>
   );
 }

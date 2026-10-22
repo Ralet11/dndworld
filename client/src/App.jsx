@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/auth';
 import { SocketProvider } from './context/SocketContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -7,7 +8,8 @@ import PlayerLayout from './layouts/PlayerLayout';
 import DmLayout from './layouts/DmLayout';
 import CampaignHub from './pages/CampaignHub';
 import Chronicles from './tabs/Chronicles';
-import { CampaignProvider, useCampaign } from './context/CampaignContext';
+import { CampaignProvider } from './context/CampaignContext';
+import { useCampaign } from './context/campaign';
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();

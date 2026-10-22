@@ -1,7 +1,7 @@
 import { createElement, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Compass, Lock, Mail, User } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');

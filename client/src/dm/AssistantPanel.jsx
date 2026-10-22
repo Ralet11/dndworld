@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Sparkles, Send, RotateCcw, Clock3, MapPin, HeartPulse, Users, Mic, MicOff, Plus, Trash2 } from 'lucide-react';
 import API_URL from '../config';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 import { useSocket } from '../context/SocketContext';
 
 const DEFAULT_SUGGESTIONS = [

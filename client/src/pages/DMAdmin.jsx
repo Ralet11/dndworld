@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import API_URL from '../config';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { Users, Upload, Send, Heart, Map as MapIcon, Shield, Scroll, Skull, Sword, UserPlus, Package, Plus, Dices, X, Image as ImageIcon, Eye } from 'lucide-react';
 import { MapContainer, ImageOverlay, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -20,12 +20,12 @@ const partyIcon = new L.Icon({
     iconAnchor: [16, 32],
 });
 
-export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket }) {
+export default function DMAdmin({ partyStats, sharedMedia, socket }) {
     const [activeTab, setActiveTab] = useState('dashboard');
 
     // Data States
     const [allItems, setAllItems] = useState([]);
-    const [allPlayers, setAllPlayers] = useState([]);
+    const [, setAllPlayers] = useState([]);
     const [allQuests, setAllQuests] = useState([]);
     const [allNpcs, setAllNpcs] = useState([]);
 
@@ -39,7 +39,7 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
     const [randomLevel, setRandomLevel] = useState(1);
     const [foundRandomResult, setFoundRandomResult] = useState(null);
     const [editingCharacter, setEditingCharacter] = useState(null);
-    const [showMapModal, setShowMapModal] = useState(false); // New Map Modal State
+    const [, setShowMapModal] = useState(false); // New Map Modal State
     const fileInputRef = useRef(null);
 
     useEffect(() => {
@@ -109,9 +109,6 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
         socket.emit('update-hp', { characterId, newHp: parseInt(newHp) });
     };
 
-    const updatePosition = (pos) => {
-        socket.emit('update-position', pos);
-    };
 
     const handleAssignItem = (itemId, characterId) => {
         if (!characterId) return;
@@ -196,14 +193,14 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
 
             <AnimatePresence>
                 {foundRandomResult && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                         onClick={() => setFoundRandomResult(null)}
                     >
-                        <motion.div
+                        <Motion.div
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             className="bg-slate-900 border border-accent-gold/30 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl relative ring-1 ring-accent-gold/20"
@@ -270,15 +267,15 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                     </>
                                 )}
                             </div>
-                        </motion.div>
-                    </motion.div>
+                        </Motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
 
             <AnimatePresence mode="wait">
                 {/* DASHBOARD TAB */}
                 {activeTab === 'dashboard' && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
@@ -301,7 +298,7 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                 {partyStats.map(character => (
-                                    <motion.div
+                                    <Motion.div
                                         key={character.id}
                                         layoutId={character.id}
                                         onClick={() => setEditingCharacter(character)}
@@ -350,7 +347,7 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                                 <span className="text-white">{character.hp} / {character.maxHp}</span>
                                             </div>
                                             <div className="h-2 bg-slate-950 rounded-full overflow-hidden">
-                                                <motion.div
+                                                <Motion.div
                                                     className={`h-full ${character.hp <= character.maxHp * 0.2 ? 'bg-red-500' : 'bg-green-500'}`}
                                                     initial={{ width: 0 }}
                                                     animate={{ width: `${(character.hp / character.maxHp) * 100}%` }}
@@ -364,7 +361,7 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                                 placeholder="Modificar HP..."
                                             />
                                         </div>
-                                    </motion.div>
+                                    </Motion.div>
                                 ))}
                             </div>
                         </section>
@@ -460,13 +457,13 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                 </div>
                             </div>
                         </section>
-                    </motion.div>
+                    </Motion.div>
                 )
                 }
 
                 {
                     activeTab === 'items' && (
-                        <motion.div
+                        <Motion.div
                             key="items"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -578,13 +575,13 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                         ))}
                                 </div>
                             </div>
-                        </motion.div>
+                        </Motion.div>
                     )
                 }
 
                 {
                     activeTab === 'quests' && (
-                        <motion.div
+                        <Motion.div
                             key="quests"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -723,13 +720,13 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                     ))}
                                 </div>
                             </div>
-                        </motion.div>
+                        </Motion.div>
                     )
                 }
 
                 {
                     activeTab === 'npcs' && (
-                        <motion.div
+                        <Motion.div
                             key="npcs"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -780,7 +777,7 @@ export default function DMAdmin({ partyStats, sharedMedia, partyPosition, socket
                                     ))}
                                 </div>
                             </div>
-                        </motion.div>
+                        </Motion.div>
                     )
                 }
             </AnimatePresence >
@@ -804,7 +801,7 @@ function MapComponent({ partyPosition, onPositionChange }) {
         const map = useMap();
         useEffect(() => {
             map.panTo([pos.y, pos.x]);
-        }, [pos]);
+        }, [pos, map]);
         return null;
     }
 
@@ -858,14 +855,14 @@ function CharacterEditorModal({ character, onClose, socket }) {
     };
 
     return (
-        <motion.div
+        <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[2100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
             onClick={onClose}
         >
-            <motion.div
+            <Motion.div
                 initial={{ scale: 0.9, y: 30 }}
                 animate={{ scale: 1, y: 0 }}
                 className="bg-slate-900 border border-accent-gold/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
@@ -955,7 +952,7 @@ function CharacterEditorModal({ character, onClose, socket }) {
                     <button onClick={onClose} className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white hover:bg-white/5 transition-colors">Cancelar</button>
                     <button onClick={handleSave} className="px-6 py-2 rounded-lg bg-accent-gold text-slate-950 text-xs font-black uppercase tracking-wider hover:bg-yellow-400 shadow-lg shadow-accent-gold/20 transition-all">Guardar Cambios</button>
                 </div>
-            </motion.div>
-        </motion.div>
+            </Motion.div>
+        </Motion.div>
     );
 }

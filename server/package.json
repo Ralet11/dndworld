@@ -3,17 +3,18 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node tests/gameCombat.test.js",
+    "test": "node --test tests/*.test.js",
     "combat:audit": "node scripts/audit_combat_actions.js",
     "lore:sync": "node scripts/sync_ecos_lore.js",
     "seed": "node scripts/seed.js",
-    "seed:reset": "node scripts/reset-and-seed.js --force",
+    "seed:reset": "node scripts/reset-and-seed.js",
     "seed:export": "node export_seed.js",
     "npc-images:import": "node scripts/import_npc_images.js",
     "media:migrate-s3": "node scripts/migrate_cloudinary_to_s3.js",
     "export": "node export_seed.js",
-    "start": "nodemon index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test:combat": "node --test tests/gameCombat.test.js"
   },
   "keywords": [],
   "author": "",
@@ -37,5 +38,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

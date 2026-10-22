@@ -2133,9 +2133,11 @@ app.get(/.*/, (req, res) => {
 const PORT = process.env.PORT || 3001;
 const RUN_STARTUP_SEED = /^(1|true|yes)$/i.test(String(process.env.RUN_STARTUP_SEED || ''));
 
-// Database Sync and Server Launch
-sequelize.sync({ alter: true }).then(async () => {
-    console.log('Database connected and synced.');
+// Schema changes are opt-in and restricted to disposable local databases.
+const { initializeDatabase, assertLocalDatabase } = require('./utils/localDatabaseSafety');
+if (RUN_STARTUP_SEED) assertLocalDatabase(process.env, 'Startup seed');
+initializeDatabase(sequelize, process.env).then(async () => {
+    console.log('Database connected.');
     await ensureLegacyCampaign();
     if (RUN_STARTUP_SEED) {
         console.warn('RUN_STARTUP_SEED habilitado: ejecutando seed de arranque.');
@@ -2150,4 +2152,5 @@ sequelize.sync({ alter: true }).then(async () => {
     });
 }).catch(err => {
     console.error('Unable to connect to the database:', err);
+    process.exitCode = 1;
 });

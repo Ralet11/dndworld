@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Compass, Plus, Shield, Swords } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import API_URL from '../config';
-import { useAuth } from '../context/AuthContext';
-import { useCampaign } from '../context/CampaignContext';
+import { useAuth } from '../context/auth';
+import { useCampaign } from '../context/campaign';
 
 export default function CampaignHub() {
   const { user } = useAuth();

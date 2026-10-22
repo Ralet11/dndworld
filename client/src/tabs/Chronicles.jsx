@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, BookOpen, CalendarDays, LogIn, MapPin, Scroll, Share2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 
 const CHRONICLE_PATH = '/chronicles/informes-de-herbolago';
 

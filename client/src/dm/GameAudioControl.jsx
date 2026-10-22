@@ -22,6 +22,7 @@ export default function GameAudioControl({ session, socket, onError }) {
   const audioRef = useRef(null);
   const token = localStorage.getItem('dnd_token');
   const track = session?.audioTrack;
+  const { audio_loop, audio_position_seconds, audio_started_at, audio_status } = session || {};
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -34,21 +35,21 @@ export default function GameAudioControl({ session, socket, onError }) {
     const audio = audioRef.current;
     if (!audio || !track) return;
     const sync = () => {
-      const target = expectedPosition(session);
-      if (Number.isFinite(audio.duration) && audio.duration > 0 && session.audio_loop !== false) audio.currentTime = target % audio.duration;
+      const target = expectedPosition({ audio_position_seconds, audio_started_at, audio_status });
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio_loop !== false) audio.currentTime = target % audio.duration;
       else if (Math.abs((audio.currentTime || 0) - target) > 2) audio.currentTime = target;
 
-      if (session.audio_status === 'PLAYING') {
+      if (audio_status === 'PLAYING') {
         audio.play().then(() => setNeedsActivation(false)).catch(() => setNeedsActivation(true));
       } else {
         audio.pause();
-        if (session.audio_status === 'STOPPED') audio.currentTime = 0;
+        if (audio_status === 'STOPPED') audio.currentTime = 0;
       }
     };
     if (audio.readyState >= 1) sync();
     else audio.addEventListener('loadedmetadata', sync, { once: true });
     return () => audio.removeEventListener('loadedmetadata', sync);
-  }, [session.audio_loop, session.audio_position_seconds, session.audio_started_at, session.audio_status, track]);
+  }, [audio_loop, audio_position_seconds, audio_started_at, audio_status, track]);
 
   const updateVolume = next => {
     const value = Number(next);

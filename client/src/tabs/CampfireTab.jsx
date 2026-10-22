@@ -1,7 +1,8 @@
 import { Flame, LogOut, Mail, Shield, User } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 
-function InfoRow({ Icon, label, value }) {
+function InfoRow(props) {
+  const { Icon, label, value } = props;
   return (
     <div className="campfire-info-row">
       <div className="campfire-info-icon"><Icon size={18} strokeWidth={1.4} /></div>

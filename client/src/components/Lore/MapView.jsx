@@ -8,7 +8,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import API_URL from '../../config';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/auth';
 import { useSocket } from '../../context/SocketContext';
 
 const MAP_WIDTH = 2400;

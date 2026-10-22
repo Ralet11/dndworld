@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Scroll, X, ChevronRight } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
-import { useAuth } from '../../context/AuthContext';
 
 const TYPE_COLOR = {
   Epica: '#F59E0B', Personal: '#C2452F', Cadena: '#5BA86B', Común: '#3E84D6',
@@ -9,7 +8,6 @@ const TYPE_COLOR = {
 
 export default function QuestsView({ onBack }) {
   const { socket } = useSocket();
-  const { user } = useAuth();
   const [quests, setQuests] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
