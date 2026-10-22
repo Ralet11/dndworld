@@ -61,7 +61,8 @@ export default function LoreTab() {
   );
 }
 
-function LoreCard({ title, subtitle, Icon, art, onPress }) {
+function LoreCard(props) {
+  const { title, subtitle, Icon, art, onPress } = props;
   return (
     <button onClick={onPress} className="lore-hub-card" style={{ '--card-art': art }}>
       <div className="lore-hub-card-icon"><Icon size={21} strokeWidth={1.3} /></div>

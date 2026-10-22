@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Scroll, Plus, Sun, Moon, Settings, ChevronRight, CheckCircle2, CircleDashed, Crown } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/auth';
 import CreateSceneModal from './CreateSceneModal';
 
 export default function SceneList({ onSelectScene }) {

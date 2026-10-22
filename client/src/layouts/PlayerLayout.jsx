@@ -8,7 +8,7 @@ import CampfireTab from '../tabs/CampfireTab';
 import NotificationBanner from '../components/UI/NotificationBanner';
 import GamePlayerPanel from '../components/Game/GamePlayerPanel';
 import { useSocket } from '../context/SocketContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 
 const MOBILE_TABS = [
   { path: '/game', label: 'Mesa', Icon: Swords },

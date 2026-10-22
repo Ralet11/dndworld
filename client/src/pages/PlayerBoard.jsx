@@ -1,5 +1,6 @@
+import { usePropDraft } from '../hooks/usePropDraft';
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
     User, Briefcase, Sparkles, Dices, Map as MapIcon,
     Navigation, Crosshair, Scroll, Sword, Target, Link as LinkIcon,
@@ -139,7 +140,7 @@ export default function PlayerBoard({ sharedMedia = [], character, partyPosition
             {/* Notification Overlay */}
             <AnimatePresence>
                 {notification && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, y: -50, scale: 0.9 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -50, scale: 0.9 }}
@@ -193,14 +194,14 @@ export default function PlayerBoard({ sharedMedia = [], character, partyPosition
                                 </div>
                             </div>
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
 
             {/* Dice Result Overlay */}
             <AnimatePresence>
                 {showDice && lastRoll && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0, scale: 0.5, y: 50 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.5, y: -50 }}
@@ -211,7 +212,7 @@ export default function PlayerBoard({ sharedMedia = [], character, partyPosition
                             <div className="text-xs uppercase font-black tracking-[0.3em] text-accent-gold/70 mb-1">Realidad d{lastRoll.sides}</div>
                             <div className="text-7xl font-black text-white drop-shadow-2xl">{lastRoll.result}</div>
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence >
 
@@ -257,7 +258,7 @@ function StatsTab({ character, rollDice, socket }) {
     };
 
     return (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="space-y-5">
+        <Motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="space-y-5">
             {/* Header Vitals - Keep compact */}
             <div className="grid grid-cols-4 gap-2">
                 <MetricCard small label="CA" value={character.ac || 10} icon={<Shield size={12} />} color="text-blue-400" />
@@ -274,7 +275,7 @@ function StatsTab({ character, rollDice, socket }) {
                     const labelMap = { str: 'FUERZA', dex: 'DESTREZA', con: 'CONSTITUCIÓN', int: 'INTELIGENCIA', wis: 'SABIDURÍA', cha: 'CARISMA' };
 
                     return (
-                        <motion.div
+                        <Motion.div
                             key={attr}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => rollDice(20)}
@@ -289,7 +290,7 @@ function StatsTab({ character, rollDice, socket }) {
                             <div className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-slate-950/50 border border-white/10 flex items-center justify-center">
                                 <span className="text-xs font-bold text-slate-400">{val}</span>
                             </div>
-                        </motion.div>
+                        </Motion.div>
                     );
                 })}
             </div>
@@ -358,7 +359,7 @@ function StatsTab({ character, rollDice, socket }) {
                     </div>
                 </div>
             </div>
-        </motion.div>
+        </Motion.div>
     );
 }
 
@@ -385,7 +386,7 @@ function QuestsTab({ quests }) {
 
     return (
         <>
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+            <Motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
                 {quests.map((quest) => (
                     <div
                         key={quest.id}
@@ -417,19 +418,19 @@ function QuestsTab({ quests }) {
                 {quests.length === 0 && (
                     <div className="py-20 text-center opacity-30 italic text-sm">No hay misiones activas en tu bitácora...</div>
                 )}
-            </motion.div>
+            </Motion.div>
 
             {/* Quest Details Modal */}
             <AnimatePresence>
                 {selectedQuest && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                         onClick={() => setSelectedQuest(null)}
                     >
-                        <motion.div
+                        <Motion.div
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
@@ -498,8 +499,8 @@ function QuestsTab({ quests }) {
                                     )}
                                 </div>
                             </div>
-                        </motion.div>
-                    </motion.div>
+                        </Motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
         </>
@@ -522,12 +523,12 @@ function MapTab({ partyPosition }) {
         const map = useMap();
         useEffect(() => {
             map.setView([pos.y, pos.x], map.getZoom());
-        }, [pos]);
+        }, [pos, map]);
         return null;
     }
 
     return (
-        <motion.div
+        <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -568,7 +569,7 @@ function MapTab({ partyPosition }) {
                     <span className="text-[10px] font-black uppercase tracking-[0.2em]">Sincronizado</span>
                 </div>
             </div>
-        </motion.div>
+        </Motion.div>
     );
 }
 
@@ -635,14 +636,14 @@ function EquipmentTab({ equipment, characterId, socket }) {
 
             <AnimatePresence>
                 {selectedItem && (
-                    <motion.div
+                    <Motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-sm"
                         onClick={() => setSelectedItem(null)}
                     >
-                        <motion.div
+                        <Motion.div
                             initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.9, y: 20 }}
@@ -686,8 +687,8 @@ function EquipmentTab({ equipment, characterId, socket }) {
                                     <X size={16} /> Desequipar Objeto
                                 </button>
                             </div>
-                        </motion.div>
-                    </motion.div>
+                        </Motion.div>
+                    </Motion.div>
                 )}
             </AnimatePresence>
         </>
@@ -868,13 +869,8 @@ function AlliesTab({ characterId, socket }) {
 }
 
 function AbilitiesTab({ characterId, initialText, socket }) {
-    const [text, setText] = useState(initialText || '');
+    const [text, setText] = usePropDraft(initialText || '');
     const [isSaving, setIsSaving] = useState(false);
-
-    // Sync with external updates (e.g. from DM)
-    useEffect(() => {
-        setText(initialText || '');
-    }, [initialText]);
 
     // Debounced save
     useEffect(() => {
@@ -890,7 +886,7 @@ function AbilitiesTab({ characterId, initialText, socket }) {
     }, [text, characterId, socket, initialText]);
 
     return (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full flex flex-col">
+        <Motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full flex flex-col">
             <div className="flex items-center justify-between mb-3 px-1">
                 <h3 className="text-sm font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
                     <BookOpen size={16} /> Habilidades y Talentos
@@ -919,11 +915,11 @@ function AbilitiesTab({ characterId, initialText, socket }) {
                     Sincronizado con el DM
                 </div>
             </div>
-        </motion.div>
+        </Motion.div>
     );
 }
 
-function AvatarEditorModal({ character, isOpen, onClose, socket }) {
+function AvatarEditorModal({ character, onClose, socket }) {
     const [scale, setScale] = useState(character.image_scale || 1);
     const [offsetX, setOffsetX] = useState(character.image_offset_x || 0);
     const [offsetY, setOffsetY] = useState(character.image_offset_y || 0);
@@ -969,14 +965,14 @@ function AvatarEditorModal({ character, isOpen, onClose, socket }) {
     };
 
     return (
-        <motion.div
+        <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
             onClick={onClose}
         >
-            <motion.div
+            <Motion.div
                 initial={{ scale: 0.9, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.9, y: 20 }}
@@ -1081,17 +1077,17 @@ function AvatarEditorModal({ character, isOpen, onClose, socket }) {
                         Guardar Cambios
                     </button>
                 </div>
-            </motion.div>
-        </motion.div>
+            </Motion.div>
+        </Motion.div>
     );
 }
 
 function GalleryTab({ sharedMedia }) {
     return (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 gap-4">
+        <Motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 gap-4">
             <AnimatePresence>
-                {sharedMedia.map((m, i) => (
-                    <motion.div key={m.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel overflow-hidden border-white/10 group">
+                {sharedMedia.map((m) => (
+                    <Motion.div key={m.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel overflow-hidden border-white/10 group">
                         <div className="aspect-video relative overflow-hidden">
                             <img src={m.url} alt={m.caption} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                         </div>
@@ -1099,11 +1095,11 @@ function GalleryTab({ sharedMedia }) {
                             <p className="text-sm font-bold text-slate-200 tracking-tight">{m.caption}</p>
                             <p className="text-[10px] text-slate-500 font-medium uppercase mt-1">Recibido {new Date(m.timestamp).toLocaleTimeString()}</p>
                         </div>
-                    </motion.div>
+                    </Motion.div>
                 ))}
             </AnimatePresence>
             {sharedMedia.length === 0 && <div className="py-20 text-center opacity-30 italic text-sm">Esperando revelaciones del DM...</div>}
-        </motion.div>
+        </Motion.div>
     );
 }
 

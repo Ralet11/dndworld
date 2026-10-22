@@ -41,7 +41,7 @@ import {
   X,
 } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 import API_URL from '../config';
 import AssistantPanel from './AssistantPanel';
 import GameStage from '../components/Game/GameStage';

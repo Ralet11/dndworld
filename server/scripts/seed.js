@@ -1,4 +1,6 @@
 require('dotenv').config();
+const { assertLocalDatabase } = require('../utils/localDatabaseSafety');
+assertLocalDatabase(process.env, 'Database seed/reset');
 
 const sequelize = require('../config/database');
 const seedDatabase = require('../utils/seeder');

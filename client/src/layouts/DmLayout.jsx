@@ -1,7 +1,7 @@
 import { createElement, lazy, Suspense, useState } from 'react';
 import { BookMarked, Compass, Image as ImageIcon, LogOut, Map, Menu, Package, Scroll, Skull, Sparkles, Swords, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 import { useSocket } from '../context/SocketContext';
 import PartyPanel from '../dm/PartyPanel';
 import ScenesPanel from '../dm/ScenesPanel';

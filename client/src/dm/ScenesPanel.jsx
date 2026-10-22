@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Scroll, Users, CheckCircle2, CircleDashed, Trash2, Edit3, X, ImageIcon, Crown, Send, Sun, Moon, Settings, Upload } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 import API_URL from '../config';
 
-function SceneCard({ scene, onSelect, onDelete, socket }) {
+function SceneCard({ scene, onSelect, socket }) {
   const statusColor = scene.status === 'ACTIVE' ? '#F59E0B' : '#5BA86B';
   const statusLabel = scene.status === 'ACTIVE' ? 'Activa' : scene.status === 'FINISHED' ? 'Terminada' : 'Archivada';
 
@@ -72,7 +72,7 @@ function SceneCard({ scene, onSelect, onDelete, socket }) {
   );
 }
 
-function SceneChatDm({ scene, onBack, socket, user }) {
+function SceneChatDm({ scene, onBack, socket }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [mode, setMode] = useState('narration'); // narration | description | action

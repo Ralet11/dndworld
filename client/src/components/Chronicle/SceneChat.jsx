@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, Crown, Trash2, Upload, X, Users } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/auth';
 import API_URL from '../../config';
 
 function ChatBubble({ msg, isDm, userId }) {
@@ -85,20 +85,15 @@ export default function SceneChat({ scene, onBack }) {
       setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
     };
     const handleUpdated = (msg) => setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
-    const handlePlayers = (players) => {
-      const mine = players.find(p => p.UserId == user?.id);
-    };
 
     socket.on('timeline-data', handleTimeline);
     socket.on('new-message', handleNew);
     socket.on('message-updated', handleUpdated);
-    socket.on('players-data', handlePlayers);
 
     return () => {
       socket.off('timeline-data', handleTimeline);
       socket.off('new-message', handleNew);
       socket.off('message-updated', handleUpdated);
-      socket.off('players-data', handlePlayers);
     };
   }, [socket, scene.id, user]);
 

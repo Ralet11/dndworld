@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Swords, Loader, Edit3, Lock } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth';
 import { useSocket } from '../context/SocketContext';
 import CharacterSheet from '../components/Hero/CharacterSheet';
 import CharacterEditorModal from '../components/Hero/CharacterEditorModal';
@@ -16,14 +16,14 @@ export default function HeroTab() {
   const [editing, setEditing] = useState(false);
   const [permissionMessage, setPermissionMessage] = useState('');
 
-  const fetchAvailable = async () => {
+  const fetchAvailable = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/characters/available`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) setAvailable(await res.json());
     } catch (e) { console.error(e); }
-  };
+  }, [token]);
 
   useEffect(() => {
     if (!socket || !user) return;
@@ -47,7 +47,7 @@ export default function HeroTab() {
       socket.off('players-data', handlePlayers);
       socket.off('stats-updated', handleStats);
     };
-  }, [socket, user]);
+  }, [socket, user, fetchAvailable]);
 
   useEffect(() => {
     if (!socket) return;

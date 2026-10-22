@@ -20,7 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/auth';
 import API_URL from '../../config';
 import ArmorTalents from './ArmorTalents';
 
@@ -294,9 +294,11 @@ function ItemDetailModal({ slot, onClose, onUnequip }) {
 
             {metrics.length > 0 && (
               <div className="item-detail-metrics">
-                {metrics.map(({ label, value, Icon }) => (
+                {metrics.map(metric => {
+                  const { label, value, Icon } = metric;
+                  return (
                   <div key={label}><Icon size={15} /><span><small>{label}</small><strong>{value}</strong></span></div>
-                ))}
+                ); })}
               </div>
             )}
 
@@ -351,7 +353,7 @@ export default function InventorySection({ character }) {
   const fileInputRef = useRef(null);
   const creepRef = useRef(null);
 
-  const inventory = character.inventory || [];
+  const inventory = useMemo(() => character.inventory || [], [character.inventory]);
   const equipment = character.equipment || {};
   const figureUrl = character.rendered_url || character.base_body_url || character.image_url || null;
   const hasBaseBody = !!character.base_body_url;

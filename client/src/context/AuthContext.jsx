@@ -1,28 +1,31 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import API_URL from '../config';
 
-const AuthContext = createContext(undefined);
+import { AuthContext } from './auth';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [storedToken] = useState(() => localStorage.getItem('dnd_token'));
+  const [isLoading, setIsLoading] = useState(() => Boolean(storedToken));
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('dnd_token');
-    if (!storedToken) { setIsLoading(false); return; }
+    if (!storedToken) return undefined;
+    let active = true;
 
     fetch(`${API_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${storedToken}` }
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
+        if (!active) return;
         if (data) { setUser(data); setToken(storedToken); }
         else { localStorage.removeItem('dnd_token'); }
       })
-      .catch(() => localStorage.removeItem('dnd_token'))
-      .finally(() => setIsLoading(false));
-  }, []);
+      .catch(() => { if (active) localStorage.removeItem('dnd_token'); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
+  }, [storedToken]);
 
   const login = async (email, password) => {
     const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -63,10 +66,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be inside AuthProvider');
-  return ctx;
 }

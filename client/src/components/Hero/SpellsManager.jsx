@@ -1,3 +1,7 @@
+import { useClassSpells } from '../../hooks/useClassSpells';
+import { usePropDraft } from '../../hooks/usePropDraft';
+
+const EMPTY_SLOTS = {};
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
@@ -36,7 +40,6 @@ const getSpellCastingType = (classSlug) => {
   return 'known';
 };
 
-const sortSpells = (spells) => [...(spells || [])].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
 const getSlotUsed = (slotData) => {
   if (typeof slotData === 'number') return slotData;
@@ -88,48 +91,16 @@ export default function SpellsManager({ character }) {
     return [];
   }, [character.classes, character.class_slug, character.class]);
 
-  const [activeTab, setActiveTab] = useState('book');
-  const [classSpells, setClassSpells] = useState([]);
+  const [activeTab, setActiveTab] = usePropDraft(casterType === 'divine' ? 'prepared' : 'book');
+  const { spells: classSpells, loading: isFetching } = useClassSpells(socket, classNames);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpell, setSelectedSpell] = useState(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [translating, setTranslating] = useState(false);
-  const [isFetching, setIsFetching] = useState(true);
   const [isSwitchingTab, setIsSwitchingTab] = useState(false);
-  const [slots, setSlots] = useState(character.spell_slots || {});
+  const [slots, setSlots] = usePropDraft(character.spell_slots || EMPTY_SLOTS);
   const [collapsedGroups, setCollapsedGroups] = useState(DEFAULT_COLLAPSED_GROUPS);
   const activeSpellRef = useRef(null);
-
-  useEffect(() => {
-    if (casterType === 'divine') setActiveTab('prepared');
-    else setActiveTab('book');
-  }, [casterType]);
-
-  useEffect(() => {
-    setSlots(character.spell_slots || {});
-  }, [character.spell_slots]);
-
-  useEffect(() => {
-    if (!socket) return;
-    if (!classNames.length) {
-      setClassSpells([]);
-      setIsFetching(false);
-      return;
-    }
-
-    setIsFetching(true);
-    const handleSpells = (spells) => {
-      setClassSpells(sortSpells(spells));
-      setIsFetching(false);
-    };
-
-    socket.on('class-spells-result', handleSpells);
-    socket.emit('get-class-spells', { class_names: classNames });
-
-    return () => {
-      socket.off('class-spells-result', handleSpells);
-    };
-  }, [socket, classNames]);
 
   useEffect(() => {
     if (!socket) return;
